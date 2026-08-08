@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Read-only by default. Any job needing more must ask for it explicitly, so a
+# compromised dependency cannot quietly push commits or publish packages.
+permissions:
+  contents: read
+
+# A new push to the same branch cancels the previous run still in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 1.26.x resolves to the latest 1.26 patch, matching the `go 1.26` line in
+  # go.mod. Pinning an exact patch here would mean editing this file for every
+  # security release.
+  GO_VERSION: "1.26.x"
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          # Caches the module and build caches keyed on go.sum.
+          cache: true
+
+      - name: Check formatting
+        # gofmt is not a style preference in Go, it is the format. There is one
+        # correct output and no options to argue about, which is why this can be
+        # a hard CI failure rather than a review comment.
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Check go.mod is tidy
+        # Catches dependencies added but never recorded, or left behind after
+        # removal. Rough equivalent of committing a stale packages.lock.json.
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        # -race is the whole point of running tests in CI for a Go service: the
+        # detector catches concurrent map writes and unsynchronised shared state
+        # that pass silently otherwise. It needs CGO, which ubuntu-latest has.
+        # -count=1 disables Go's test result cache so this always really runs.
+        run: go test -race -count=1 ./...
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          # Pinned, not "latest": a new linter release adding a check would
+          # otherwise turn CI red on a commit that changed nothing. Bump this
+          # deliberately, matching the version installed locally.
+          version: v2.12.2

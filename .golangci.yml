@@ -1,0 +1,47 @@
+# golangci-lint configuration.
+#
+# Schema version 2 (golangci-lint v2.x) — v1 configs are NOT compatible, so the
+# `version` key is required. Verify changes with `golangci-lint config verify`.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  # "standard" is errcheck, govet, ineffassign, staticcheck and unused.
+  # Deliberately not "all": it enables opinionated style linters that would
+  # bury real findings under noise on a learning project.
+  default: standard
+
+  enable:
+    # Response bodies must be closed or the connection leaks. Directly
+    # relevant to the eBird and iNaturalist clients in Phase 2.
+    - bodyclose
+    # Catches errors.Is/As misuse and == comparison of wrapped errors — an
+    # easy mistake coming from C#, where exception type checks are built in.
+    - errorlint
+    # Every outbound HTTP request should carry a context, so a cancelled
+    # request stops work instead of running to completion.
+    - noctx
+    - misspell
+    - revive
+    - unconvert
+
+  exclusions:
+    rules:
+      # Test files legitimately construct requests without a caller-supplied
+      # context, and httptest responses do not need closing.
+      - path: _test\.go
+        linters:
+          - bodyclose
+          - noctx
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      # Sort this module's own imports into a separate final group.
+      local-prefixes:
+        - github.com/Kontora20/where-to-bird-today

@@ -1,0 +1,63 @@
+# Local development database for Where to Bird Today.
+#
+# Run from the REPOSITORY ROOT so that .env is picked up:
+#
+#   docker compose --env-file .env -f deploy/docker-compose.yml up -d
+#   docker compose --env-file .env -f deploy/docker-compose.yml down
+#
+# The --env-file flag matters: with -f, Compose looks for .env next to the
+# compose file (deploy/) rather than in the directory you ran it from.
+#
+# PostGIS is not optional here. "Hotspots within N km of a point" is a spatial
+# query — ST_DWithin against a geography(Point,4326) column with a GiST index
+# (master plan §5). Plain Postgres cannot do it.
+#
+# There is no `version:` key: it has been obsolete since Compose v2 and now
+# emits a warning.
+
+name: where-to-bird-today
+
+services:
+  db:
+    # Pinned deliberately, not :latest — a silent major-version bump would
+    # rewrite the data directory format and break the volume below.
+    # TODO(Phase 5): confirm this matches a version Azure Database for
+    # PostgreSQL Flexible Server offers, so local and cloud stay consistent.
+    image: postgis/postgis:17-3.5
+    container_name: wtbt-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-birder}
+      # No default on purpose. `:?` makes Compose abort with this message
+      # rather than quietly starting a database with a blank password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?not set - copy .env.example to .env and fill it in}
+      POSTGRES_DB: ${POSTGRES_DB:-wheretobird}
+      # Detects silent disk corruption. Can only be set at initdb time, so it
+      # is far cheaper to enable now than after there is data to migrate.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+
+    ports:
+      # Overridable via POSTGRES_PORT for anyone already running Postgres
+      # natively on 5432.
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      # A named volume, not a bind mount: bind-mounting a Postgres data
+      # directory onto a Windows host filesystem causes permission and fsync
+      # problems. `docker compose down -v` is what deletes it.
+      - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      # pg_isready reports "accepting connections", which is later than
+      # "container started" — the difference matters, because initdb runs on
+      # first boot and takes several seconds. CI and testcontainers wait on
+      # this rather than sleeping and hoping.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-birder} -d ${POSTGRES_DB:-wheretobird}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+volumes:
+  pgdata:

@@ -1,0 +1,27 @@
+# Line endings are normalised here rather than left to each machine's
+# core.autocrlf setting, so a clone behaves identically everywhere.
+#
+# Everything is LF in the repository and LF on checkout. This matters most for
+# Phase 5: a shell script copied into a Linux container with CRLF endings fails
+# with "no such file or directory", naming the interpreter, because the \r
+# becomes part of the shebang path.
+* text=auto eol=lf
+
+# Windows-native scripts must keep CRLF or some shells mis-parse them.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets — never normalise, never diff as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff  binary
+*.woff2 binary
+*.pdf  binary
+
+# Generated code: still reviewed, but collapsed by default in PR diffs.
+*.sql.go linguist-generated=true

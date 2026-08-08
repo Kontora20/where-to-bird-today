@@ -1,0 +1,117 @@
+# =============================================================================
+# Secrets — nothing in this block may ever be committed.
+# The eBird API key is the one that actually matters (master plan §5).
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.publishsettings
+.azure/
+
+# =============================================================================
+# Go build output
+# =============================================================================
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/where-to-bird-today
+/server
+cmd/server/server
+
+# Test and profiling artifacts
+*.test
+coverage.out
+coverage.html
+*.prof
+*.pprof
+cpu.out
+mem.out
+
+# Go workspace files are machine-local — never shared
+go.work
+go.work.sum
+
+# NOT ignored, deliberately:
+#   go.sum                  — the lockfile; must be committed
+#   internal/store/*.sql.go — sqlc-generated code is committed by convention,
+#                             so builds and CI don't need sqlc installed
+#   vendor/                 — we're not vendoring; if that changes, commit it
+
+# =============================================================================
+# air — live reload during dev (master plan §7)
+# =============================================================================
+tmp/
+
+# =============================================================================
+# Node / SvelteKit — Phase 4
+# =============================================================================
+node_modules/
+.svelte-kit/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# The built SPA is embedded into the Go binary via //go:embed, and is produced
+# by CI and the Dockerfile — so it is generated, not source.
+# NOTE for Phase 4: //go:embed FAILS AT COMPILE TIME if the directory is
+# missing, so web/build/.gitkeep is committed to guarantee it exists.
+# This must be `web/build/*` and not `web/build/` — a directory pattern stops
+# git descending into the folder at all, and the negation below would never
+# be reached.
+web/build/*
+!web/build/.gitkeep
+
+# =============================================================================
+# Bulk data — Phase 2. The eBird Basic Dataset is measured in GB; a single
+# accidental `git add .` here would be very hard to undo.
+# Scoped patterns rather than a blanket *.tsv/*.txt, so small committed test
+# fixtures under testdata/ still work.
+# =============================================================================
+/data/
+ebd_*.txt
+ebd_*.tsv
+ebd_*.zip
+*.txt.gz
+*.tsv.gz
+
+# =============================================================================
+# Planning notes and decision records — kept private for now.
+# The master plan and ADRs live in docs/ locally but are deliberately not
+# published. Remove this rule to start sharing them; nothing under docs/ has
+# ever been committed, so there is no history to rewrite.
+# =============================================================================
+docs/
+
+# =============================================================================
+# Local agent tooling — machine-local, not shared
+# =============================================================================
+.claude/skills/
+.claude/settings.local.json
+.serena/
+# Registers the Serena MCP server. Machine-local: it names an absolute path
+# on this machine, so it is of no use in a clone.
+.mcp.json
+
+# =============================================================================
+# Editors
+# =============================================================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*~
+
+# =============================================================================
+# OS cruft
+# =============================================================================
+Thumbs.db
+desktop.ini
+.DS_Store
