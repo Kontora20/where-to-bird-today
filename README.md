@@ -188,3 +188,7 @@ Third-party data carries licence obligations that the UI must honour, not just t
   config. Phase 5 copies shell scripts into a Linux container, where CRLF breaks the shebang.
 - **`internal/`** is enforced by the Go compiler: no other module can import anything beneath it.
 - **Dependencies are wired by hand in `main`** — no container, no service registration.
+- **Style follows the [Google Go Style Guide](https://google.github.io/styleguide/go/guide)**, which
+  governs over personal preference. The rule with the most visible effect here: **no assertion
+  libraries.** Tests use standard comparisons and [`go-cmp`](https://github.com/google/go-cmp), and a
+  failure message names what was called — `Load().Port = 9000, want 8080`, never `port = 9000`.
