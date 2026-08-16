@@ -52,7 +52,7 @@ func TestRouterStatusCodes(t *testing.T) {
 		},
 	}
 
-	router := NewRouter(testLogger())
+	router := NewRouter(testLogger(), fakeDatabase{})
 
 	for _, tc := range tests {
 		// Since Go 1.22 each loop iteration gets its own `tc`, so subtests
@@ -87,7 +87,7 @@ func TestHealthResponseBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
-	NewRouter(testLogger()).ServeHTTP(rec, req)
+	NewRouter(testLogger(), fakeDatabase{}).ServeHTTP(rec, req)
 
 	if got, want := rec.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d", got, want)

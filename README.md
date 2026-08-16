@@ -8,7 +8,7 @@ get back a ranked list of places with a summary of what you can realistically ex
 > Detailed planning notes and decision records are kept privately for now and are not part of this
 > repository.
 
-**Status: Phase 0** — foundations and a running skeleton.
+**Status: Phase 1** — wiring the database in.
 
 ---
 
@@ -21,7 +21,8 @@ get back a ranked list of places with a summary of what you can realistically ex
 | Database | PostgreSQL 16+ with **PostGIS** |
 | Logging | `log/slog` |
 | Frontend | SvelteKit + `adapter-static` (SSR off), embedded into the Go binary via `embed` — Phase 4 |
-| Data | eBird API 2.0 + eBird Basic Dataset + iNaturalist — Phase 2 |
+| Data | eBird API 2.0 + eBird Basic Dataset + AviList v2025b + Wikidata/Commons + iNaturalist — Phase 2 |
+| Languages | Lithuanian (default) and English — Phase 2 |
 | Hosting | Azure Container Apps + Postgres Flexible Server, Bicep, GitHub Actions — Phase 5 |
 
 Deliberately **not** using Gin/Echo/Fiber or an ORM: the point is to learn the real `net/http` model
@@ -41,12 +42,32 @@ git clone https://github.com/Kontora20/where-to-bird-today.git
 cd where-to-bird-today
 cp .env.example .env    # then replace every PLACEHOLDER with a real value
 go build ./...
+```
+
+Start the database (see below), then put `.env` into your shell and run the server. **The Go process
+does not read `.env`** — it reads real environment variables, and only Docker Compose reads the file
+directly. `DATABASE_URL` is required; the server refuses to start without it.
+
+```bash
+set -a && . ./.env && set +a && go run ./cmd/server
+```
+
+In PowerShell:
+
+```powershell
+Get-Content .env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object { $name, $value = $_ -split '=', 2; Set-Item "env:$($name.Trim())" $value.Trim() }
 go run ./cmd/server
 ```
 
 ```bash
 curl http://localhost:8080/health
+curl http://localhost:8080/ready
 ```
+
+`/health` is a **liveness** probe — it answers "is this process running?" and never touches the
+database, so a database blip cannot cause the orchestrator to restart a healthy container.
+`/ready` is a **readiness** probe: it pings Postgres and returns `503` when it cannot reach it, so
+the instance is taken out of rotation instead of being killed.
 
 ## Local database
 
@@ -85,7 +106,7 @@ All configuration is environment variables. Copy `.env.example` to `.env` and fi
 |---|---|
 | `PORT` | HTTP listen port (default `8080`) |
 | `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` |
-| `DATABASE_URL` | Postgres connection string |
+| `DATABASE_URL` | **Required.** Postgres connection string — no default, startup fails without it |
 | `EBIRD_API_KEY` | **Secret.** eBird API 2.0 token — Phase 2 |
 
 > **The eBird key is a secret.** It lives in `.env` (gitignored) locally and in GitHub Actions /
@@ -99,6 +120,7 @@ cmd/server/      main.go — wiring and startup only
 internal/        app code; the compiler forbids imports from outside this module
   config/        environment-variable loading
   http/          handlers, middleware, routing
+  store/         connection pool and, from Phase 1, the sqlc-generated queries
 migrations/      goose SQL migrations (Phase 1)
 deploy/          docker-compose, Dockerfile, Bicep
 web/             SvelteKit app (Phase 4)
@@ -117,12 +139,43 @@ affect how the code is written are summarised here as they land.
   stays region-agnostic: the region is configuration, never baked into loader logic, schema, or
   queries.
 
+- **Species reference backbone — AviList v2025b.** One CC BY 4.0 spreadsheet supplies, per species,
+  the eBird species code, AvibaseID, IUCN Red List status and canonical Birds of the World /
+  BirdLife DataZone URLs. Loaded offline into `species`; **no feature resolves a species identifier
+  over the network at request time.**
+
+- **Photos — Wikidata/Wikimedia Commons first, iNaturalist for gaps.** The app stores image
+  *references*, never bytes, and licence + attribution are required columns on `species_media`.
+  Macaulay Library is a link target only: eBird's API exposes no media endpoints, and Macaulay
+  grants no download rights.
+
+- **Species detail is our own panel, never an iframe.** eBird sends `X-Frame-Options: DENY` and
+  Avibase `SAMEORIGIN`, so embedding is not possible — and linking out is the better design anyway.
+  The panel leads with our own week-of-year seasonality data, which is the part no one else has.
+
+- **Languages — Lithuanian and English, Lithuanian the default.** The load-bearing rule: **the Go
+  API never returns a user-facing sentence.** Explanations are structured codes plus params; the
+  Svelte app renders the prose. Common names live in `species_names`, source-ranked so the
+  `lt → en → scientific` fallback resolves in SQL. Language is a request parameter, never global
+  state.
+
+## Attribution
+
+Third-party data carries licence obligations that the UI must honour, not just the source:
+
+- **AviList** — CC BY 4.0. *AviList Core Team. 2026. AviList: The Global Avian Checklist, v2025b.*
+  <https://doi.org/10.2173/avilist.v2025b>
+- **Wikimedia Commons** — per-image licence and author, rendered next to the image.
+- **iNaturalist** — per-photo `attribution` string, rendered next to the image. Photos default to
+  CC BY-**NC**.
+- **eBird / Cornell Lab** — taxonomy and observation data, per the eBird API terms.
+
 ## Roadmap
 
 | Phase | Deliverable |
 |---|---|
-| **0** | `curl localhost:8080/health` works; CI green ← *here* |
-| 1 | Config, sqlc+pgx, first migration, an endpoint that reads/writes a row |
+| **0** | `curl localhost:8080/health` works; CI green |
+| **1** | Config, sqlc+pgx, first migration, an endpoint that reads/writes a row ← *here* |
 | 2 | eBird + iNat clients, EBD bulk loader, `species_seasonality` |
 | 3 | Spatial `ST_DWithin` query, ranking, parallel fetches via `errgroup` |
 | 4 | SvelteKit UI with a Leaflet map, embedded in the binary |

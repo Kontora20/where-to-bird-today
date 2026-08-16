@@ -17,6 +17,7 @@ import (
 
 	"github.com/Kontora20/where-to-bird-today/internal/config"
 	apphttp "github.com/Kontora20/where-to-bird-today/internal/http"
+	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
 
 // shutdownTimeout bounds how long in-flight requests get to finish once a
@@ -51,9 +52,25 @@ func run() error {
 		Level: cfg.LogLevel,
 	}))
 
+	// NotifyContext returns a context that is cancelled when one of these
+	// signals arrives — turning "a signal happened" into ordinary context
+	// cancellation that the rest of the code already knows how to handle.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := store.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connecting to database: %w", err)
+	}
+	// Deferred here rather than in store.New: whoever opens the pool decides
+	// when it closes, and that is this function's whole lifetime.
+	defer pool.Close()
+
+	logger.Info("database connected")
+
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: apphttp.NewRouter(logger),
+		Handler: apphttp.NewRouter(logger, pool),
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine
@@ -64,12 +81,6 @@ func run() error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-
-	// NotifyContext returns a context that is cancelled when one of these
-	// signals arrives — turning "a signal happened" into ordinary context
-	// cancellation that the rest of the code already knows how to handle.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// ListenAndServe blocks, so it runs in a goroutine while main waits on
 	// either it failing or a shutdown signal.
