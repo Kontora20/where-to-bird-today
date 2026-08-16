@@ -74,8 +74,8 @@ func run() error {
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine
-		// forever — the classic Slowloris exposure. Kestrel ships with
-		// defaults for this; net/http does not, and it is on you to set them.
+		// forever — the classic Slowloris exposure. Setting these is on the
+		// caller; net/http supplies no defaults.
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,

@@ -1,8 +1,7 @@
 // Package config loads the server's configuration from environment variables.
 //
-// Coming from .NET: this replaces appsettings.json, IConfiguration, and
-// IOptions<T>. There is no provider chain and no reflection-based binding —
-// just explicit reads with explicit defaults, returning a plain struct.
+// Every value is read explicitly, with an explicit default, into a plain
+// struct: there is no provider chain and no reflection-based binding.
 package config
 
 import (

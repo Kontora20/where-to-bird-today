@@ -14,11 +14,9 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// TestRouterStatusCodes is a table-driven test: the Go idiom for what xUnit
-// expresses with [Theory] and [InlineData]. The cases are ordinary data in an
-// ordinary slice, so building them can use loops, helpers, or anything else Go
-// can do — there is no attribute grammar to work within, and no constant-
-// expression restriction on the arguments.
+// TestRouterStatusCodes is a table-driven test. The cases are ordinary data in
+// an ordinary slice, so building them can use loops, helpers, or anything else
+// the language can do.
 //
 // Two of these cases assert behaviour nobody wrote code for: registering only
 // "GET /health" makes the Go 1.22+ ServeMux answer 405 for other methods on
@@ -68,7 +66,7 @@ func TestRouterStatusCodes(t *testing.T) {
 			router.ServeHTTP(rec, req)
 
 			if rec.Code != tc.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tc.wantStatus)
+				t.Errorf("%s %s status = %d, want %d", tc.method, tc.target, rec.Code, tc.wantStatus)
 			}
 		})
 	}
@@ -78,9 +76,7 @@ func TestRouterStatusCodes(t *testing.T) {
 // a JSON content type and a body of {"status":"ok"}.
 //
 // httptest.NewRecorder is an in-memory ResponseWriter, so this exercises the
-// real router and the real handler with no socket and no port. Closest .NET
-// analogue is WebApplicationFactory / TestServer, but with nothing to host and
-// no startup cost.
+// real router and the real handler with no socket and no port.
 func TestHealthResponseBody(t *testing.T) {
 	t.Parallel()
 
@@ -90,19 +86,19 @@ func TestHealthResponseBody(t *testing.T) {
 	NewRouter(testLogger(), fakeDatabase{}).ServeHTTP(rec, req)
 
 	if got, want := rec.Code, http.StatusOK; got != want {
-		t.Fatalf("status = %d, want %d", got, want)
+		t.Fatalf("GET /health status = %d, want %d", got, want)
 	}
 
 	if got, want := rec.Header().Get("Content-Type"), "application/json"; got != want {
-		t.Errorf("Content-Type = %q, want %q", got, want)
+		t.Errorf("GET /health Content-Type = %q, want %q", got, want)
 	}
 
 	var body healthResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("response body is not valid JSON: %v (body: %q)", err, rec.Body.String())
+		t.Fatalf("GET /health body is not valid JSON: %v (body: %q)", err, rec.Body.String())
 	}
 
 	if got, want := body.Status, "ok"; got != want {
-		t.Errorf("status field = %q, want %q", got, want)
+		t.Errorf("GET /health body.status = %q, want %q", got, want)
 	}
 }

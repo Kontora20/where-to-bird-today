@@ -60,10 +60,8 @@ func logRequests(logger *slog.Logger, next http.Handler) http.Handler {
 //
 // The embedded http.ResponseWriter (a field with no name) promotes all of its
 // methods onto statusRecorder, so this type satisfies http.ResponseWriter
-// while only actually implementing one method itself. This is composition with
-// method forwarding, not inheritance: there is no base class and no virtual
-// dispatch. WriteHeader below does not "override" anything — it shadows the
-// promoted method, and explicitly calls through.
+// while only actually implementing one method itself. WriteHeader below
+// shadows the promoted method and calls through to it.
 //
 // Caveat worth knowing: wrapping a ResponseWriter hides any optional
 // interfaces the original also implemented (http.Flusher, http.Hijacker,
