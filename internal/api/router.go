@@ -1,10 +1,6 @@
-// Package http contains the application's HTTP surface: routing, middleware,
+// Package api contains the application's HTTP surface: routing, middleware,
 // and handlers.
-//
-// Note: this package is itself named "http", so within these files the
-// identifier `http` refers to the *standard library's* net/http, not to this
-// package. Callers outside must import it under an alias.
-package http
+package api
 
 import (
 	"log/slog"

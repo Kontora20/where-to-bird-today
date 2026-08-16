@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Kontora20/where-to-bird-today/internal/api"
 	"github.com/Kontora20/where-to-bird-today/internal/config"
-	apphttp "github.com/Kontora20/where-to-bird-today/internal/http"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
 
@@ -70,7 +70,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: apphttp.NewRouter(logger, pool),
+		Handler: api.NewRouter(logger, pool),
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine

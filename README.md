@@ -118,8 +118,8 @@ All configuration is environment variables. Copy `.env.example` to `.env` and fi
 ```
 cmd/server/      main.go — wiring and startup only
 internal/        app code; the compiler forbids imports from outside this module
+  api/           handlers, middleware, routing
   config/        environment-variable loading
-  http/          handlers, middleware, routing
   store/         connection pool and, from Phase 1, the sqlc-generated queries
 migrations/      goose SQL migrations (Phase 1)
 deploy/          docker-compose, Dockerfile, Bicep
