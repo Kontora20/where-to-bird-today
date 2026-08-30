@@ -5,6 +5,8 @@
 package store
 
 import (
+	"encoding/json"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -15,7 +17,7 @@ type Hotspot struct {
 	Region    string             `json:"region"`
 	Source    string             `json:"source"`
 	SourceRef string             `json:"source_ref"`
-	Metadata  []byte             `json:"metadata"`
+	Metadata  json.RawMessage    `json:"metadata"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }

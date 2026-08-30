@@ -3,9 +3,14 @@ sql:
   - engine: "postgresql"
     queries: "internal/store/queries"
     schema: "migrations"
+    database:
+      uri: "${DATABASE_URL}"
     gen:
       go:
         package: "store"
         out: "internal/store"
         sql_package: "pgx/v5"
         emit_json_tags: true
+        overrides:
+          - db_type: "jsonb"
+            go_type: "encoding/json.RawMessage"
