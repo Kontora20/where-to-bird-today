@@ -58,19 +58,21 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := store.New(ctx, cfg.DatabaseURL)
+	pool, err := store.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("connecting to database: %w", err)
 	}
-	// Deferred here rather than in store.New: whoever opens the pool decides
-	// when it closes, and that is this function's whole lifetime.
+	// Deferred here rather than in store.NewPool: whoever opens the pool
+	// decides when it closes, and that is this function's whole lifetime.
 	defer pool.Close()
 
 	logger.Info("database connected")
 
+	queries := store.New(pool)
+
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: api.NewRouter(logger, pool),
+		Handler: api.NewRouter(logger, pool, queries),
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine

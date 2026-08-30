@@ -21,11 +21,11 @@ const (
 	healthCheckPeriod = 30 * time.Second
 )
 
-// New opens a connection pool and proves it can reach the database.
+// NewPool opens a connection pool and proves it can reach the database.
 //
 // The returned pool is safe for concurrent use by many goroutines: create one
 // at startup, share it, and close it once. Callers own the Close.
-func New(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	poolConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing DATABASE_URL: %w", err)

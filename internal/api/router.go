@@ -17,7 +17,7 @@ import (
 // Dependencies arrive as parameters and are handed to the handlers that need
 // them. The database is taken as a pinger, not as a concrete pool: the router
 // passes on what it is given and never touches the database itself.
-func NewRouter(logger *slog.Logger, db pinger) http.Handler {
+func NewRouter(logger *slog.Logger, db pinger, ingestionRuns ingestionRunStore) http.Handler {
 	mux := http.NewServeMux()
 
 	// "GET /health" is a Go 1.22+ pattern: method and path in one string.
@@ -26,6 +26,8 @@ func NewRouter(logger *slog.Logger, db pinger) http.Handler {
 	// free, with no configuration.
 	mux.Handle("GET /health", handleHealth(logger))
 	mux.Handle("GET /ready", handleReady(logger, db))
+	mux.Handle("POST /ingestion-runs", handleCreateIngestionRun(logger, ingestionRuns))
+	mux.Handle("GET /ingestion-runs/{id}", handleGetIngestionRun(logger, ingestionRuns))
 
 	// Middleware is applied by wrapping. The outermost wrapper runs first.
 	return logRequests(logger, mux)
