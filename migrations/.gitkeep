@@ -1,2 +1,0 @@
-Placeholder so `migrations/` exists in a fresh clone.
-goose SQL migrations land here in Phase 1. Delete this file once the first one exists.
