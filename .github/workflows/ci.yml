@@ -17,10 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # 1.26.x resolves to the latest 1.26 patch, matching the `go 1.26` line in
+  # 1.27.x resolves to the latest 1.27 patch, matching the `go 1.27` line in
   # go.mod. Pinning an exact patch here would mean editing this file for every
   # security release.
-  GO_VERSION: "1.26.x"
+  GO_VERSION: "1.27.x"
 
 jobs:
   build:
@@ -86,5 +86,7 @@ jobs:
         with:
           # Pinned, not "latest": a new linter release adding a check would
           # otherwise turn CI red on a commit that changed nothing. Bump this
-          # deliberately, matching the version installed locally.
-          version: v2.12.2
+          # deliberately, matching the version installed locally. v2.13.2 is
+          # the first release built with Go 1.27 -- golangci-lint refuses to
+          # analyse a module targeting a newer Go than it was built with.
+          version: v2.13.2
