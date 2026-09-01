@@ -6,6 +6,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -132,6 +133,36 @@ func TestHotspotsRoundTrip(t *testing.T) {
 	}
 	if got.ID != created.ID || got.Name != created.Name {
 		t.Errorf("GetHotspot = %+v, want id=%d name=%q", got, created.ID, created.Name)
+	}
+}
+
+// A species with no eBird code has a NULL ebird_species_code, and NULL
+// never conflicts with itself in Postgres -- this checks that upserting on
+// avibase_id instead still avoids a duplicate row on re-run.
+func TestUpsertSpeciesIsIdempotentForNullEbirdCode(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := New(newTestPool(t))
+
+	params := UpsertSpeciesParams{
+		ScientificName: "Struthio molybdophanes",
+		AvibaseID:      pgtype.Text{String: "avibase-40329BB6", Valid: true},
+		// EbirdSpeciesCode left zero-valued: Valid=false, i.e. SQL NULL.
+	}
+
+	first, err := queries.UpsertSpecies(ctx, params)
+	if err != nil {
+		t.Fatalf("first UpsertSpecies: %v", err)
+	}
+
+	second, err := queries.UpsertSpecies(ctx, params)
+	if err != nil {
+		t.Fatalf("second UpsertSpecies: %v", err)
+	}
+
+	if second.ID != first.ID {
+		t.Errorf("second.ID = %d, want %d (re-run inserted a duplicate row)", second.ID, first.ID)
 	}
 }
 

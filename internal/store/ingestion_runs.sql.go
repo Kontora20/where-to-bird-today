@@ -7,6 +7,8 @@ package store
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createIngestionRun = `-- name: CreateIngestionRun :one
@@ -17,6 +19,43 @@ RETURNING id, source, started_at, finished_at, row_count, status, error
 
 func (q *Queries) CreateIngestionRun(ctx context.Context, source string) (IngestionRun, error) {
 	row := q.db.QueryRow(ctx, createIngestionRun, source)
+	var i IngestionRun
+	err := row.Scan(
+		&i.ID,
+		&i.Source,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.RowCount,
+		&i.Status,
+		&i.Error,
+	)
+	return i, err
+}
+
+const finishIngestionRun = `-- name: FinishIngestionRun :one
+UPDATE ingestion_runs
+SET finished_at = now(),
+    row_count   = $1,
+    status      = $2,
+    error       = $3
+WHERE id = $4
+RETURNING id, source, started_at, finished_at, row_count, status, error
+`
+
+type FinishIngestionRunParams struct {
+	RowCount pgtype.Int4 `json:"row_count"`
+	Status   string      `json:"status"`
+	Error    pgtype.Text `json:"error"`
+	ID       int64       `json:"id"`
+}
+
+func (q *Queries) FinishIngestionRun(ctx context.Context, arg FinishIngestionRunParams) (IngestionRun, error) {
+	row := q.db.QueryRow(ctx, finishIngestionRun,
+		arg.RowCount,
+		arg.Status,
+		arg.Error,
+		arg.ID,
+	)
 	var i IngestionRun
 	err := row.Scan(
 		&i.ID,
