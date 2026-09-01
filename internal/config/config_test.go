@@ -37,6 +37,7 @@ func TestLoad(t *testing.T) {
 		wantPort        int
 		wantLevel       slog.Level
 		wantDatabaseURL string
+		wantEbirdAPIKey string
 	}{
 		{
 			name: "defaults apply when only DATABASE_URL is set",
@@ -78,11 +79,22 @@ func TestLoad(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "EBIRD_API_KEY is read but stays optional",
+			env: map[string]string{
+				"DATABASE_URL":  "postgres://localhost/wheretobird",
+				"EBIRD_API_KEY": "test-key",
+			},
+			wantPort:        8080,
+			wantLevel:       slog.LevelInfo,
+			wantDatabaseURL: "postgres://localhost/wheretobird",
+			wantEbirdAPIKey: "test-key",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			clearEnv(t, "PORT", "LOG_LEVEL", "DATABASE_URL")
+			clearEnv(t, "PORT", "LOG_LEVEL", "DATABASE_URL", "EBIRD_API_KEY")
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
@@ -107,6 +119,9 @@ func TestLoad(t *testing.T) {
 			}
 			if cfg.DatabaseURL != tc.wantDatabaseURL {
 				t.Errorf("Load().DatabaseURL = %q, want %q", cfg.DatabaseURL, tc.wantDatabaseURL)
+			}
+			if cfg.EbirdAPIKey != tc.wantEbirdAPIKey {
+				t.Errorf("Load().EbirdAPIKey = %q, want %q", cfg.EbirdAPIKey, tc.wantEbirdAPIKey)
 			}
 		})
 	}

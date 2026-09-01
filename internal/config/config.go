@@ -14,10 +14,6 @@ import (
 )
 
 // Config is the fully resolved configuration for one run of the server.
-//
-// Fields are added as phases need them: EBIRD_API_KEY arrives in Phase 2. It is
-// documented in .env.example already, but is deliberately not read here yet —
-// unused config is dead code.
 type Config struct {
 	// Port is the TCP port the HTTP server listens on.
 	Port int
@@ -30,6 +26,10 @@ type Config struct {
 	// localhost fallback would only turn a clear startup failure into a
 	// confusing connection error.
 	DatabaseURL string
+
+	// EbirdAPIKey authenticates requests to the eBird API. No default, same
+	// reasoning as DatabaseURL.
+	EbirdAPIKey string
 }
 
 // Load reads configuration from the environment and applies defaults.
@@ -64,6 +64,10 @@ func Load() (Config, error) {
 		return Config{}, errors.New("DATABASE_URL is required (see .env.example)")
 	}
 	cfg.DatabaseURL = databaseURL
+
+	// Not required here: most commands (server, migrate, the AviList loader)
+	// never touch eBird. Whatever needs it checks for itself.
+	cfg.EbirdAPIKey = strings.TrimSpace(os.Getenv("EBIRD_API_KEY"))
 
 	return cfg, nil
 }
