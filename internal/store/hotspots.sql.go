@@ -127,3 +127,77 @@ func (q *Queries) GetHotspot(ctx context.Context, id int64) (GetHotspotRow, erro
 	)
 	return i, err
 }
+
+const upsertHotspot = `-- name: UpsertHotspot :one
+INSERT INTO hotspots (name, location, region, source, source_ref)
+VALUES (
+    $1,
+    ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (source, source_ref) DO UPDATE SET
+    name       = EXCLUDED.name,
+    location   = EXCLUDED.location,
+    region     = EXCLUDED.region,
+    updated_at = now()
+RETURNING
+    id,
+    name,
+    ST_X(location::geometry) AS longitude,
+    ST_Y(location::geometry) AS latitude,
+    region,
+    source,
+    source_ref,
+    metadata,
+    created_at,
+    updated_at
+`
+
+type UpsertHotspotParams struct {
+	Name      string  `json:"name"`
+	Longitude float64 `json:"longitude"`
+	Latitude  float64 `json:"latitude"`
+	Region    string  `json:"region"`
+	Source    string  `json:"source"`
+	SourceRef string  `json:"source_ref"`
+}
+
+type UpsertHotspotRow struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	Longitude pgtype.Float8      `json:"longitude"`
+	Latitude  pgtype.Float8      `json:"latitude"`
+	Region    string             `json:"region"`
+	Source    string             `json:"source"`
+	SourceRef string             `json:"source_ref"`
+	Metadata  json.RawMessage    `json:"metadata"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpsertHotspot(ctx context.Context, arg UpsertHotspotParams) (UpsertHotspotRow, error) {
+	row := q.db.QueryRow(ctx, upsertHotspot,
+		arg.Name,
+		arg.Longitude,
+		arg.Latitude,
+		arg.Region,
+		arg.Source,
+		arg.SourceRef,
+	)
+	var i UpsertHotspotRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Longitude,
+		&i.Latitude,
+		&i.Region,
+		&i.Source,
+		&i.SourceRef,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

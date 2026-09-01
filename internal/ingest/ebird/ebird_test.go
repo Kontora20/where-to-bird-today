@@ -69,10 +69,54 @@ func TestTaxonomyFiltersToSpeciesRankAndSendsAuth(t *testing.T) {
 	}
 }
 
+func TestHotspotsByRegion(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+
+		entries := []hotspotEntry{
+			{LocID: "L14634126", LocName: "Alka Polder", CountryCode: "LT", Lat: 55.4382263, Lng: 21.3721427},
+			{LocID: "L9055742", LocName: "Amalavo polderis", CountryCode: "LT", Lat: 54.5432936, Lng: 23.603611},
+		}
+		_ = json.NewEncoder(w).Encode(entries)
+	}))
+	defer server.Close()
+
+	client, err := NewClient("test-key", server.Client())
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	client.baseURL = server.URL
+
+	hotspots, err := client.HotspotsByRegion(context.Background(), "LT")
+	if err != nil {
+		t.Fatalf("HotspotsByRegion: %v", err)
+	}
+
+	if gotPath != "/ref/hotspot/LT" {
+		t.Errorf("path = %q, want %q", gotPath, "/ref/hotspot/LT")
+	}
+
+	want := []Hotspot{
+		{LocID: "L14634126", Name: "Alka Polder", Region: "LT", Lat: 55.4382263, Lng: 21.3721427},
+		{LocID: "L9055742", Name: "Amalavo polderis", Region: "LT", Lat: 54.5432936, Lng: 23.603611},
+	}
+	if len(hotspots) != len(want) {
+		t.Fatalf("HotspotsByRegion returned %d hotspots, want %d: %+v", len(hotspots), len(want), hotspots)
+	}
+	for i, hotspot := range hotspots {
+		if hotspot != want[i] {
+			t.Errorf("hotspots[%d] = %+v, want %+v", i, hotspot, want[i])
+		}
+	}
+}
+
 func TestTaxonomyUnexpectedStatus(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()

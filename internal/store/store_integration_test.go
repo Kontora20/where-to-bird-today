@@ -166,6 +166,40 @@ func TestUpsertSpeciesIsIdempotentForNullEbirdCode(t *testing.T) {
 	}
 }
 
+func TestUpsertHotspotIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := New(newTestPool(t))
+
+	params := UpsertHotspotParams{
+		Name:      "Alka Polder",
+		Longitude: 21.3721427,
+		Latitude:  55.4382263,
+		Region:    "LT",
+		Source:    "ebird",
+		SourceRef: "L14634126",
+	}
+
+	first, err := queries.UpsertHotspot(ctx, params)
+	if err != nil {
+		t.Fatalf("first UpsertHotspot: %v", err)
+	}
+
+	params.Name = "Alka Polder (renamed)"
+	second, err := queries.UpsertHotspot(ctx, params)
+	if err != nil {
+		t.Fatalf("second UpsertHotspot: %v", err)
+	}
+
+	if second.ID != first.ID {
+		t.Errorf("second.ID = %d, want %d (re-run inserted a duplicate row)", second.ID, first.ID)
+	}
+	if second.Name != "Alka Polder (renamed)" {
+		t.Errorf("second.Name = %q, want the updated name", second.Name)
+	}
+}
+
 func floatsClose(got, want float64) bool {
 	return math.Abs(got-want) < 1e-9
 }

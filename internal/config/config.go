@@ -30,6 +30,10 @@ type Config struct {
 	// EbirdAPIKey authenticates requests to the eBird API. No default, same
 	// reasoning as DatabaseURL.
 	EbirdAPIKey string
+
+	// Regions lists the eBird region codes hotspot and observation ingestion
+	// covers. Defaults to the Baltics.
+	Regions []string
 }
 
 // Load reads configuration from the environment and applies defaults.
@@ -41,6 +45,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Port:     8080,
 		LogLevel: slog.LevelInfo,
+		Regions:  []string{"LT", "LV", "EE"},
 	}
 
 	if v, ok := os.LookupEnv("PORT"); ok {
@@ -69,6 +74,14 @@ func Load() (Config, error) {
 	// never touch eBird. Whatever needs it checks for itself.
 	cfg.EbirdAPIKey = strings.TrimSpace(os.Getenv("EBIRD_API_KEY"))
 
+	if v, ok := os.LookupEnv("EBIRD_REGIONS"); ok {
+		regions, err := parseRegions(v)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.Regions = regions
+	}
+
 	return cfg, nil
 }
 
@@ -81,6 +94,21 @@ func parsePort(s string) (int, error) {
 		return 0, fmt.Errorf("PORT %d is outside the valid range 1-65535", port)
 	}
 	return port, nil
+}
+
+func parseRegions(s string) ([]string, error) {
+	parts := strings.Split(s, ",")
+	regions := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			regions = append(regions, part)
+		}
+	}
+	if len(regions) == 0 {
+		return nil, fmt.Errorf("EBIRD_REGIONS %q has no region codes", s)
+	}
+	return regions, nil
 }
 
 func parseLevel(s string) (slog.Level, error) {

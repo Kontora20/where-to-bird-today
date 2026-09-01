@@ -3,6 +3,7 @@ package config
 import (
 	"log/slog"
 	"os"
+	"slices"
 	"testing"
 )
 
@@ -38,6 +39,7 @@ func TestLoad(t *testing.T) {
 		wantLevel       slog.Level
 		wantDatabaseURL string
 		wantEbirdAPIKey string
+		wantRegions     []string
 	}{
 		{
 			name: "defaults apply when only DATABASE_URL is set",
@@ -47,6 +49,7 @@ func TestLoad(t *testing.T) {
 			wantPort:        8080,
 			wantLevel:       slog.LevelInfo,
 			wantDatabaseURL: "postgres://localhost/wheretobird",
+			wantRegions:     []string{"LT", "LV", "EE"},
 		},
 		{
 			name: "every variable is read",
@@ -58,6 +61,7 @@ func TestLoad(t *testing.T) {
 			wantPort:        9000,
 			wantLevel:       slog.LevelDebug,
 			wantDatabaseURL: "postgres://localhost/other",
+			wantRegions:     []string{"LT", "LV", "EE"},
 		},
 		{
 			name:    "missing DATABASE_URL is an error",
@@ -89,12 +93,32 @@ func TestLoad(t *testing.T) {
 			wantLevel:       slog.LevelInfo,
 			wantDatabaseURL: "postgres://localhost/wheretobird",
 			wantEbirdAPIKey: "test-key",
+			wantRegions:     []string{"LT", "LV", "EE"},
+		},
+		{
+			name: "EBIRD_REGIONS overrides the Baltics default",
+			env: map[string]string{
+				"DATABASE_URL":  "postgres://localhost/wheretobird",
+				"EBIRD_REGIONS": " US-CA , US-NY ,, ",
+			},
+			wantPort:        8080,
+			wantLevel:       slog.LevelInfo,
+			wantDatabaseURL: "postgres://localhost/wheretobird",
+			wantRegions:     []string{"US-CA", "US-NY"},
+		},
+		{
+			name: "blank EBIRD_REGIONS is an error",
+			env: map[string]string{
+				"DATABASE_URL":  "postgres://localhost/wheretobird",
+				"EBIRD_REGIONS": "  ,  ",
+			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			clearEnv(t, "PORT", "LOG_LEVEL", "DATABASE_URL", "EBIRD_API_KEY")
+			clearEnv(t, "PORT", "LOG_LEVEL", "DATABASE_URL", "EBIRD_API_KEY", "EBIRD_REGIONS")
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
@@ -122,6 +146,9 @@ func TestLoad(t *testing.T) {
 			}
 			if cfg.EbirdAPIKey != tc.wantEbirdAPIKey {
 				t.Errorf("Load().EbirdAPIKey = %q, want %q", cfg.EbirdAPIKey, tc.wantEbirdAPIKey)
+			}
+			if !slices.Equal(cfg.Regions, tc.wantRegions) {
+				t.Errorf("Load().Regions = %v, want %v", cfg.Regions, tc.wantRegions)
 			}
 		})
 	}
