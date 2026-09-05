@@ -3,12 +3,13 @@
 package ebd
 
 import (
+	"bufio"
 	"context"
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,6 +20,11 @@ import (
 // Source is the ingestion_runs.source value this loader writes.
 const Source = "ebd"
 
+// maxLineSize bounds one EBD row. The largest fields are free-text comments;
+// 10MB is far beyond any real checklist comment, but cheap to allow so a
+// single unusually long row fails loudly instead of stopping the whole load.
+const maxLineSize = 10 * 1024 * 1024
+
 // Stats summarizes one Load call.
 type Stats struct {
 	// Inserted is the number of observations upserted.
@@ -27,6 +33,9 @@ type Stats struct {
 	// TAXON CONCEPT ID has no matching species -- taxonomic drift between
 	// AviList and eBird's live taxonomy, not a load failure.
 	SkippedUnmatchedSpecies int
+	// SkippedFiltered counts rows that are neither species-rank nor
+	// approved -- excluded by design, not a data problem.
+	SkippedFiltered int
 }
 
 // errSpeciesNotFound marks a row whose avibase_id has no matching species.
@@ -58,30 +67,35 @@ func Load(ctx context.Context, queries *store.Queries, r io.Reader) (Stats, erro
 		return Stats{}, fmt.Errorf("loading hotspot index: %w", err)
 	}
 
-	reader := csv.NewReader(r)
-	reader.Comma = '\t'
-	// EBD's free-text comment columns carry stray, unescaped quote
-	// characters. Without this, encoding/csv rejects otherwise-valid rows
-	// over columns Load never reads.
-	reader.LazyQuotes = true
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
 
-	header, err := reader.Read()
-	if err != nil {
-		return Stats{}, fmt.Errorf("reading header: %w", err)
+	// EBD is tab-separated but has no quoting convention at all: a `"` in a
+	// free-text comment field is a literal character, never a delimiter or
+	// an escape marker. encoding/csv doesn't know that -- an unescaped quote
+	// makes it enter "inside a quoted field" state, which then silently
+	// swallows following tabs and even newlines as literal content until it
+	// finds another quote, merging physical rows into one and losing data
+	// with no error at all. Splitting each line on tabs by hand sidesteps
+	// CSV's quoting rules entirely, which is exactly what a quote-free
+	// format needs.
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return Stats{}, fmt.Errorf("reading header: %w", err)
+		}
+		return Stats{}, errors.New("reading header: file is empty")
 	}
+	header := strings.Split(scanner.Text(), "\t")
 	cols, err := columnIndex(header, requiredColumns)
 	if err != nil {
 		return Stats{}, err
 	}
 
 	var stats Stats
-	for line := 2; ; line++ {
-		record, err := reader.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return stats, fmt.Errorf("reading row %d: %w", line, err)
+	for line := 2; scanner.Scan(); line++ {
+		record := strings.Split(scanner.Text(), "\t")
+		if len(record) != len(header) {
+			return stats, fmt.Errorf("row %d: got %d fields, want %d", line, len(record), len(header))
 		}
 
 		params, err := rowToParams(record, cols, speciesByAvibaseID, hotspotsByRef)
@@ -93,13 +107,17 @@ func Load(ctx context.Context, queries *store.Queries, r io.Reader) (Stats, erro
 			return stats, fmt.Errorf("row %d: %w", line, err)
 		}
 		if params == nil {
-			continue // not species-rank, or not approved
+			stats.SkippedFiltered++
+			continue
 		}
 
 		if _, err := queries.UpsertObservation(ctx, *params); err != nil {
 			return stats, fmt.Errorf("row %d (source_ref %s): %w", line, params.SourceRef, err)
 		}
 		stats.Inserted++
+	}
+	if err := scanner.Err(); err != nil {
+		return stats, fmt.Errorf("reading EBD export: %w", err)
 	}
 
 	return stats, nil

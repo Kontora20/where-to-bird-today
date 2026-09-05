@@ -63,6 +63,9 @@ func run() error {
 	if stats.SkippedUnmatchedSpecies > 0 {
 		slog.Warn("ebd ingest: rows with unmatched species", slog.Int("skipped", stats.SkippedUnmatchedSpecies))
 	}
-	slog.Info("ebd ingest complete", slog.Int("observations", stats.Inserted), slog.String("file", path))
+	slog.Info("ebd ingest complete",
+		slog.Int("observations", stats.Inserted),
+		slog.Int("skipped_filtered", stats.SkippedFiltered),
+		slog.String("file", path))
 	return nil
 }
