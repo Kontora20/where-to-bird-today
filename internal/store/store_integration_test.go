@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -197,6 +198,120 @@ func TestUpsertHotspotIsIdempotent(t *testing.T) {
 	}
 	if second.Name != "Alka Polder (renamed)" {
 		t.Errorf("second.Name = %q, want the updated name", second.Name)
+	}
+}
+
+// TestRecomputeSpeciesSeasonality seeds one hotspot, two species, and five
+// observations spread across one ISO week, then checks the recomputed
+// frequency and sample_size by hand. Species A is seen on 3 of the week's 4
+// active days (frequency 0.75), species B on 2 of them (0.5). It then
+// removes one of those active days and recomputes again: a stale
+// sample_size of 4 surviving that second run would mean the table wasn't
+// actually truncated first, only appended to.
+func TestRecomputeSpeciesSeasonality(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := newTestPool(t)
+	queries := New(pool)
+
+	hotspot, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name:      "Seasonality Test Hotspot",
+		Longitude: 25.0,
+		Latitude:  55.0,
+		Region:    "LT",
+		Source:    "test",
+		SourceRef: "test-seasonality-hotspot",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot: %v", err)
+	}
+
+	speciesA, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName: "Testus speciesa",
+		AvibaseID:      pgtype.Text{String: "avibase-TESTAAA1", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies (A): %v", err)
+	}
+	speciesB, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName: "Testus speciesb",
+		AvibaseID:      pgtype.Text{String: "avibase-TESTBBB1", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies (B): %v", err)
+	}
+
+	seedObservation := func(sourceRef string, speciesID int64, day int) {
+		t.Helper()
+		_, err := queries.UpsertObservation(ctx, UpsertObservationParams{
+			SpeciesID:  speciesID,
+			HotspotID:  pgtype.Int8{Int64: hotspot.ID, Valid: true},
+			Longitude:  25.0,
+			Latitude:   55.0,
+			ObservedOn: pgtype.Date{Time: time.Date(2026, 3, day, 0, 0, 0, 0, time.UTC), Valid: true},
+			Source:     "test",
+			SourceRef:  sourceRef,
+		})
+		if err != nil {
+			t.Fatalf("seeding observation %s: %v", sourceRef, err)
+		}
+	}
+	// All within the same ISO week (Mon 2026-03-02 to Fri 2026-03-06):
+	// species A on the 2nd, 3rd and 4th; species B on the 2nd and 5th. Four
+	// distinct days of activity at the hotspot in total.
+	seedObservation("test-obs-a-1", speciesA.ID, 2)
+	seedObservation("test-obs-a-2", speciesA.ID, 3)
+	seedObservation("test-obs-a-3", speciesA.ID, 4)
+	seedObservation("test-obs-b-1", speciesB.ID, 2)
+	seedObservation("test-obs-b-2", speciesB.ID, 5)
+
+	recompute := func() {
+		t.Helper()
+		if err := queries.TruncateSpeciesSeasonality(ctx); err != nil {
+			t.Fatalf("TruncateSpeciesSeasonality: %v", err)
+		}
+		if _, err := queries.RecomputeSpeciesSeasonality(ctx); err != nil {
+			t.Fatalf("RecomputeSpeciesSeasonality: %v", err)
+		}
+	}
+	recompute()
+
+	_, weekOfYear := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC).ISOWeek()
+
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA.ID, weekOfYear, 3.0/4.0, 4)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB.ID, weekOfYear, 2.0/4.0, 4)
+
+	if _, err := pool.Exec(ctx, "DELETE FROM observations WHERE source_ref = $1", "test-obs-b-2"); err != nil {
+		t.Fatalf("removing observation: %v", err)
+	}
+	recompute()
+
+	// Species A is now seen on all 3 remaining active days.
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA.ID, weekOfYear, 1.0, 3)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB.ID, weekOfYear, 1.0/3.0, 3)
+}
+
+func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32) {
+	t.Helper()
+
+	var frequency float32
+	var sampleSize int32
+	err := pool.QueryRow(ctx,
+		"SELECT frequency, sample_size FROM species_seasonality WHERE hotspot_id = $1 AND species_id = $2 AND week_of_year = $3",
+		hotspotID, speciesID, weekOfYear,
+	).Scan(&frequency, &sampleSize)
+	if err != nil {
+		t.Fatalf("reading species_seasonality (hotspot=%d species=%d week=%d): %v", hotspotID, speciesID, weekOfYear, err)
+	}
+	// frequency is stored as a real (float32); dividing by 3 doesn't land on
+	// an exact binary fraction, so this needs a coarser tolerance than
+	// floatsClose's, which is calibrated for PostGIS coordinate round-trips.
+	if math.Abs(float64(frequency)-wantFrequency) > 1e-4 {
+		t.Errorf("frequency = %v, want %v", frequency, wantFrequency)
+	}
+	if sampleSize != wantSampleSize {
+		t.Errorf("sample_size = %d, want %d", sampleSize, wantSampleSize)
 	}
 }
 
