@@ -59,6 +59,12 @@ Get-Content .env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object { $
 go run ./cmd/server
 ```
 
+Or, on Windows, [scripts/dev.ps1](scripts/dev.ps1) wraps that PowerShell snippet into one command — it still only sets real environment variables before running the binary, same as above, just without retyping it:
+
+```powershell
+.\scripts\dev.ps1
+```
+
 ```bash
 curl http://localhost:8080/health
 curl http://localhost:8080/ready
