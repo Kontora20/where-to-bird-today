@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/fstest"
 )
 
 // fakeDatabase is a pinger whose answer the test chooses.
@@ -48,7 +49,7 @@ func TestReady(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 			rec := httptest.NewRecorder()
 
-			NewRouter(testLogger(), fakeDatabase{err: tc.pingErr}, fakeIngestionRunStore{}, fakeHotspotStore{}, fakeRecommendationService{}).ServeHTTP(rec, req)
+			NewRouter(testLogger(), fakeDatabase{err: tc.pingErr}, fakeIngestionRunStore{}, fakeHotspotStore{}, fakeRecommendationService{}, fstest.MapFS{}).ServeHTTP(rec, req)
 
 			if got := rec.Code; got != tc.wantStatus {
 				t.Fatalf("GET /ready status = %d, want %d", got, tc.wantStatus)

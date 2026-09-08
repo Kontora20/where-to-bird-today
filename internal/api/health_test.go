@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/fstest"
 )
 
 // testLogger returns a logger that discards output, so tests do not spew JSON.
@@ -18,9 +19,15 @@ func testLogger() *slog.Logger {
 // an ordinary slice, so building them can use loops, helpers, or anything else
 // the language can do.
 //
-// Two of these cases assert behaviour nobody wrote code for: registering only
-// "GET /health" makes the Go 1.22+ ServeMux answer 405 for other methods on
-// that path and 404 for unknown paths, automatically.
+// One case asserts behaviour nobody wrote code for: registering "GET /health"
+// makes the Go 1.22+ ServeMux answer 405 for other methods on that path,
+// automatically -- and that still holds with the SPA catch-all in the mix
+// only because it's registered as "GET /", not a bare "/" that would match
+// every method (see router.go). What an *unrecognized* GET path does is
+// covered in spa_test.go instead, since the SPA fallback changed that answer
+// on purpose (204/404 became "serve index.html" -- that's the whole point of
+// the fallback), so it deserves its own fixture with a real index.html, not
+// a table entry here still asserting the old behaviour.
 func TestRouterStatusCodes(t *testing.T) {
 	t.Parallel()
 
@@ -42,15 +49,9 @@ func TestRouterStatusCodes(t *testing.T) {
 			target:     "/health",
 			wantStatus: http.StatusMethodNotAllowed,
 		},
-		{
-			name:       "unknown path is not found",
-			method:     http.MethodGet,
-			target:     "/does-not-exist",
-			wantStatus: http.StatusNotFound,
-		},
 	}
 
-	router := NewRouter(testLogger(), fakeDatabase{}, fakeIngestionRunStore{}, fakeHotspotStore{}, fakeRecommendationService{})
+	router := NewRouter(testLogger(), fakeDatabase{}, fakeIngestionRunStore{}, fakeHotspotStore{}, fakeRecommendationService{}, fstest.MapFS{})
 
 	for _, tc := range tests {
 		// Since Go 1.22 each loop iteration gets its own `tc`, so subtests
@@ -83,7 +84,7 @@ func TestHealthResponseBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
-	NewRouter(testLogger(), fakeDatabase{}, fakeIngestionRunStore{}, fakeHotspotStore{}, fakeRecommendationService{}).ServeHTTP(rec, req)
+	NewRouter(testLogger(), fakeDatabase{}, fakeIngestionRunStore{}, fakeHotspotStore{}, fakeRecommendationService{}, fstest.MapFS{}).ServeHTTP(rec, req)
 
 	if got, want := rec.Code, http.StatusOK; got != want {
 		t.Fatalf("GET /health status = %d, want %d", got, want)

@@ -3,6 +3,7 @@
 package api
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"time"
@@ -16,8 +17,10 @@ import (
 //
 // Dependencies arrive as parameters and are handed to the handlers that need
 // them. The database is taken as a pinger, not as a concrete pool: the router
-// passes on what it is given and never touches the database itself.
-func NewRouter(logger *slog.Logger, db pinger, ingestionRuns ingestionRunStore, hotspots hotspotStore, recommendations recommendationService) http.Handler {
+// passes on what it is given and never touches the database itself. spaFS is
+// similarly just an fs.FS -- this package knows nothing about //go:embed or
+// the web module, only that it was handed something file-shaped to serve.
+func NewRouter(logger *slog.Logger, db pinger, ingestionRuns ingestionRunStore, hotspots hotspotStore, recommendations recommendationService, spaFS fs.FS) http.Handler {
 	mux := http.NewServeMux()
 
 	// "GET /health" is a Go 1.22+ pattern: method and path in one string.
@@ -31,6 +34,14 @@ func NewRouter(logger *slog.Logger, db pinger, ingestionRuns ingestionRunStore, 
 	mux.Handle("POST /hotspots", handleCreateHotspot(logger, hotspots))
 	mux.Handle("GET /hotspots/{id}", handleGetHotspot(logger, hotspots))
 	mux.Handle("GET /recommendations", handleGetRecommendations(logger, recommendations))
+	// Catch-all for the SPA, GET-only. A bare "/" (no method) matches every
+	// method as well as every path -- it would swallow e.g. a POST to
+	// /hotspots too, silently replacing ServeMux's automatic 405 with the
+	// SPA's index.html. Restricting to GET keeps that automatic 405 working
+	// for the routes above, while still catching any GET to a path this mux
+	// doesn't otherwise recognize -- exactly what a client-side route (or a
+	// browser refresh on one) needs.
+	mux.Handle("GET /", handleSPA(spaFS))
 
 	// Middleware is applied by wrapping. The outermost wrapper runs first.
 	return logRequests(logger, mux)

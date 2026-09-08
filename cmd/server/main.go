@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/Kontora20/where-to-bird-today/internal/birding"
 	"github.com/Kontora20/where-to-bird-today/internal/config"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
+	"github.com/Kontora20/where-to-bird-today/web"
 )
 
 // shutdownTimeout bounds how long in-flight requests get to finish once a
@@ -72,9 +74,17 @@ func run() error {
 	queries := store.New(pool)
 	recommendations := birding.NewService(queries)
 
+	// The embedded FS has everything under a "build" prefix (that's what
+	// //go:embed all:build captured); Sub strips it so a request for
+	// "/index.html" maps to the FS root, matching what the browser asks for.
+	spaFS, err := fs.Sub(web.BuildFS, "build")
+	if err != nil {
+		return fmt.Errorf("opening embedded frontend: %w", err)
+	}
+
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: api.NewRouter(logger, pool, queries, queries, recommendations),
+		Handler: api.NewRouter(logger, pool, queries, queries, recommendations, spaFS),
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine
