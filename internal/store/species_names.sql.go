@@ -11,6 +11,38 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getPrimaryCommonNames = `-- name: GetPrimaryCommonNames :many
+SELECT species_id, lang, common_name
+FROM species_names
+WHERE species_id = ANY($1::bigint[]) AND is_primary = true
+`
+
+type GetPrimaryCommonNamesRow struct {
+	SpeciesID  int64  `json:"species_id"`
+	Lang       string `json:"lang"`
+	CommonName string `json:"common_name"`
+}
+
+func (q *Queries) GetPrimaryCommonNames(ctx context.Context, speciesIds []int64) ([]GetPrimaryCommonNamesRow, error) {
+	rows, err := q.db.Query(ctx, getPrimaryCommonNames, speciesIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPrimaryCommonNamesRow
+	for rows.Next() {
+		var i GetPrimaryCommonNamesRow
+		if err := rows.Scan(&i.SpeciesID, &i.Lang, &i.CommonName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertSpeciesName = `-- name: UpsertSpeciesName :execrows
 INSERT INTO species_names (species_id, lang, common_name, source, is_primary)
 SELECT id, $1, $2, $3, $4

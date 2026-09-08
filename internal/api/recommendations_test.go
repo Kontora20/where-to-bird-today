@@ -1,0 +1,130 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/Kontora20/where-to-bird-today/internal/birding"
+)
+
+type fakeRecommendationService struct {
+	err     error
+	results []birding.Recommendation
+}
+
+func (f fakeRecommendationService) Recommend(_ context.Context, _ birding.Params) ([]birding.Recommendation, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.results, nil
+}
+
+func TestGetRecommendations(t *testing.T) {
+	t.Parallel()
+
+	validQuery := "lat=55.3167&lon=21.3667&radius_km=25"
+
+	tests := []struct {
+		name       string
+		query      string
+		service    fakeRecommendationService
+		wantStatus int
+	}{
+		{
+			name:       "valid request",
+			query:      validQuery,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "missing lat",
+			query:      "lon=21.3667&radius_km=25",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "lat out of range",
+			query:      "lat=95&lon=21.3667&radius_km=25",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "lon out of range",
+			query:      "lat=55.3167&lon=200&radius_km=25",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "missing radius_km",
+			query:      "lat=55.3167&lon=21.3667",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "zero radius_km",
+			query:      "lat=55.3167&lon=21.3667&radius_km=0",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid date",
+			query:      validQuery + "&date=not-a-date",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "valid date",
+			query:      validQuery + "&date=2026-05-15",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "service error",
+			query:      validQuery,
+			service:    fakeRecommendationService{err: errors.New("db down")},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/recommendations?"+tc.query, nil)
+			rec := httptest.NewRecorder()
+
+			handleGetRecommendations(testLogger(), tc.service).ServeHTTP(rec, req)
+
+			if got := rec.Code; got != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body: %q)", got, tc.wantStatus, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestGetRecommendationsResponseBody(t *testing.T) {
+	t.Parallel()
+
+	want := []birding.Recommendation{
+		{
+			HotspotID:   1,
+			HotspotName: "Nemunas Delta",
+			TopSpecies: []birding.ExpectedSpecies{
+				{SpeciesID: 10, CommonName: "Baltasis gandras", Frequency: 0.8},
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recommendations?lat=55.3167&lon=21.3667&radius_km=25", nil)
+	rec := httptest.NewRecorder()
+
+	handleGetRecommendations(testLogger(), fakeRecommendationService{results: want}).ServeHTTP(rec, req)
+
+	if got, wantStatus := rec.Code, http.StatusOK; got != wantStatus {
+		t.Fatalf("status = %d, want %d (body: %q)", got, wantStatus, rec.Body.String())
+	}
+
+	var got []birding.Recommendation
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("body is not valid JSON: %v (body: %q)", err, rec.Body.String())
+	}
+	if len(got) != 1 || got[0].HotspotName != "Nemunas Delta" {
+		t.Errorf("body = %+v, want %+v", got, want)
+	}
+}

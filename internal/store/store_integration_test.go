@@ -318,3 +318,165 @@ func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, ho
 func floatsClose(got, want float64) bool {
 	return math.Abs(got-want) < 1e-9
 }
+
+// TestRecommendHotspots seeds three hotspots around one point -- two within
+// a 25km search radius, one well outside it -- and checks that
+// RecommendHotspots (a) excludes the far hotspot, (b) still lists a nearby
+// hotspot with no seasonality data for the queried week (score 0, no
+// species), (c) ranks species within a hotspot by frequency, (d) respects
+// TopSpeciesLimit, and (e) an explicit species_ids filter narrows both the
+// species returned and the score computed from them.
+func TestRecommendHotspots(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := newTestPool(t)
+	queries := New(pool)
+
+	const centerLat, centerLon = 55.0, 25.0
+	const week = int16(10)
+
+	near, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name: "Near Hotspot", Latitude: 55.05, Longitude: 25.05,
+		Region: "LT", Source: "test", SourceRef: "test-recommend-near",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot (near): %v", err)
+	}
+	noData, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name: "No Seasonality Data Hotspot", Latitude: 54.95, Longitude: 24.95,
+		Region: "LT", Source: "test", SourceRef: "test-recommend-no-data",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot (no data): %v", err)
+	}
+	_, err = queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name: "Far Hotspot", Latitude: 57.0, Longitude: 27.0,
+		Region: "LT", Source: "test", SourceRef: "test-recommend-far",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot (far): %v", err)
+	}
+
+	common, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName: "Testus commonis",
+		AvibaseID:      pgtype.Text{String: "avibase-TESTCMN1", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies (common): %v", err)
+	}
+	rare, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName: "Testus rarus",
+		AvibaseID:      pgtype.Text{String: "avibase-TESTRAR1", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies (rare): %v", err)
+	}
+
+	seedSeasonality := func(hotspotID, speciesID int64, frequency float32) {
+		t.Helper()
+		_, err := pool.Exec(ctx,
+			"INSERT INTO species_seasonality (hotspot_id, species_id, week_of_year, frequency, sample_size) VALUES ($1, $2, $3, $4, 10)",
+			hotspotID, speciesID, week, frequency,
+		)
+		if err != nil {
+			t.Fatalf("seeding species_seasonality: %v", err)
+		}
+	}
+	seedSeasonality(near.ID, common.ID, 0.8)
+	seedSeasonality(near.ID, rare.ID, 0.3)
+	// noData and the far hotspot deliberately get no seasonality rows: the
+	// far one is proven excluded by radius alone, so it doesn't need any.
+
+	recommend := func(params RecommendHotspotsParams) []RecommendHotspotsRow {
+		t.Helper()
+		params.Latitude = pgtype.Float8{Float64: centerLat, Valid: true}
+		params.Longitude = pgtype.Float8{Float64: centerLon, Valid: true}
+		params.RadiusMeters = pgtype.Float8{Float64: 25_000, Valid: true}
+		params.WeekOfYear = pgtype.Int2{Int16: week, Valid: true}
+		if params.TopSpeciesLimit.Int64 == 0 {
+			params.TopSpeciesLimit = pgtype.Int8{Int64: 10, Valid: true}
+		}
+		rows, err := queries.RecommendHotspots(ctx, params)
+		if err != nil {
+			t.Fatalf("RecommendHotspots: %v", err)
+		}
+		return rows
+	}
+
+	t.Run("excludes the far hotspot and still lists the empty one", func(t *testing.T) {
+		rows := recommend(RecommendHotspotsParams{})
+
+		hotspots := map[int64]int{}
+		for _, r := range rows {
+			hotspots[r.HotspotID]++
+		}
+		if _, ok := hotspots[near.ID]; !ok {
+			t.Errorf("near hotspot missing from results")
+		}
+		if _, ok := hotspots[noData.ID]; !ok {
+			t.Errorf("no-data hotspot missing from results (should still be listed, just empty)")
+		}
+		if hotspots[near.ID] != 2 {
+			t.Errorf("near hotspot returned %d rows, want 2 (one per species)", hotspots[near.ID])
+		}
+		if hotspots[noData.ID] != 1 {
+			t.Errorf("no-data hotspot returned %d rows, want 1 (score-only row, no species)", hotspots[noData.ID])
+		}
+		for _, r := range rows {
+			if r.HotspotID == noData.ID && (r.Score != 0 || r.SpeciesID.Valid) {
+				t.Errorf("no-data hotspot row = %+v, want score=0 and no species", r)
+			}
+		}
+	})
+
+	t.Run("ranks species within a hotspot by frequency", func(t *testing.T) {
+		rows := recommend(RecommendHotspotsParams{})
+
+		var nearSpecies []RecommendHotspotsRow
+		for _, r := range rows {
+			if r.HotspotID == near.ID {
+				nearSpecies = append(nearSpecies, r)
+			}
+		}
+		if len(nearSpecies) != 2 || nearSpecies[0].SpeciesID.Int64 != common.ID || nearSpecies[1].SpeciesID.Int64 != rare.ID {
+			t.Fatalf("near hotspot species order = %+v, want [common, rare]", nearSpecies)
+		}
+		// Score sums two float32 frequencies, so -- like assertSeasonality
+		// above -- this needs a coarser tolerance than floatsClose's, which
+		// is calibrated for float64 PostGIS coordinate round-trips.
+		if math.Abs(float64(nearSpecies[0].Score)-1.1) > 1e-4 {
+			t.Errorf("near hotspot score = %v, want ~1.1 (0.8 + 0.3)", nearSpecies[0].Score)
+		}
+	})
+
+	t.Run("respects top_species_limit", func(t *testing.T) {
+		rows := recommend(RecommendHotspotsParams{TopSpeciesLimit: pgtype.Int8{Int64: 1, Valid: true}})
+
+		var nearSpecies int
+		for _, r := range rows {
+			if r.HotspotID == near.ID {
+				nearSpecies++
+			}
+		}
+		if nearSpecies != 1 {
+			t.Errorf("near hotspot returned %d species rows, want 1 (top_species_limit=1)", nearSpecies)
+		}
+	})
+
+	t.Run("an explicit species_ids filter narrows both species and score", func(t *testing.T) {
+		rows := recommend(RecommendHotspotsParams{SpeciesIds: []int64{rare.ID}})
+
+		for _, r := range rows {
+			if r.HotspotID != near.ID {
+				continue
+			}
+			if r.SpeciesID.Int64 != rare.ID {
+				t.Errorf("species_ids filter let through species %d, want only %d", r.SpeciesID.Int64, rare.ID)
+			}
+			if math.Abs(float64(r.Score)-0.3) > 1e-4 {
+				t.Errorf("filtered score = %v, want 0.3 (rare's frequency alone)", r.Score)
+			}
+		}
+	})
+}

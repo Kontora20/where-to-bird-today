@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Kontora20/where-to-bird-today/internal/api"
+	"github.com/Kontora20/where-to-bird-today/internal/birding"
 	"github.com/Kontora20/where-to-bird-today/internal/config"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
@@ -69,10 +70,11 @@ func run() error {
 	logger.Info("database connected")
 
 	queries := store.New(pool)
+	recommendations := birding.NewService(queries)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: api.NewRouter(logger, pool, queries, queries),
+		Handler: api.NewRouter(logger, pool, queries, queries, recommendations),
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine

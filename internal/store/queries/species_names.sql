@@ -6,3 +6,8 @@ WHERE ebird_species_code = sqlc.arg(ebird_species_code)
 ON CONFLICT (species_id, lang, source) DO UPDATE SET
     common_name = EXCLUDED.common_name,
     is_primary  = EXCLUDED.is_primary;
+
+-- name: GetPrimaryCommonNames :many
+SELECT species_id, lang, common_name
+FROM species_names
+WHERE species_id = ANY(sqlc.arg(species_ids)::bigint[]) AND is_primary = true;
