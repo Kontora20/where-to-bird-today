@@ -6,7 +6,12 @@ node_modules
 .netlify
 .wrangler
 /.svelte-kit
-/build
+# NOT /build: the root .gitignore already governs this path deliberately,
+# with a negated `!web/build/.gitkeep` so //go:embed always has a
+# non-empty directory to point at (see its comment there). A directory-level
+# ignore here would shadow that negation before git ever reaches it -- which
+# is exactly what happened: this line silently dropped .gitkeep from a
+# commit once already.
 
 # OS
 .DS_Store

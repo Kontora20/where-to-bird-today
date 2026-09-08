@@ -30,6 +30,27 @@ jobs:
       - name: Check out
         uses: actions/checkout@v7
 
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          # "lts/*" resolves to whatever's current LTS at run time, same
+          # reasoning as GO_VERSION above: pinning a number means editing
+          # this file for every security release.
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build frontend
+        # web/embed.go's //go:embed needs real files in web/build before any
+        # Go step below can even compile -- web/build/.gitkeep alone
+        # satisfies that at the syntax level, but golangci-lint and the real
+        # binary both need the actual app, not a placeholder.
+        working-directory: web
+        run: |
+          npm ci
+          npm run check
+          npm run build
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
@@ -75,6 +96,22 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build frontend
+        # golangci-lint type-checks the whole module, including web/embed.go's
+        # //go:embed directive -- it needs the same real web/build this job's
+        # sibling needs, for the same reason.
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
 
       - name: Set up Go
         uses: actions/setup-go@v7

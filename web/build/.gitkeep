@@ -1,0 +1,10 @@
+# This file exists only so `web/build` is a non-empty directory in a fresh
+# git checkout. //go:embed (web/embed.go) fails to compile if its target
+# directory is missing or empty -- see the comment in .gitignore.
+#
+# Heads up: `npm run build` clears this whole directory before writing the
+# real frontend output, deleting this file along with it. That's expected --
+# once a real build exists, .gitkeep isn't needed for the embed to work. If
+# you commit after building locally, check `git status` before staging: it's
+# easy to accidentally commit that deletion (this file has already been
+# accidentally deleted and re-added once for exactly that reason).
