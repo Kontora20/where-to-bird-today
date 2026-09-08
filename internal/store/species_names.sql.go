@@ -11,28 +11,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getPrimaryCommonNames = `-- name: GetPrimaryCommonNames :many
-SELECT species_id, lang, common_name
+const getCommonNames = `-- name: GetCommonNames :many
+SELECT DISTINCT ON (species_id)
+    species_id,
+    common_name
 FROM species_names
 WHERE species_id = ANY($1::bigint[]) AND is_primary = true
+ORDER BY species_id, array_position($2::text[], lang) ASC NULLS LAST
 `
 
-type GetPrimaryCommonNamesRow struct {
+type GetCommonNamesParams struct {
+	SpeciesIds   []int64  `json:"species_ids"`
+	LangPriority []string `json:"lang_priority"`
+}
+
+type GetCommonNamesRow struct {
 	SpeciesID  int64  `json:"species_id"`
-	Lang       string `json:"lang"`
 	CommonName string `json:"common_name"`
 }
 
-func (q *Queries) GetPrimaryCommonNames(ctx context.Context, speciesIds []int64) ([]GetPrimaryCommonNamesRow, error) {
-	rows, err := q.db.Query(ctx, getPrimaryCommonNames, speciesIds)
+// Resolves one name per species, already fallback-ranked by lang_priority
+// (e.g. ['en','lt']) -- the caller never sees per-language rows to pick
+// between. array_position ranks each row by where its lang sits in the
+// priority list; NULLS LAST pushes any row in a language outside that list
+// to the bottom; DISTINCT ON keeps only the best-ranked row per species.
+// This generalizes to any future language list with no query change.
+func (q *Queries) GetCommonNames(ctx context.Context, arg GetCommonNamesParams) ([]GetCommonNamesRow, error) {
+	rows, err := q.db.Query(ctx, getCommonNames, arg.SpeciesIds, arg.LangPriority)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetPrimaryCommonNamesRow
+	var items []GetCommonNamesRow
 	for rows.Next() {
-		var i GetPrimaryCommonNamesRow
-		if err := rows.Scan(&i.SpeciesID, &i.Lang, &i.CommonName); err != nil {
+		var i GetCommonNamesRow
+		if err := rows.Scan(&i.SpeciesID, &i.CommonName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

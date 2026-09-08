@@ -15,20 +15,30 @@ import (
 // A plain constant: nothing today needs it tunable per request.
 const topSpeciesPerHotspot = 10
 
-// preferredLangs is the common-name fallback order: Lithuanian first (the
-// app's default locale), English second, and the species' scientific name
-// if neither exists.
-var preferredLangs = []string{"lt", "en"}
+// supportedLangs are the only two the app ships today (ADR 0005). otherOf
+// keeps that fact in this one place rather than spreading a hardcoded pair
+// through every caller.
+var supportedLangs = []string{"lt", "en"}
+
+func otherOf(lang string) string {
+	if lang == supportedLangs[0] {
+		return supportedLangs[1]
+	}
+	return supportedLangs[0]
+}
 
 // Params is one recommendation request. SpeciesIDs is nil for "all species".
 // Keeping it an explicit field -- rather than the query silently assuming
 // every species -- means a future species-group filter (birds of prey,
 // water birds) is just a new value here, not a rewrite of the ranking.
+// Lang is the single language resolved by the caller (content negotiation
+// is an HTTP concern, decided in internal/api, not here).
 type Params struct {
 	Latitude   float64
 	Longitude  float64
 	RadiusKM   float64
 	Week       int16
+	Lang       string
 	SpeciesIDs []int64
 }
 
@@ -57,7 +67,7 @@ type Recommendation struct {
 // birding or knowing it exists.
 type Store interface {
 	RecommendHotspots(ctx context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error)
-	GetPrimaryCommonNames(ctx context.Context, speciesIDs []int64) ([]store.GetPrimaryCommonNamesRow, error)
+	GetCommonNames(ctx context.Context, arg store.GetCommonNamesParams) ([]store.GetCommonNamesRow, error)
 }
 
 // Service ranks hotspots for a recommendation request.
@@ -86,13 +96,17 @@ func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, er
 
 	recommendations, speciesIDs := groupByHotspot(rows)
 
-	names, err := s.commonNames(ctx, speciesIDs)
+	names, err := s.commonNames(ctx, speciesIDs, p.Lang)
 	if err != nil {
 		return nil, err
 	}
 	for i, r := range recommendations {
 		for j, sp := range r.TopSpecies {
-			recommendations[i].TopSpecies[j].CommonName = commonName(names, sp.SpeciesID, sp.ScientificName)
+			name, ok := names[sp.SpeciesID]
+			if !ok {
+				name = sp.ScientificName
+			}
+			recommendations[i].TopSpecies[j].CommonName = name
 		}
 	}
 
@@ -140,35 +154,26 @@ func groupByHotspot(rows []store.RecommendHotspotsRow) ([]Recommendation, []int6
 
 // commonNames batches one lookup for every species across every hotspot,
 // instead of one query per species -- N hotspots x topSpeciesPerHotspot
-// species stays two round trips total, not N*topSpeciesPerHotspot+1.
-func (s *Service) commonNames(ctx context.Context, speciesIDs []int64) (map[int64]map[string]string, error) {
+// species stays two round trips total, not N*topSpeciesPerHotspot+1. The
+// fallback between lang and its alternate is resolved in SQL (ADR 0005),
+// so the result already has at most one name per species -- no picking
+// left to do here, unlike before this query existed.
+func (s *Service) commonNames(ctx context.Context, speciesIDs []int64, lang string) (map[int64]string, error) {
 	if len(speciesIDs) == 0 {
 		return nil, nil
 	}
 
-	rows, err := s.store.GetPrimaryCommonNames(ctx, speciesIDs)
+	rows, err := s.store.GetCommonNames(ctx, store.GetCommonNamesParams{
+		SpeciesIds:   speciesIDs,
+		LangPriority: []string{lang, otherOf(lang)},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("loading species names: %w", err)
 	}
 
-	names := make(map[int64]map[string]string, len(speciesIDs))
+	names := make(map[int64]string, len(rows))
 	for _, row := range rows {
-		if names[row.SpeciesID] == nil {
-			names[row.SpeciesID] = make(map[string]string, len(preferredLangs))
-		}
-		names[row.SpeciesID][row.Lang] = row.CommonName
+		names[row.SpeciesID] = row.CommonName
 	}
 	return names, nil
-}
-
-// commonName picks the first available name in preferredLangs order,
-// falling back to the scientific name if the species has no common name in
-// any preferred language.
-func commonName(names map[int64]map[string]string, speciesID int64, scientificName string) string {
-	for _, lang := range preferredLangs {
-		if name, ok := names[speciesID][lang]; ok {
-			return name
-		}
-	}
-	return scientificName
 }

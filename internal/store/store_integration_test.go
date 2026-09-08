@@ -480,3 +480,76 @@ func TestRecommendHotspots(t *testing.T) {
 		}
 	})
 }
+
+// TestGetCommonNames seeds one species with both lt and en names and a
+// second with only en, then checks that lang_priority actually drives which
+// name wins -- this is what proves the DISTINCT ON + array_position query
+// behaves as designed against real Postgres, not just as read on the page.
+func TestGetCommonNames(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := New(newTestPool(t))
+
+	both, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName:   "Ciconia ciconia",
+		EbirdSpeciesCode: pgtype.Text{String: "whistk-test", Valid: true},
+		AvibaseID:        pgtype.Text{String: "avibase-TESTBOTH1", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies (both): %v", err)
+	}
+	enOnly, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName:   "Testus englishonly",
+		EbirdSpeciesCode: pgtype.Text{String: "engonly-test", Valid: true},
+		AvibaseID:        pgtype.Text{String: "avibase-TESTENON1", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies (en-only): %v", err)
+	}
+
+	seedName := func(ebirdCode, lang, commonName string) {
+		t.Helper()
+		if _, err := queries.UpsertSpeciesName(ctx, UpsertSpeciesNameParams{
+			EbirdSpeciesCode: pgtype.Text{String: ebirdCode, Valid: true},
+			Lang:             lang,
+			CommonName:       commonName,
+			Source:           "test",
+			IsPrimary:        true,
+		}); err != nil {
+			t.Fatalf("UpsertSpeciesName (%s, %s): %v", ebirdCode, lang, err)
+		}
+	}
+	seedName("whistk-test", "lt", "Baltasis gandras")
+	seedName("whistk-test", "en", "White Stork")
+	seedName("engonly-test", "en", "English Only Bird")
+
+	speciesIDs := []int64{both.ID, enOnly.ID}
+
+	ltFirst, err := queries.GetCommonNames(ctx, GetCommonNamesParams{SpeciesIds: speciesIDs, LangPriority: []string{"lt", "en"}})
+	if err != nil {
+		t.Fatalf("GetCommonNames (lt priority): %v", err)
+	}
+	names := make(map[int64]string, len(ltFirst))
+	for _, row := range ltFirst {
+		names[row.SpeciesID] = row.CommonName
+	}
+	if names[both.ID] != "Baltasis gandras" {
+		t.Errorf("names[both] = %q, want %q (lt requested and available)", names[both.ID], "Baltasis gandras")
+	}
+	if names[enOnly.ID] != "English Only Bird" {
+		t.Errorf("names[enOnly] = %q, want %q (falls back to en, no lt row)", names[enOnly.ID], "English Only Bird")
+	}
+
+	enFirst, err := queries.GetCommonNames(ctx, GetCommonNamesParams{SpeciesIds: speciesIDs, LangPriority: []string{"en", "lt"}})
+	if err != nil {
+		t.Fatalf("GetCommonNames (en priority): %v", err)
+	}
+	names = make(map[int64]string, len(enFirst))
+	for _, row := range enFirst {
+		names[row.SpeciesID] = row.CommonName
+	}
+	if names[both.ID] != "White Stork" {
+		t.Errorf("names[both] = %q, want %q (en requested and available -- proves lang_priority actually changes the outcome)", names[both.ID], "White Stork")
+	}
+}

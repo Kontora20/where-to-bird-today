@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/text/language"
+
 	"github.com/Kontora20/where-to-bird-today/internal/birding"
 )
 
@@ -18,6 +20,28 @@ import (
 // species_seasonality aggregates by week_of_year only. Accepting a
 // timestamp today would mean silently discarding the time half of it.
 const dateParamLayout = "2006-01-02"
+
+// supportedLanguages is Lithuanian-first: NewMatcher uses the first tag as
+// its own fallback (ADR 0005 -- "Lithuanian is the default in every
+// ambiguous case"), so that's a property of this construction, not a
+// special case written by hand anywhere below.
+var supportedLanguages = language.NewMatcher([]language.Tag{language.Lithuanian, language.English})
+
+// languageCodes is index-aligned with supportedLanguages' tag list, so a
+// Matcher's returned index can be turned back into the plain "lt"/"en" the
+// rest of the app (and the database's lang column) uses.
+var languageCodes = []string{"lt", "en"}
+
+// resolveLanguage picks the response language for r: an explicit "?lang="
+// override if present and understood, else negotiated from Accept-Language,
+// else Lithuanian -- the Matcher's own configured default when neither
+// candidate parses or matches. MatchStrings tries each string in turn and
+// falls through silently on anything it can't parse, so an absent or
+// malformed value in either source never needs a special-cased branch here.
+func resolveLanguage(r *http.Request) string {
+	_, index := language.MatchStrings(supportedLanguages, r.URL.Query().Get("lang"), r.Header.Get("Accept-Language"))
+	return languageCodes[index]
+}
 
 type recommendationService interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
@@ -58,6 +82,7 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 			Longitude: longitude,
 			RadiusKM:  radiusKM,
 			Week:      int16(week),
+			Lang:      resolveLanguage(r),
 		})
 		if err != nil {
 			logger.Error("ranking recommendations failed", slog.Any("error", err))

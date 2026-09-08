@@ -98,6 +98,71 @@ func TestGetRecommendations(t *testing.T) {
 	}
 }
 
+func TestResolveLanguage(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		langParam      string
+		acceptLanguage string
+		want           string
+	}{
+		{
+			name: "no signal at all defaults to lt",
+			want: "lt",
+		},
+		{
+			name:      "explicit override to en",
+			langParam: "en",
+			want:      "en",
+		},
+		{
+			name:           "explicit override wins over Accept-Language",
+			langParam:      "en",
+			acceptLanguage: "lt",
+			want:           "en",
+		},
+		{
+			name:           "negotiated from Accept-Language when no override",
+			acceptLanguage: "en",
+			want:           "en",
+		},
+		{
+			name:           "unsupported Accept-Language falls back to lt",
+			acceptLanguage: "fr",
+			want:           "lt",
+		},
+		{
+			name:      "garbage override falls through to Accept-Language",
+			langParam: "not-a-real-tag!!",
+			// language.Parse rejects this, so it's as if no override was
+			// given -- Accept-Language decides instead of erroring.
+			acceptLanguage: "en",
+			want:           "en",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/recommendations?lat=0&lon=0&radius_km=1", nil)
+			if tc.langParam != "" {
+				q := req.URL.Query()
+				q.Set("lang", tc.langParam)
+				req.URL.RawQuery = q.Encode()
+			}
+			if tc.acceptLanguage != "" {
+				req.Header.Set("Accept-Language", tc.acceptLanguage)
+			}
+
+			if got := resolveLanguage(req); got != tc.want {
+				t.Errorf("resolveLanguage() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestGetRecommendationsResponseBody(t *testing.T) {
 	t.Parallel()
 
