@@ -9,11 +9,14 @@ package web
 
 import "embed"
 
-// all: is required, not decoration -- SvelteKit's static build emits a
-// leading-underscore _app/ directory for its JS chunks, and a plain
-// "//go:embed build" silently excludes any file or directory starting with
-// _ or ., losing every chunk with no compile error, just a broken page at
-// runtime.
+// BuildFS holds the built SvelteKit SPA, embedded at compile time so
+// cmd/server can serve it without a separate static-file deployment step.
+//
+// The all: prefix is required, not decoration: SvelteKit's static build
+// emits a leading-underscore _app/ directory for its JS chunks, and a plain
+// "//go:embed build" would silently exclude any file or directory starting
+// with _ or ., losing every chunk with no compile error, just a broken page
+// at runtime.
 //
 //go:embed all:build
 var BuildFS embed.FS

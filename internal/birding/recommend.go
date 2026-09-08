@@ -75,6 +75,7 @@ type Service struct {
 	store Store
 }
 
+// NewService builds a Service backed by store.
 func NewService(store Store) *Service {
 	return &Service{store: store}
 }
