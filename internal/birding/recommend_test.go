@@ -15,6 +15,13 @@ type fakeStore struct {
 	rows         []store.RecommendHotspotsRow
 	// nameCandidates simulates species_names rows: speciesID -> lang -> name.
 	nameCandidates map[int64]map[string]string
+
+	speciesErr      error
+	speciesRow      store.Species
+	mediaErr        error
+	mediaRows       []store.SpeciesMedium
+	seasonalityErr  error
+	seasonalityRows []store.GetSpeciesSeasonalityAtHotspotRow
 }
 
 func (f fakeStore) RecommendHotspots(_ context.Context, _ store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error) {
@@ -40,6 +47,27 @@ func (f fakeStore) GetCommonNames(_ context.Context, arg store.GetCommonNamesPar
 		}
 	}
 	return rows, nil
+}
+
+func (f fakeStore) GetSpecies(_ context.Context, _ int64) (store.Species, error) {
+	if f.speciesErr != nil {
+		return store.Species{}, f.speciesErr
+	}
+	return f.speciesRow, nil
+}
+
+func (f fakeStore) ListSpeciesMedia(_ context.Context, _ int64) ([]store.SpeciesMedium, error) {
+	if f.mediaErr != nil {
+		return nil, f.mediaErr
+	}
+	return f.mediaRows, nil
+}
+
+func (f fakeStore) GetSpeciesSeasonalityAtHotspot(_ context.Context, _ store.GetSpeciesSeasonalityAtHotspotParams) ([]store.GetSpeciesSeasonalityAtHotspotRow, error) {
+	if f.seasonalityErr != nil {
+		return nil, f.seasonalityErr
+	}
+	return f.seasonalityRows, nil
 }
 
 // Named pgtypeX, not X: int8 is a predeclared Go type, so a function named

@@ -12,8 +12,10 @@ import (
 )
 
 type fakeRecommendationService struct {
-	err     error
-	results []birding.Recommendation
+	err          error
+	results      []birding.Recommendation
+	speciesErr   error
+	speciesFound birding.SpeciesDetail
 }
 
 func (f fakeRecommendationService) Recommend(_ context.Context, _ birding.Params) ([]birding.Recommendation, error) {
@@ -21,6 +23,13 @@ func (f fakeRecommendationService) Recommend(_ context.Context, _ birding.Params
 		return nil, f.err
 	}
 	return f.results, nil
+}
+
+func (f fakeRecommendationService) SpeciesDetail(_ context.Context, _, _ int64, _ string) (birding.SpeciesDetail, error) {
+	if f.speciesErr != nil {
+		return birding.SpeciesDetail{}, f.speciesErr
+	}
+	return f.speciesFound, nil
 }
 
 func TestGetRecommendations(t *testing.T) {

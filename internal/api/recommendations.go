@@ -45,6 +45,7 @@ func resolveLanguage(r *http.Request) string {
 
 type recommendationService interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
+	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string) (birding.SpeciesDetail, error)
 }
 
 func handleGetRecommendations(logger *slog.Logger, recommendations recommendationService) http.Handler {

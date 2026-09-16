@@ -1,3 +1,12 @@
+-- name: GetSpeciesSeasonalityAtHotspot :many
+-- One species' week-by-week frequency at one hotspot -- what the species
+-- detail panel charts (ADR 0004). Missing weeks mean "never recorded", not
+-- zero; the caller decides how to render that gap.
+SELECT week_of_year, frequency
+FROM species_seasonality
+WHERE hotspot_id = sqlc.arg(hotspot_id) AND species_id = sqlc.arg(species_id)
+ORDER BY week_of_year;
+
 -- name: TruncateSpeciesSeasonality :exec
 TRUNCATE species_seasonality;
 

@@ -93,6 +93,9 @@ func verificationURL(source, sourceRef string) string {
 type Store interface {
 	RecommendHotspots(ctx context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error)
 	GetCommonNames(ctx context.Context, arg store.GetCommonNamesParams) ([]store.GetCommonNamesRow, error)
+	GetSpecies(ctx context.Context, id int64) (store.Species, error)
+	ListSpeciesMedia(ctx context.Context, speciesID int64) ([]store.SpeciesMedium, error)
+	GetSpeciesSeasonalityAtHotspot(ctx context.Context, arg store.GetSpeciesSeasonalityAtHotspotParams) ([]store.GetSpeciesSeasonalityAtHotspotRow, error)
 }
 
 // Service ranks hotspots for a recommendation request.

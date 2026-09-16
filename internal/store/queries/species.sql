@@ -1,3 +1,6 @@
+-- name: GetSpecies :one
+SELECT * FROM species WHERE id = sqlc.arg(id);
+
 -- name: UpsertSpecies :one
 INSERT INTO species (
     ebird_species_code, scientific_name, avibase_id, iucn_category,

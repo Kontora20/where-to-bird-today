@@ -11,6 +11,29 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getSpecies = `-- name: GetSpecies :one
+SELECT id, ebird_species_code, scientific_name, avibase_id, iucn_category, family, taxon_order, birds_of_the_world_url, birdlife_datazone_url, created_at, updated_at FROM species WHERE id = $1
+`
+
+func (q *Queries) GetSpecies(ctx context.Context, id int64) (Species, error) {
+	row := q.db.QueryRow(ctx, getSpecies, id)
+	var i Species
+	err := row.Scan(
+		&i.ID,
+		&i.EbirdSpeciesCode,
+		&i.ScientificName,
+		&i.AvibaseID,
+		&i.IucnCategory,
+		&i.Family,
+		&i.TaxonOrder,
+		&i.BirdsOfTheWorldUrl,
+		&i.BirdlifeDatazoneUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertSpecies = `-- name: UpsertSpecies :one
 INSERT INTO species (
     ebird_species_code, scientific_name, avibase_id, iucn_category,

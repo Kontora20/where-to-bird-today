@@ -9,6 +9,46 @@ import (
 	"context"
 )
 
+const getSpeciesSeasonalityAtHotspot = `-- name: GetSpeciesSeasonalityAtHotspot :many
+SELECT week_of_year, frequency
+FROM species_seasonality
+WHERE hotspot_id = $1 AND species_id = $2
+ORDER BY week_of_year
+`
+
+type GetSpeciesSeasonalityAtHotspotParams struct {
+	HotspotID int64 `json:"hotspot_id"`
+	SpeciesID int64 `json:"species_id"`
+}
+
+type GetSpeciesSeasonalityAtHotspotRow struct {
+	WeekOfYear int16   `json:"week_of_year"`
+	Frequency  float32 `json:"frequency"`
+}
+
+// One species' week-by-week frequency at one hotspot -- what the species
+// detail panel charts (ADR 0004). Missing weeks mean "never recorded", not
+// zero; the caller decides how to render that gap.
+func (q *Queries) GetSpeciesSeasonalityAtHotspot(ctx context.Context, arg GetSpeciesSeasonalityAtHotspotParams) ([]GetSpeciesSeasonalityAtHotspotRow, error) {
+	rows, err := q.db.Query(ctx, getSpeciesSeasonalityAtHotspot, arg.HotspotID, arg.SpeciesID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSpeciesSeasonalityAtHotspotRow
+	for rows.Next() {
+		var i GetSpeciesSeasonalityAtHotspotRow
+		if err := rows.Scan(&i.WeekOfYear, &i.Frequency); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recomputeSpeciesSeasonality = `-- name: RecomputeSpeciesSeasonality :execrows
 WITH species_week_days AS (
     SELECT hotspot_id, species_id, EXTRACT(week FROM observed_on)::smallint AS week_of_year,
