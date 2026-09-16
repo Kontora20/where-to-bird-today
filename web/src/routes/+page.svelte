@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
 	import type * as Leaflet from 'leaflet';
-	import { getRecommendations, type Recommendation } from '$lib/api';
+	import { getRecommendations, getSpeciesDetail, type Recommendation, type SpeciesDetail } from '$lib/api';
 
 	let lat = $state('');
 	let lon = $state('');
@@ -14,6 +14,12 @@
 	let locating = $state(false);
 	let error = $state('');
 	let selectedHotspotId = $state<number | null>(null);
+
+	let openSpecies = $state<SpeciesDetail | null>(null);
+	let speciesLoading = $state(false);
+	let speciesError = $state('');
+
+	const yearWeeks = Array.from({ length: 52 }, (_, index) => index + 1);
 
 	let mapContainer: HTMLDivElement;
 	let leaflet: typeof Leaflet;
@@ -95,6 +101,24 @@
 
 		const marker = markersByHotspotId.get(hotspotId);
 		marker?.openPopup();
+	}
+
+	async function openSpeciesDetail(hotspotId: number, speciesId: number) {
+		speciesError = '';
+		speciesLoading = true;
+		openSpecies = null;
+		try {
+			openSpecies = await getSpeciesDetail(hotspotId, speciesId);
+		} catch (err) {
+			speciesError = err instanceof Error ? err.message : 'failed to load species detail';
+		} finally {
+			speciesLoading = false;
+		}
+	}
+
+	function closeSpeciesDetail() {
+		openSpecies = null;
+		speciesError = '';
 	}
 
 	function useMyLocation() {
@@ -185,13 +209,86 @@
 				{/if}
 				<ul class="species">
 					{#each hotspot.top_species as species (species.species_id)}
-						<li>{species.common_name} ({(species.frequency * 100).toFixed(0)}%)</li>
+						<li>
+							<button type="button" onclick={() => openSpeciesDetail(hotspot.hotspot_id, species.species_id)}>
+								{species.common_name} ({(species.frequency * 100).toFixed(0)}%)
+							</button>
+						</li>
 					{/each}
 				</ul>
 			</li>
 		{/each}
 	</ul>
 </div>
+
+<svelte:window
+	onkeydown={(event) => {
+		if (event.key === 'Escape' && (speciesLoading || speciesError || openSpecies)) closeSpeciesDetail();
+	}}
+/>
+
+{#if speciesLoading || speciesError || openSpecies}
+	<div
+		class="species-panel-backdrop"
+		onclick={(event) => event.target === event.currentTarget && closeSpeciesDetail()}
+		role="presentation"
+	>
+		<aside class="species-panel">
+			<button type="button" class="close" onclick={closeSpeciesDetail} aria-label="Close">✕</button>
+
+			{#if speciesLoading}
+				<p>Loading…</p>
+			{:else if speciesError}
+				<p class="error" role="alert">{speciesError}</p>
+			{:else if openSpecies}
+				<h2>{openSpecies.common_name}</h2>
+				<p class="scientific-name">{openSpecies.scientific_name}</p>
+
+				{#if openSpecies.photo}
+					<figure>
+						<img src={openSpecies.photo.image_url} alt={openSpecies.common_name} />
+						<figcaption>
+							{#if openSpecies.photo.attribution_url}
+								<a href={openSpecies.photo.attribution_url} target="_blank" rel="noopener noreferrer">
+									{openSpecies.photo.attribution}
+								</a>
+							{:else}
+								{openSpecies.photo.attribution}
+							{/if}
+							· {openSpecies.photo.license}
+						</figcaption>
+					</figure>
+				{/if}
+
+				{#if openSpecies.seasonality.length > 0}
+					<h3>Seasonality at this hotspot</h3>
+					<div class="seasonality">
+						{#each yearWeeks as week (week)}
+							{@const match = openSpecies.seasonality.find((w) => w.week === week)}
+							<div
+								class="week-bar"
+								style="height: {(match?.frequency ?? 0) * 100}%"
+								title="Week {week}: {match ? `${(match.frequency * 100).toFixed(0)}%` : 'no data'}"
+							></div>
+						{/each}
+					</div>
+				{/if}
+
+				<ul class="links">
+					{#each [
+						{ url: openSpecies.ebird_url, label: 'eBird' },
+						{ url: openSpecies.birds_of_the_world_url, label: 'Birds of the World' },
+						{ url: openSpecies.birdlife_datazone_url, label: 'BirdLife DataZone' }
+					] as link (link.label)}
+						{#if link.url}
+							<li><a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a></li>
+						{/if}
+					{/each}
+				</ul>
+			{/if}
+		</aside>
+	</div>
+{/if}
 
 <style>
 	.page {
@@ -307,15 +404,110 @@
 
 	.species li {
 		border-radius: 999px;
-		padding: 0.15rem 0.6rem;
 		background: var(--color-accent-bg);
 		font-size: 0.8rem;
+	}
+
+	.species li button {
+		all: unset;
+		display: block;
+		padding: 0.15rem 0.6rem;
+		cursor: pointer;
 	}
 
 	.verify {
 		display: inline-block;
 		margin-top: 0.4rem;
 		font-size: 0.8rem;
+		color: var(--color-accent);
+	}
+
+	.species-panel-backdrop {
+		position: fixed;
+		inset: 0;
+		display: flex;
+		justify-content: flex-end;
+		background: rgba(0, 0, 0, 0.4);
+		/* Above Leaflet's own panes, which go up to z-index 700. */
+		z-index: 1000;
+	}
+
+	.species-panel {
+		position: relative;
+		width: min(420px, 100%);
+		height: 100%;
+		overflow-y: auto;
+		padding: 1.5rem;
+		background: var(--color-bg);
+		border-left: 1px solid var(--color-border);
+	}
+
+	.species-panel .close {
+		position: absolute;
+		top: 1rem;
+		right: 1rem;
+		border: none;
+		background: none;
+		font-size: 1.1rem;
+		cursor: pointer;
+		color: var(--color-fg);
+	}
+
+	.species-panel h2 {
+		margin: 0 0 0.15rem;
+	}
+
+	.scientific-name {
+		margin: 0 0 1rem;
+		font-style: italic;
+		color: var(--color-muted);
+	}
+
+	.species-panel figure {
+		margin: 0 0 1rem;
+	}
+
+	.species-panel img {
+		width: 100%;
+		border-radius: 8px;
+	}
+
+	.species-panel figcaption {
+		margin-top: 0.3rem;
+		font-size: 0.75rem;
+		color: var(--color-muted);
+	}
+
+	.species-panel h3 {
+		font-size: 0.95rem;
+		margin: 1rem 0 0.5rem;
+	}
+
+	.seasonality {
+		display: flex;
+		align-items: flex-end;
+		gap: 1px;
+		height: 80px;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.week-bar {
+		flex: 1;
+		min-height: 2px;
+		background: var(--color-accent);
+		border-radius: 2px 2px 0 0;
+	}
+
+	.links {
+		list-style: none;
+		margin: 1rem 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.links a {
 		color: var(--color-accent);
 	}
 </style>

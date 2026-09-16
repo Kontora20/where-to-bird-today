@@ -42,3 +42,36 @@ export async function getRecommendations(query: {
 	}
 	return response.json();
 }
+
+export interface Photo {
+	image_url: string;
+	thumb_url?: string;
+	license: string;
+	license_url?: string;
+	attribution: string;
+	attribution_url?: string;
+}
+
+export interface WeekFrequency {
+	week: number;
+	frequency: number;
+}
+
+export interface SpeciesDetail {
+	species_id: number;
+	common_name: string;
+	scientific_name: string;
+	birds_of_the_world_url?: string;
+	birdlife_datazone_url?: string;
+	ebird_url?: string;
+	photo?: Photo;
+	seasonality: WeekFrequency[];
+}
+
+export async function getSpeciesDetail(hotspotId: number, speciesId: number): Promise<SpeciesDetail> {
+	const response = await fetch(`/hotspots/${hotspotId}/species/${speciesId}`);
+	if (!response.ok) {
+		throw new Error(`species detail request failed: ${response.status}`);
+	}
+	return response.json();
+}
