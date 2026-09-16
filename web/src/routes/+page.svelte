@@ -178,6 +178,11 @@
 				<button type="button" onclick={() => selectHotspot(hotspot.hotspot_id)}>
 					<strong>{hotspot.hotspot_name}</strong> — {hotspot.distance_km.toFixed(1)} km
 				</button>
+				{#if hotspot.verification_url}
+					<a class="verify" href={hotspot.verification_url} target="_blank" rel="noopener noreferrer">
+						View on eBird
+					</a>
+				{/if}
 				<ul class="species">
 					{#each hotspot.top_species as species (species.species_id)}
 						<li>{species.common_name} ({(species.frequency * 100).toFixed(0)}%)</li>
@@ -305,5 +310,12 @@
 		padding: 0.15rem 0.6rem;
 		background: var(--color-accent-bg);
 		font-size: 0.8rem;
+	}
+
+	.verify {
+		display: inline-block;
+		margin-top: 0.4rem;
+		font-size: 0.8rem;
+		color: var(--color-accent);
 	}
 </style>

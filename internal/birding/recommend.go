@@ -59,6 +59,31 @@ type Recommendation struct {
 	DistanceKM  float64           `json:"distance_km"`
 	Score       float64           `json:"score"`
 	TopSpecies  []ExpectedSpecies `json:"top_species"`
+
+	// VerificationURL links back to the hotspot on the site it came from, so
+	// nothing this read-only app says has to be taken on faith. Empty for a
+	// source with no public page to point at.
+	VerificationURL string `json:"verification_url,omitempty"`
+}
+
+// sourceEBird is the hotspots.source value eBird-sourced hotspots carry
+// (see cmd/ingest-ebird-hotspots). It is the only source verificationURL
+// knows how to link today.
+const sourceEBird = "ebird"
+
+// verificationURL turns a hotspot's (source, source_ref) into a link a
+// birder can open to check the data against its origin. This app never
+// submits anything upstream, so its only claim to trust is that every
+// number traces back to the source that produced it -- sourceRef is
+// eBird's locId for an eBird-sourced hotspot, kept as-is from ingestion for
+// exactly this purpose.
+func verificationURL(source, sourceRef string) string {
+	switch source {
+	case sourceEBird:
+		return "https://ebird.org/hotspot/" + sourceRef
+	default:
+		return ""
+	}
 }
 
 // Store is the persistence this service needs, declared on the consuming
@@ -129,12 +154,13 @@ func groupByHotspot(rows []store.RecommendHotspotsRow) ([]Recommendation, []int6
 	for _, row := range rows {
 		if len(recommendations) == 0 || recommendations[len(recommendations)-1].HotspotID != row.HotspotID {
 			recommendations = append(recommendations, Recommendation{
-				HotspotID:   row.HotspotID,
-				HotspotName: row.HotspotName,
-				Latitude:    row.Latitude.Float64,
-				Longitude:   row.Longitude.Float64,
-				DistanceKM:  row.DistanceMeters.Float64 / 1000,
-				Score:       float64(row.Score),
+				HotspotID:       row.HotspotID,
+				HotspotName:     row.HotspotName,
+				Latitude:        row.Latitude.Float64,
+				Longitude:       row.Longitude.Float64,
+				DistanceKM:      row.DistanceMeters.Float64 / 1000,
+				Score:           float64(row.Score),
+				VerificationURL: verificationURL(row.HotspotSource, row.HotspotSourceRef),
 			})
 		}
 

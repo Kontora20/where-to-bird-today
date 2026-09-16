@@ -16,6 +16,8 @@ WITH nearby AS (
     SELECT
         h.id,
         h.name,
+        h.source,
+        h.source_ref,
         ST_X(h.location::geometry) AS longitude,
         ST_Y(h.location::geometry) AS latitude,
         ST_Distance(h.location, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography) AS distance_meters
@@ -46,6 +48,8 @@ ranked AS (
 SELECT
     n.id AS hotspot_id,
     n.name AS hotspot_name,
+    n.source AS hotspot_source,
+    n.source_ref AS hotspot_source_ref,
     n.latitude,
     n.longitude,
     n.distance_meters,
@@ -72,15 +76,17 @@ type RecommendHotspotsParams struct {
 }
 
 type RecommendHotspotsRow struct {
-	HotspotID      int64         `json:"hotspot_id"`
-	HotspotName    string        `json:"hotspot_name"`
-	Latitude       pgtype.Float8 `json:"latitude"`
-	Longitude      pgtype.Float8 `json:"longitude"`
-	DistanceMeters pgtype.Float8 `json:"distance_meters"`
-	Score          float32       `json:"score"`
-	SpeciesID      pgtype.Int8   `json:"species_id"`
-	ScientificName pgtype.Text   `json:"scientific_name"`
-	Frequency      pgtype.Float4 `json:"frequency"`
+	HotspotID        int64         `json:"hotspot_id"`
+	HotspotName      string        `json:"hotspot_name"`
+	HotspotSource    string        `json:"hotspot_source"`
+	HotspotSourceRef string        `json:"hotspot_source_ref"`
+	Latitude         pgtype.Float8 `json:"latitude"`
+	Longitude        pgtype.Float8 `json:"longitude"`
+	DistanceMeters   pgtype.Float8 `json:"distance_meters"`
+	Score            float32       `json:"score"`
+	SpeciesID        pgtype.Int8   `json:"species_id"`
+	ScientificName   pgtype.Text   `json:"scientific_name"`
+	Frequency        pgtype.Float4 `json:"frequency"`
 }
 
 // Ranks hotspots within radius_meters of a point by expected species
@@ -108,6 +114,8 @@ func (q *Queries) RecommendHotspots(ctx context.Context, arg RecommendHotspotsPa
 		if err := rows.Scan(
 			&i.HotspotID,
 			&i.HotspotName,
+			&i.HotspotSource,
+			&i.HotspotSourceRef,
 			&i.Latitude,
 			&i.Longitude,
 			&i.DistanceMeters,

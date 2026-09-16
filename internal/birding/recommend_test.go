@@ -55,9 +55,9 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 
 	fake := fakeStore{
 		rows: []store.RecommendHotspotsRow{
-			{HotspotID: 1, HotspotName: "Nemunas Delta", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia"), Frequency: pgtypeFloat4(0.9)},
-			{HotspotID: 1, HotspotName: "Nemunas Delta", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(11), ScientificName: pgtypeText("Anas platyrhynchos"), Frequency: pgtypeFloat4(0.6)},
-			{HotspotID: 2, HotspotName: "Kaunas Lagoon", Latitude: pgtypeFloat8(54.9), Longitude: pgtypeFloat8(23.9), DistanceMeters: pgtypeFloat8(20000), Score: 0, SpeciesID: pgtype.Int8{}, ScientificName: pgtype.Text{}, Frequency: pgtype.Float4{}},
+			{HotspotID: 1, HotspotName: "Nemunas Delta", HotspotSource: "ebird", HotspotSourceRef: "L123456", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia"), Frequency: pgtypeFloat4(0.9)},
+			{HotspotID: 1, HotspotName: "Nemunas Delta", HotspotSource: "ebird", HotspotSourceRef: "L123456", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(11), ScientificName: pgtypeText("Anas platyrhynchos"), Frequency: pgtypeFloat4(0.6)},
+			{HotspotID: 2, HotspotName: "Kaunas Lagoon", HotspotSource: "manual", HotspotSourceRef: "internal-2", Latitude: pgtypeFloat8(54.9), Longitude: pgtypeFloat8(23.9), DistanceMeters: pgtypeFloat8(20000), Score: 0, SpeciesID: pgtype.Int8{}, ScientificName: pgtype.Text{}, Frequency: pgtype.Float4{}},
 		},
 		nameCandidates: map[int64]map[string]string{
 			10: {"lt": "Baltasis gandras", "en": "White Stork"},
@@ -78,6 +78,9 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 	if first.HotspotID != 1 || first.DistanceKM != 5 {
 		t.Errorf("got[0] = %+v, want HotspotID=1 DistanceKM=5", first)
 	}
+	if want := "https://ebird.org/hotspot/L123456"; first.VerificationURL != want {
+		t.Errorf("got[0].VerificationURL = %q, want %q", first.VerificationURL, want)
+	}
 	if len(first.TopSpecies) != 2 {
 		t.Fatalf("len(got[0].TopSpecies) = %d, want 2", len(first.TopSpecies))
 	}
@@ -91,6 +94,9 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 	second := got[1]
 	if second.HotspotID != 2 || len(second.TopSpecies) != 0 {
 		t.Errorf("got[1] = %+v, want HotspotID=2 with no species", second)
+	}
+	if second.VerificationURL != "" {
+		t.Errorf("got[1].VerificationURL = %q, want empty (source %q has no known link)", second.VerificationURL, "manual")
 	}
 }
 

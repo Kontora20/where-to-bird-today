@@ -17,6 +17,8 @@ export interface Recommendation {
 	distance_km: number;
 	score: number;
 	top_species: ExpectedSpecies[];
+	// Absent when the hotspot's source has no public page to link to.
+	verification_url?: string;
 }
 
 export async function getRecommendations(query: {
