@@ -137,61 +137,173 @@
 	}
 </script>
 
-<h1>Where to Bird Today</h1>
+<div class="page">
+	<h1>Where to Bird Today</h1>
 
-<form onsubmit={search}>
-	<label>
-		Latitude
-		<input type="number" step="any" bind:value={lat} required />
-	</label>
-	<label>
-		Longitude
-		<input type="number" step="any" bind:value={lon} required />
-	</label>
-	<button type="button" onclick={useMyLocation} disabled={locating}>
-		{locating ? 'Locating…' : 'Use my location'}
-	</button>
-	<label>
-		Radius (km)
-		<input type="number" step="any" bind:value={radiusKm} required />
-	</label>
-	<label>
-		Date
-		<input type="date" bind:value={date} />
-	</label>
-	<button type="submit" disabled={loading}>{loading ? 'Searching…' : 'Search'}</button>
-</form>
+	<form class="search-form" onsubmit={search}>
+		<label>
+			Latitude
+			<input type="number" step="any" bind:value={lat} required />
+		</label>
+		<label>
+			Longitude
+			<input type="number" step="any" bind:value={lon} required />
+		</label>
+		<button type="button" onclick={useMyLocation} disabled={locating}>
+			{locating ? 'Locating…' : 'Use my location'}
+		</button>
+		<label>
+			Radius (km)
+			<input type="number" step="any" bind:value={radiusKm} required />
+		</label>
+		<label>
+			Date
+			<input type="date" bind:value={date} />
+		</label>
+		<button type="submit" class="primary" disabled={loading}>
+			{loading ? 'Searching…' : 'Search'}
+		</button>
+	</form>
 
-{#if error}
-	<p role="alert">{error}</p>
-{/if}
+	{#if error}
+		<p class="error" role="alert">{error}</p>
+	{/if}
 
-<p>Click the map to set your location.</p>
-<div bind:this={mapContainer} style="height: 400px; width: 100%;"></div>
+	<p class="hint">Click the map to set your location.</p>
+	<div bind:this={mapContainer} class="map"></div>
 
-<ul>
-	{#each recommendations as hotspot (hotspot.hotspot_id)}
-		<li id={`hotspot-${hotspot.hotspot_id}`} class:selected={hotspot.hotspot_id === selectedHotspotId}>
-			<button type="button" onclick={() => selectHotspot(hotspot.hotspot_id)}>
-				<strong>{hotspot.hotspot_name}</strong> — {hotspot.distance_km.toFixed(1)} km
-			</button>
-			<ul>
-				{#each hotspot.top_species as species (species.species_id)}
-					<li>{species.common_name} ({(species.frequency * 100).toFixed(0)}%)</li>
-				{/each}
-			</ul>
-		</li>
-	{/each}
-</ul>
+	<ul class="results">
+		{#each recommendations as hotspot (hotspot.hotspot_id)}
+			<li id={`hotspot-${hotspot.hotspot_id}`} class:selected={hotspot.hotspot_id === selectedHotspotId}>
+				<button type="button" onclick={() => selectHotspot(hotspot.hotspot_id)}>
+					<strong>{hotspot.hotspot_name}</strong> — {hotspot.distance_km.toFixed(1)} km
+				</button>
+				<ul class="species">
+					{#each hotspot.top_species as species (species.species_id)}
+						<li>{species.common_name} ({(species.frequency * 100).toFixed(0)}%)</li>
+					{/each}
+				</ul>
+			</li>
+		{/each}
+	</ul>
+</div>
 
 <style>
-	li[id] > button {
-		all: unset;
-		cursor: pointer;
-		display: block;
+	.page {
+		max-width: 900px;
+		margin: 0 auto;
+		padding: 1.5rem 1rem 4rem;
 	}
-	li.selected {
-		background: #eef6ff;
-		outline: 2px solid #3388ff;
+
+	h1 {
+		font-size: 1.5rem;
+		margin: 0 0 1rem;
+	}
+
+	.search-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+	}
+
+	.search-form label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.search-form input {
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		background: var(--color-bg);
+		color: var(--color-fg);
+		font-size: 1rem;
+	}
+
+	.search-form button {
+		padding: 0.5rem 1rem;
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		background: var(--color-bg);
+		color: var(--color-fg);
+		font-size: 1rem;
+		cursor: pointer;
+	}
+
+	.search-form button.primary {
+		border-color: var(--color-accent);
+		background: var(--color-accent);
+		color: #fff;
+	}
+
+	.search-form button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.error {
+		color: var(--color-error);
+	}
+
+	.hint {
+		margin: 0 0 0.5rem;
+		font-size: 0.85rem;
+		color: var(--color-muted);
+	}
+
+	.map {
+		height: 400px;
+		width: 100%;
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		margin-bottom: 1.5rem;
+	}
+
+	.results {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.results > li {
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		padding: 0.75rem 1rem;
+	}
+
+	.results > li.selected {
+		background: var(--color-accent-bg);
+		outline: 2px solid var(--color-accent);
+	}
+
+	.results > li > button {
+		all: unset;
+		display: block;
+		cursor: pointer;
+		font-size: 1rem;
+	}
+
+	.species {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		list-style: none;
+		margin: 0.5rem 0 0;
+		padding: 0;
+	}
+
+	.species li {
+		border-radius: 999px;
+		padding: 0.15rem 0.6rem;
+		background: var(--color-accent-bg);
+		font-size: 0.8rem;
 	}
 </style>

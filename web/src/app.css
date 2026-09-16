@@ -1,0 +1,36 @@
+:root {
+	color-scheme: light dark;
+	--color-bg: #ffffff;
+	--color-fg: #1a1a1a;
+	--color-border: #d8dee4;
+	--color-accent: #3388ff;
+	--color-accent-bg: #eef6ff;
+	--color-muted: #6b7280;
+	--color-error: #c0392b;
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-bg: #14171a;
+		--color-fg: #e8eaed;
+		--color-border: #33393f;
+		--color-accent-bg: #16324f;
+		--color-muted: #9aa4af;
+		--color-error: #ff6b5e;
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--color-bg);
+	color: var(--color-fg);
+}
