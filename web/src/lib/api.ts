@@ -19,14 +19,12 @@ export interface Recommendation {
 	top_species: ExpectedSpecies[];
 }
 
-export interface RecommendationQuery {
+export async function getRecommendations(query: {
 	lat: number;
 	lon: number;
 	radiusKm: number;
 	date?: string;
-}
-
-export async function getRecommendations(query: RecommendationQuery): Promise<Recommendation[]> {
+}): Promise<Recommendation[]> {
 	const params = new URLSearchParams({
 		lat: String(query.lat),
 		lon: String(query.lon),

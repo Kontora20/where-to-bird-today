@@ -49,18 +49,17 @@
 			.addTo(map);
 		markersLayer = leaflet.layerGroup().addTo(map);
 
-		// A plain circle, not a pin icon, so it reads as "your search point"
-		// and is never confused with a hotspot result marker.
-		map.on('click', (event) => {
-			lat = event.latlng.lat.toFixed(4);
-			lon = event.latlng.lng.toFixed(4);
-			placeSearchLocationMarker(event.latlng.lat, event.latlng.lng);
-		});
+		map.on('click', (event) => setSearchLocation(event.latlng.lat, event.latlng.lng));
 
 		updateMarkers();
 	});
 
-	function placeSearchLocationMarker(latitude: number, longitude: number) {
+	// Fills the lat/lon fields and drops (or moves) the search-point pin -- a
+	// plain circle, not a pin icon, so it's never confused with a hotspot
+	// result marker. Shared by the map click handler and "Use my location".
+	function setSearchLocation(latitude: number, longitude: number) {
+		lat = latitude.toFixed(4);
+		lon = longitude.toFixed(4);
 		if (searchLocationMarker) {
 			searchLocationMarker.setLatLng([latitude, longitude]);
 		} else {
@@ -107,9 +106,7 @@
 		locating = true;
 		navigator.geolocation.getCurrentPosition(
 			(position) => {
-				lat = position.coords.latitude.toFixed(4);
-				lon = position.coords.longitude.toFixed(4);
-				placeSearchLocationMarker(position.coords.latitude, position.coords.longitude);
+				setSearchLocation(position.coords.latitude, position.coords.longitude);
 				map?.setView([position.coords.latitude, position.coords.longitude], 11);
 				locating = false;
 			},

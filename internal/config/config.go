@@ -112,16 +112,9 @@ func parseRegions(s string) ([]string, error) {
 }
 
 func parseLevel(s string) (slog.Level, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "debug":
-		return slog.LevelDebug, nil
-	case "info":
-		return slog.LevelInfo, nil
-	case "warn", "warning":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(strings.TrimSpace(s))); err != nil {
 		return 0, fmt.Errorf("LOG_LEVEL %q is not one of: debug, info, warn, error", s)
 	}
+	return level, nil
 }
