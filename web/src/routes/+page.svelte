@@ -13,11 +13,14 @@
 	let loading = $state(false);
 	let locating = $state(false);
 	let error = $state('');
+	let selectedHotspotId = $state<number | null>(null);
 
 	let mapContainer: HTMLDivElement;
 	let leaflet: typeof Leaflet;
 	let map: Leaflet.Map;
 	let markersLayer: Leaflet.LayerGroup;
+	let markersByHotspotId = new Map<number, Leaflet.Marker>();
+	let searchLocationMarker: Leaflet.CircleMarker | undefined;
 
 	// Leaflet touches `window`, so it's loaded here rather than at module
 	// scope -- onMount only runs in the browser, never during the static
@@ -46,17 +49,38 @@
 			.addTo(map);
 		markersLayer = leaflet.layerGroup().addTo(map);
 
+		// A plain circle, not a pin icon, so it reads as "your search point"
+		// and is never confused with a hotspot result marker.
+		map.on('click', (event) => {
+			lat = event.latlng.lat.toFixed(4);
+			lon = event.latlng.lng.toFixed(4);
+			placeSearchLocationMarker(event.latlng.lat, event.latlng.lng);
+		});
+
 		updateMarkers();
 	});
+
+	function placeSearchLocationMarker(latitude: number, longitude: number) {
+		if (searchLocationMarker) {
+			searchLocationMarker.setLatLng([latitude, longitude]);
+		} else {
+			searchLocationMarker = leaflet
+				.circleMarker([latitude, longitude], { radius: 8, color: 'red', fillOpacity: 0.8 })
+				.addTo(map);
+		}
+	}
 
 	function updateMarkers() {
 		if (!markersLayer) return;
 		markersLayer.clearLayers();
+		markersByHotspotId.clear();
 		for (const hotspot of recommendations) {
-			leaflet
+			const marker = leaflet
 				.marker([hotspot.latitude, hotspot.longitude])
 				.bindPopup(hotspot.hotspot_name)
+				.on('click', () => selectHotspot(hotspot.hotspot_id))
 				.addTo(markersLayer);
+			markersByHotspotId.set(hotspot.hotspot_id, marker);
 		}
 		if (recommendations.length > 0) {
 			map.fitBounds(
@@ -64,6 +88,14 @@
 				{ padding: [20, 20] }
 			);
 		}
+	}
+
+	function selectHotspot(hotspotId: number) {
+		selectedHotspotId = hotspotId;
+		document.getElementById(`hotspot-${hotspotId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+		const marker = markersByHotspotId.get(hotspotId);
+		marker?.openPopup();
 	}
 
 	function useMyLocation() {
@@ -77,6 +109,8 @@
 			(position) => {
 				lat = position.coords.latitude.toFixed(4);
 				lon = position.coords.longitude.toFixed(4);
+				placeSearchLocationMarker(position.coords.latitude, position.coords.longitude);
+				map?.setView([position.coords.latitude, position.coords.longitude], 11);
 				locating = false;
 			},
 			(geoError) => {
@@ -135,12 +169,15 @@
 	<p role="alert">{error}</p>
 {/if}
 
+<p>Click the map to set your location.</p>
 <div bind:this={mapContainer} style="height: 400px; width: 100%;"></div>
 
 <ul>
 	{#each recommendations as hotspot (hotspot.hotspot_id)}
-		<li>
-			<strong>{hotspot.hotspot_name}</strong> — {hotspot.distance_km.toFixed(1)} km
+		<li id={`hotspot-${hotspot.hotspot_id}`} class:selected={hotspot.hotspot_id === selectedHotspotId}>
+			<button type="button" onclick={() => selectHotspot(hotspot.hotspot_id)}>
+				<strong>{hotspot.hotspot_name}</strong> — {hotspot.distance_km.toFixed(1)} km
+			</button>
 			<ul>
 				{#each hotspot.top_species as species (species.species_id)}
 					<li>{species.common_name} ({(species.frequency * 100).toFixed(0)}%)</li>
@@ -149,3 +186,15 @@
 		</li>
 	{/each}
 </ul>
+
+<style>
+	li[id] > button {
+		all: unset;
+		cursor: pointer;
+		display: block;
+	}
+	li.selected {
+		background: #eef6ff;
+		outline: 2px solid #3388ff;
+	}
+</style>
