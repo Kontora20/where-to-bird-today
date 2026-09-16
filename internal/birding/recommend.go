@@ -120,7 +120,10 @@ func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, er
 // guaranteed adjacent by the query's ORDER BY, so this is a single pass with
 // no map keyed by hotspot ID.
 func groupByHotspot(rows []store.RecommendHotspotsRow) ([]Recommendation, []int64) {
-	var recommendations []Recommendation
+	// Not `var recommendations []Recommendation`: a nil slice marshals to
+	// JSON `null`, and the Svelte app's `{#each recommendations}` throws on
+	// null rather than treating it as empty.
+	recommendations := []Recommendation{}
 	var speciesIDs []int64
 
 	for _, row := range rows {

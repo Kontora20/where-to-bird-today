@@ -145,6 +145,26 @@ func TestRecommendFallsBackToScientificName(t *testing.T) {
 	}
 }
 
+// TestRecommendReturnsEmptySliceNotNil guards against a `var recommendations
+// []Recommendation` regression: a nil slice marshals to JSON `null`, and the
+// frontend's `{#each recommendations}` throws on null instead of rendering
+// nothing.
+func TestRecommendReturnsEmptySliceNotNil(t *testing.T) {
+	t.Parallel()
+
+	got, err := NewService(fakeStore{}).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
+	if err != nil {
+		t.Fatalf("Recommend() error = %v", err)
+	}
+
+	if got == nil {
+		t.Fatal("Recommend() = nil, want a non-nil empty slice")
+	}
+	if len(got) != 0 {
+		t.Errorf("len(got) = %d, want 0", len(got))
+	}
+}
+
 func TestRecommendPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
