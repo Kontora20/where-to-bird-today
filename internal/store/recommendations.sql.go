@@ -20,12 +20,12 @@ WITH nearby AS (
         h.source_ref,
         ST_X(h.location::geometry) AS longitude,
         ST_Y(h.location::geometry) AS latitude,
-        ST_Distance(h.location, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography) AS distance_meters
+        ST_Distance(h.location, ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography) AS distance_meters
     FROM hotspots h
     WHERE ST_DWithin(
         h.location,
-        ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
-        $4
+        ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography,
+        $5
     )
 ),
 matching AS (
@@ -37,8 +37,8 @@ matching AS (
     SELECT s.hotspot_id, s.species_id, s.frequency
     FROM species_seasonality s
     JOIN nearby n ON n.id = s.hotspot_id
-    WHERE s.week_of_year = $5
-      AND ($6::bigint[] IS NULL OR s.species_id = ANY($6::bigint[]))
+    WHERE s.week_of_year = $6
+      AND ($2::bigint[] IS NULL OR s.species_id = ANY($2::bigint[]))
 ),
 ranked AS (
     SELECT hotspot_id, species_id, frequency,
@@ -63,16 +63,17 @@ LEFT JOIN (
 ) scores ON scores.hotspot_id = n.id
 LEFT JOIN ranked r ON r.hotspot_id = n.id AND r.rank <= $1
 LEFT JOIN species sp ON sp.id = r.species_id
+WHERE $2::bigint[] IS NULL OR scores.total_frequency IS NOT NULL
 ORDER BY score DESC, n.id, r.frequency DESC NULLS LAST
 `
 
 type RecommendHotspotsParams struct {
 	TopSpeciesLimit pgtype.Int8   `json:"top_species_limit"`
+	SpeciesIds      []int64       `json:"species_ids"`
 	Longitude       pgtype.Float8 `json:"longitude"`
 	Latitude        pgtype.Float8 `json:"latitude"`
 	RadiusMeters    pgtype.Float8 `json:"radius_meters"`
 	WeekOfYear      pgtype.Int2   `json:"week_of_year"`
-	SpeciesIds      []int64       `json:"species_ids"`
 }
 
 type RecommendHotspotsRow struct {
@@ -94,15 +95,17 @@ type RecommendHotspotsRow struct {
 // one row per (hotspot, top-N species) pair, flattened -- Go groups them back
 // up by hotspot_id. A hotspot with no seasonality rows for that week still
 // appears (score 0, species_id NULL): ST_DWithin found it, so it stays honest
-// to list it rather than silently dropping it.
+// to list it rather than silently dropping it. When species_ids is given the
+// ranking is for those species only, so a hotspot with none of them that
+// week is left out instead of listed at the bottom with a score of 0.
 func (q *Queries) RecommendHotspots(ctx context.Context, arg RecommendHotspotsParams) ([]RecommendHotspotsRow, error) {
 	rows, err := q.db.Query(ctx, recommendHotspots,
 		arg.TopSpeciesLimit,
+		arg.SpeciesIds,
 		arg.Longitude,
 		arg.Latitude,
 		arg.RadiusMeters,
 		arg.WeekOfYear,
-		arg.SpeciesIds,
 	)
 	if err != nil {
 		return nil, err

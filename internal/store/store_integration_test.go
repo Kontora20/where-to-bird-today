@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -479,6 +480,100 @@ func TestRecommendHotspots(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("an explicit species_ids filter leaves out hotspots with none of those species", func(t *testing.T) {
+		for _, r := range recommend(RecommendHotspotsParams{SpeciesIds: []int64{rare.ID}}) {
+			if r.HotspotID == noData.ID {
+				t.Errorf("no-data hotspot listed for a species filter, want it left out: %+v", r)
+			}
+		}
+	})
+}
+
+// TestSearchSpecies checks the picker query against real Postgres: a match in
+// either language, the name returned in the requested language, scientific
+// name matching, wildcard characters treated literally, and species with no
+// hotspot observation left out.
+func TestSearchSpecies(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := newTestPool(t)
+	queries := New(pool)
+
+	hotspot, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name: "Search Hotspot", Latitude: 55.0, Longitude: 25.0,
+		Region: "LT", Source: "test", SourceRef: "test-search-hotspot",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot: %v", err)
+	}
+
+	seedSpecies := func(scientificName, ebirdCode, ltName, enName string, observed bool) {
+		t.Helper()
+		species, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+			ScientificName:   scientificName,
+			EbirdSpeciesCode: pgtype.Text{String: ebirdCode, Valid: true},
+			AvibaseID:        pgtype.Text{String: "avibase-" + ebirdCode, Valid: true},
+		})
+		if err != nil {
+			t.Fatalf("UpsertSpecies (%s): %v", scientificName, err)
+		}
+		for lang, name := range map[string]string{"lt": ltName, "en": enName} {
+			if _, err := queries.UpsertSpeciesName(ctx, UpsertSpeciesNameParams{
+				EbirdSpeciesCode: pgtype.Text{String: ebirdCode, Valid: true},
+				Lang:             lang, CommonName: name, Source: "test", IsPrimary: true,
+			}); err != nil {
+				t.Fatalf("UpsertSpeciesName (%s, %s): %v", ebirdCode, lang, err)
+			}
+		}
+		if !observed {
+			return
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO observations (species_id, hotspot_id, location, observed_on, source, source_ref)
+			 VALUES ($1, $2, ST_SetSRID(ST_MakePoint(25, 55), 4326)::geography, '2026-05-01', 'test', $3)`,
+			species.ID, hotspot.ID, "test-search-"+ebirdCode,
+		); err != nil {
+			t.Fatalf("seeding observation (%s): %v", ebirdCode, err)
+		}
+	}
+	seedSpecies("Ciconia ciconia", "whitestk", "Baltasis gandras", "White Stork", true)
+	seedSpecies("Ciconia nigra", "blackstk", "Juodasis gandras", "Black Stork", true)
+	seedSpecies("Testus unseen", "unseenstk", "Nematytas gandras", "Unseen Stork", false)
+
+	search := func(query string, langPriority ...string) []string {
+		t.Helper()
+		rows, err := queries.SearchSpecies(ctx, SearchSpeciesParams{Query: query, LangPriority: langPriority, ResultLimit: 10})
+		if err != nil {
+			t.Fatalf("SearchSpecies(%q): %v", query, err)
+		}
+		var names []string
+		for _, row := range rows {
+			names = append(names, row.CommonName)
+		}
+		return names
+	}
+
+	tests := []struct {
+		name         string
+		query        string
+		langPriority []string
+		want         []string
+	}{
+		{"matches the Lithuanian name, shown in Lithuanian", "gandras", []string{"lt", "en"}, []string{"Baltasis gandras", "Juodasis gandras"}},
+		{"matches case-insensitively in English", "STORK", []string{"en", "lt"}, []string{"Black Stork", "White Stork"}},
+		{"matches in one language, shown in the requested one", "gandras", []string{"en", "lt"}, []string{"Black Stork", "White Stork"}},
+		{"matches the scientific name", "ciconia nigra", []string{"en", "lt"}, []string{"Black Stork"}},
+		{"treats % as a plain character", "%", []string{"en", "lt"}, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := search(tc.query, tc.langPriority...); !slices.Equal(got, tc.want) {
+				t.Errorf("SearchSpecies(%q) = %v, want %v (the unobserved species must never appear)", tc.query, got, tc.want)
+			}
+		})
+	}
 }
 
 // TestGetCommonNames seeds one species with both lt and en names and a

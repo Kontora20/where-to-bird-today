@@ -2,14 +2,30 @@
 	import { onMount } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
 	import type * as Leaflet from 'leaflet';
-	import { getRecommendations, getSpeciesDetail, type Recommendation, type SpeciesDetail } from '$lib/api';
+	import {
+		getRecommendations,
+		getSpeciesDetail,
+		searchSpecies,
+		type Recommendation,
+		type SpeciesDetail,
+		type SpeciesMatch
+	} from '$lib/api';
+
+	// The API accepts at most this many target species.
+	const maxTargetSpecies = 10;
 
 	let lat = $state('');
 	let lon = $state('');
 	let radiusKm = $state('25');
 	let date = $state('');
 
+	let targetSpecies = $state<SpeciesMatch[]>([]);
+	let speciesQuery = $state('');
+	let speciesSuggestions = $state<SpeciesMatch[]>([]);
+	let suggestionTimer: ReturnType<typeof setTimeout> | undefined;
+
 	let recommendations = $state<Recommendation[]>([]);
+	let searched = $state(false);
 	let loading = $state(false);
 	let locating = $state(false);
 	let error = $state('');
@@ -141,6 +157,50 @@
 		);
 	}
 
+	const speciesLabel = (species: SpeciesMatch) => `${species.common_name} (${species.scientific_name})`;
+
+	// The datalist writes the chosen option's label into the input, so an input
+	// value equal to a suggestion's label means the person picked it. Anything
+	// else is still being typed, so the suggestions are refreshed after a pause.
+	function onSpeciesInput() {
+		const chosen = speciesSuggestions.find((species) => speciesLabel(species) === speciesQuery);
+		if (chosen) {
+			addTargetSpecies(chosen);
+			return;
+		}
+
+		clearTimeout(suggestionTimer);
+		const typed = speciesQuery.trim();
+		if (typed.length < 2) {
+			speciesSuggestions = [];
+			return;
+		}
+		suggestionTimer = setTimeout(async () => {
+			try {
+				const matches = await searchSpecies(typed);
+				// A slower earlier request must not overwrite a newer one.
+				if (typed === speciesQuery.trim()) speciesSuggestions = matches;
+			} catch (err) {
+				error = err instanceof Error ? err.message : 'species search failed';
+			}
+		}, 200);
+	}
+
+	function addTargetSpecies(species: SpeciesMatch) {
+		if (
+			targetSpecies.length < maxTargetSpecies &&
+			!targetSpecies.some((target) => target.species_id === species.species_id)
+		) {
+			targetSpecies = [...targetSpecies, species];
+		}
+		speciesQuery = '';
+		speciesSuggestions = [];
+	}
+
+	function removeTargetSpecies(speciesId: number) {
+		targetSpecies = targetSpecies.filter((target) => target.species_id !== speciesId);
+	}
+
 	async function search(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
@@ -150,8 +210,10 @@
 				lat: Number(lat),
 				lon: Number(lon),
 				radiusKm: Number(radiusKm),
-				date: date || undefined
+				date: date || undefined,
+				speciesIds: targetSpecies.map((target) => target.species_id)
 			});
+			searched = true;
 			updateMarkers();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'search failed';
@@ -184,10 +246,39 @@
 			Date
 			<input type="date" bind:value={date} />
 		</label>
+		<label>
+			Target species
+			<input
+				type="search"
+				list="species-suggestions"
+				placeholder={targetSpecies.length >= maxTargetSpecies ? 'Limit reached' : 'Type a bird name'}
+				disabled={targetSpecies.length >= maxTargetSpecies}
+				bind:value={speciesQuery}
+				oninput={onSpeciesInput}
+			/>
+			<datalist id="species-suggestions">
+				{#each speciesSuggestions as suggestion (suggestion.species_id)}
+					<option value={speciesLabel(suggestion)}></option>
+				{/each}
+			</datalist>
+		</label>
 		<button type="submit" class="primary" disabled={loading}>
 			{loading ? 'Searching…' : 'Search'}
 		</button>
 	</form>
+
+	{#if targetSpecies.length > 0}
+		<ul class="targets" aria-label="Target species">
+			{#each targetSpecies as target (target.species_id)}
+				<li>
+					{target.common_name}
+					<button type="button" onclick={() => removeTargetSpecies(target.species_id)} aria-label="Remove {target.common_name}">
+						✕
+					</button>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 
 	{#if error}
 		<p class="error" role="alert">{error}</p>
@@ -196,11 +287,20 @@
 	<p class="hint">Click the map to set your location.</p>
 	<div bind:this={mapContainer} class="map"></div>
 
+	{#if searched && recommendations.length === 0}
+		<p class="hint">
+			{targetSpecies.length > 0 ? 'No hotspot in range has these species for that week.' : 'No hotspots found in range.'}
+		</p>
+	{/if}
+
 	<ul class="results">
 		{#each recommendations as hotspot (hotspot.hotspot_id)}
 			<li id={`hotspot-${hotspot.hotspot_id}`} class:selected={hotspot.hotspot_id === selectedHotspotId}>
 				<button type="button" onclick={() => selectHotspot(hotspot.hotspot_id)}>
 					<strong>{hotspot.hotspot_name}</strong> — {hotspot.distance_km.toFixed(1)} km
+					{#if targetSpecies.length > 0}
+						— {hotspot.score.toFixed(1)} of {targetSpecies.length} targets expected
+					{/if}
 				</button>
 				{#if hotspot.verification_url}
 					<a class="verify" href={hotspot.verification_url} target="_blank" rel="noopener noreferrer">
@@ -346,6 +446,32 @@
 	.search-form button:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.targets {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		list-style: none;
+		margin: 0 0 1rem;
+		padding: 0;
+	}
+
+	.targets li {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.15rem 0.3rem 0.15rem 0.7rem;
+		border-radius: 999px;
+		background: var(--color-accent-bg);
+		font-size: 0.85rem;
+	}
+
+	.targets button {
+		border: none;
+		background: none;
+		color: var(--color-fg);
+		cursor: pointer;
 	}
 
 	.error {

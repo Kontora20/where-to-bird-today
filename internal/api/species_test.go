@@ -84,3 +84,52 @@ func TestGetSpeciesDetail(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchSpecies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		query      string
+		service    fakeRecommendationService
+		wantStatus int
+	}{
+		{
+			name:       "found",
+			query:      "q=stork",
+			service:    fakeRecommendationService{searchFound: []birding.SpeciesMatch{{SpeciesID: 10, CommonName: "White Stork"}}},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "missing q",
+			query:      "",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "blank q",
+			query:      "q=+++",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "service error",
+			query:      "q=stork",
+			service:    fakeRecommendationService{searchErr: errors.New("db down")},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "/species?"+tc.query, nil)
+			rec := httptest.NewRecorder()
+
+			handleSearchSpecies(testLogger(), tc.service).ServeHTTP(rec, req)
+
+			if got := rec.Code; got != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body: %q)", got, tc.wantStatus, rec.Body.String())
+			}
+		})
+	}
+}

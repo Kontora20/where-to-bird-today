@@ -5,9 +5,31 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
+
+// handleSearchSpecies serves the target-species picker: species whose name
+// contains ?q=, named in the request's language.
+func handleSearchSpecies(logger *slog.Logger, recommendations recommendationService) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := strings.TrimSpace(r.URL.Query().Get("q"))
+		if query == "" {
+			http.Error(w, "q is required", http.StatusBadRequest)
+			return
+		}
+
+		matches, err := recommendations.SearchSpecies(r.Context(), query, resolveLanguage(r))
+		if err != nil {
+			logger.Error("searching species failed", slog.Any("error", err))
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		writeJSON(w, logger, http.StatusOK, matches)
+	})
+}
 
 // handleGetSpeciesDetail serves the species detail panel's contents (ADR
 // 0004): name, outbound reference links, one photo, and the requested

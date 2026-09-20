@@ -14,6 +14,7 @@ export default defineConfig({
 		// instead of needing a different one.
 		proxy: {
 			'/recommendations': { target: 'http://localhost:8080', changeOrigin: true },
+			'/species': { target: 'http://localhost:8080', changeOrigin: true },
 			'/hotspots': { target: 'http://localhost:8080', changeOrigin: true }
 		}
 	}

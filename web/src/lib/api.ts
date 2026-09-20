@@ -21,11 +21,26 @@ export interface Recommendation {
 	verification_url?: string;
 }
 
+export interface SpeciesMatch {
+	species_id: number;
+	common_name: string;
+	scientific_name: string;
+}
+
+export async function searchSpecies(query: string): Promise<SpeciesMatch[]> {
+	const response = await fetch(`/species?${new URLSearchParams({ q: query })}`);
+	if (!response.ok) {
+		throw new Error(`species search failed: ${response.status}`);
+	}
+	return response.json();
+}
+
 export async function getRecommendations(query: {
 	lat: number;
 	lon: number;
 	radiusKm: number;
 	date?: string;
+	speciesIds?: number[];
 }): Promise<Recommendation[]> {
 	const params = new URLSearchParams({
 		lat: String(query.lat),
@@ -34,6 +49,9 @@ export async function getRecommendations(query: {
 	});
 	if (query.date) {
 		params.set('date', query.date);
+	}
+	for (const speciesId of query.speciesIds ?? []) {
+		params.append('species', String(speciesId));
 	}
 
 	const response = await fetch(`/recommendations?${params}`);

@@ -22,6 +22,22 @@ type fakeStore struct {
 	mediaRows       []store.SpeciesMedium
 	seasonalityErr  error
 	seasonalityRows []store.GetSpeciesSeasonalityAtHotspotRow
+
+	searchErr  error
+	searchRows []store.SearchSpeciesRow
+	// searchArgs is a pointer because fakeStore's methods have value
+	// receivers: a plain field would be written to a copy.
+	searchArgs *store.SearchSpeciesParams
+}
+
+func (f fakeStore) SearchSpecies(_ context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error) {
+	if f.searchArgs != nil {
+		*f.searchArgs = arg
+	}
+	if f.searchErr != nil {
+		return nil, f.searchErr
+	}
+	return f.searchRows, nil
 }
 
 func (f fakeStore) RecommendHotspots(_ context.Context, _ store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error) {

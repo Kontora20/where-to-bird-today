@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Kontora20/where-to-bird-today/internal/birding"
@@ -16,13 +18,28 @@ type fakeRecommendationService struct {
 	results      []birding.Recommendation
 	speciesErr   error
 	speciesFound birding.SpeciesDetail
+	searchErr    error
+	searchFound  []birding.SpeciesMatch
+	// gotParams is a pointer because the methods have value receivers: a
+	// plain field would be written to a copy.
+	gotParams *birding.Params
 }
 
-func (f fakeRecommendationService) Recommend(_ context.Context, _ birding.Params) ([]birding.Recommendation, error) {
+func (f fakeRecommendationService) Recommend(_ context.Context, params birding.Params) ([]birding.Recommendation, error) {
+	if f.gotParams != nil {
+		*f.gotParams = params
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.results, nil
+}
+
+func (f fakeRecommendationService) SearchSpecies(_ context.Context, _, _ string) ([]birding.SpeciesMatch, error) {
+	if f.searchErr != nil {
+		return nil, f.searchErr
+	}
+	return f.searchFound, nil
 }
 
 func (f fakeRecommendationService) SpeciesDetail(_ context.Context, _, _ int64, _ string) (birding.SpeciesDetail, error) {
@@ -84,6 +101,26 @@ func TestGetRecommendations(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name:       "valid species",
+			query:      validQuery + "&species=12&species=34",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "non-numeric species",
+			query:      validQuery + "&species=crane",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "zero species",
+			query:      validQuery + "&species=0",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "too many species",
+			query:      validQuery + strings.Repeat("&species=1", maxTargetSpecies+1),
+			wantStatus: http.StatusBadRequest,
+		},
+		{
 			name:       "service error",
 			query:      validQuery,
 			service:    fakeRecommendationService{err: errors.New("db down")},
@@ -102,6 +139,38 @@ func TestGetRecommendations(t *testing.T) {
 
 			if got := rec.Code; got != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %q)", got, tc.wantStatus, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestGetRecommendationsPassesSpeciesIDs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		query string
+		want  []int64
+	}{
+		{name: "no species means all species", query: "", want: nil},
+		{name: "repeated species values", query: "&species=12&species=34", want: []int64{12, 34}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotParams birding.Params
+			req := httptest.NewRequest(http.MethodGet, "/recommendations?lat=55.3&lon=21.3&radius_km=25"+tc.query, nil)
+			rec := httptest.NewRecorder()
+
+			handleGetRecommendations(testLogger(), fakeRecommendationService{gotParams: &gotParams}).ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d (body: %q)", rec.Code, http.StatusOK, rec.Body.String())
+			}
+			if !slices.Equal(gotParams.SpeciesIDs, tc.want) {
+				t.Errorf("SpeciesIDs = %v, want %v", gotParams.SpeciesIDs, tc.want)
 			}
 		})
 	}

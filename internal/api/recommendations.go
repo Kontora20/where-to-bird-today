@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -43,9 +45,31 @@ func resolveLanguage(r *http.Request) string {
 	return languageCodes[index]
 }
 
+// maxTargetSpecies equals the number of species a hotspot card lists, so
+// every chosen target can appear on it.
+const maxTargetSpecies = 10
+
 type recommendationService interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
 	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string) (birding.SpeciesDetail, error)
+	SearchSpecies(ctx context.Context, query, lang string) ([]birding.SpeciesMatch, error)
+}
+
+// parseSpeciesIDs reads repeated ?species= values. No values returns nil,
+// which the ranking treats as "all species".
+func parseSpeciesIDs(values []string) ([]int64, error) {
+	if len(values) > maxTargetSpecies {
+		return nil, fmt.Errorf("at most %d species are allowed", maxTargetSpecies)
+	}
+	var ids []int64
+	for _, value := range values {
+		id, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, errors.New("species must be a positive number")
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func handleGetRecommendations(logger *slog.Logger, recommendations recommendationService) http.Handler {
@@ -78,12 +102,19 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 		}
 		_, week := date.ISOWeek()
 
+		speciesIDs, err := parseSpeciesIDs(query["species"])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		results, err := recommendations.Recommend(r.Context(), birding.Params{
-			Latitude:  latitude,
-			Longitude: longitude,
-			RadiusKM:  radiusKM,
-			Week:      int16(week),
-			Lang:      resolveLanguage(r),
+			Latitude:   latitude,
+			Longitude:  longitude,
+			RadiusKM:   radiusKM,
+			Week:       int16(week),
+			Lang:       resolveLanguage(r),
+			SpeciesIDs: speciesIDs,
 		})
 		if err != nil {
 			logger.Error("ranking recommendations failed", slog.Any("error", err))

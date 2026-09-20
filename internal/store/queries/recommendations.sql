@@ -4,7 +4,9 @@
 -- one row per (hotspot, top-N species) pair, flattened -- Go groups them back
 -- up by hotspot_id. A hotspot with no seasonality rows for that week still
 -- appears (score 0, species_id NULL): ST_DWithin found it, so it stays honest
--- to list it rather than silently dropping it.
+-- to list it rather than silently dropping it. When species_ids is given the
+-- ranking is for those species only, so a hotspot with none of them that
+-- week is left out instead of listed at the bottom with a score of 0.
 WITH nearby AS (
     SELECT
         h.id,
@@ -56,4 +58,5 @@ LEFT JOIN (
 ) scores ON scores.hotspot_id = n.id
 LEFT JOIN ranked r ON r.hotspot_id = n.id AND r.rank <= sqlc.arg(top_species_limit)
 LEFT JOIN species sp ON sp.id = r.species_id
+WHERE sqlc.narg(species_ids)::bigint[] IS NULL OR scores.total_frequency IS NOT NULL
 ORDER BY score DESC, n.id, r.frequency DESC NULLS LAST;
