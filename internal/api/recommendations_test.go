@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -121,6 +122,48 @@ func TestGetRecommendations(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 		},
 		{
+			name:       "max_minutes instead of radius_km",
+			query:      "lat=55.3167&lon=21.3667&max_minutes=45",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "max_minutes wins over radius_km",
+			query:      validQuery + "&max_minutes=45",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "zero max_minutes",
+			query:      validQuery + "&max_minutes=0",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "max_minutes above the limit",
+			query:      validQuery + "&max_minutes=241",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "non-numeric max_minutes",
+			query:      validQuery + "&max_minutes=soon",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "NaN max_minutes",
+			query:      validQuery + "&max_minutes=NaN",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "no routing server",
+			query:      "lat=55.3167&lon=21.3667&max_minutes=45",
+			service:    fakeRecommendationService{err: fmt.Errorf("ranking: %w", birding.ErrTravelTimeUnavailable)},
+			wantStatus: http.StatusServiceUnavailable,
+		},
+		{
+			name:       "no road near the search point",
+			query:      "lat=55.3167&lon=21.3667&max_minutes=45",
+			service:    fakeRecommendationService{err: fmt.Errorf("finding drive times: %w", birding.ErrNoRoadNearOrigin)},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
 			name:       "service error",
 			query:      validQuery,
 			service:    fakeRecommendationService{err: errors.New("db down")},
@@ -141,6 +184,23 @@ func TestGetRecommendations(t *testing.T) {
 				t.Fatalf("status = %d, want %d (body: %q)", got, tc.wantStatus, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestGetRecommendationsPassesMaxMinutes(t *testing.T) {
+	t.Parallel()
+
+	var gotParams birding.Params
+	req := httptest.NewRequest(http.MethodGet, "/recommendations?lat=55.3&lon=21.3&max_minutes=45.5&radius_km=10", nil)
+	rec := httptest.NewRecorder()
+
+	handleGetRecommendations(testLogger(), fakeRecommendationService{gotParams: &gotParams}).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body: %q)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if gotParams.MaxMinutes != 45.5 || gotParams.RadiusKM != 0 {
+		t.Errorf("MaxMinutes = %v, RadiusKM = %v, want 45.5 and 0 (max_minutes replaces radius_km)", gotParams.MaxMinutes, gotParams.RadiusKM)
 	}
 }
 

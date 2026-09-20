@@ -20,7 +20,7 @@ func TestSearchSpeciesMapsRowsAndPassesLanguagePriority(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake).SearchSpecies(context.Background(), "gandr", "lt")
+	got, err := NewService(fake, nil).SearchSpecies(context.Background(), "gandr", "lt")
 	if err != nil {
 		t.Fatalf("SearchSpecies() error = %v", err)
 	}
@@ -37,7 +37,7 @@ func TestSearchSpeciesMapsRowsAndPassesLanguagePriority(t *testing.T) {
 func TestSearchSpeciesReturnsEmptySliceNotNil(t *testing.T) {
 	t.Parallel()
 
-	got, err := NewService(fakeStore{}).SearchSpecies(context.Background(), "zzz", "en")
+	got, err := NewService(fakeStore{}, nil).SearchSpecies(context.Background(), "zzz", "en")
 	if err != nil {
 		t.Fatalf("SearchSpecies() error = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSearchSpeciesPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	_, err := NewService(fakeStore{searchErr: wantErr}).SearchSpecies(context.Background(), "x", "en")
+	_, err := NewService(fakeStore{searchErr: wantErr}, nil).SearchSpecies(context.Background(), "x", "en")
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SearchSpecies() error = %v, want wrapping %v", err, wantErr)
 	}

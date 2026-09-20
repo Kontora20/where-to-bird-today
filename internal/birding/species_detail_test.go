@@ -32,7 +32,7 @@ func TestSpeciesDetail(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake).SpeciesDetail(context.Background(), 1, 10, "lt")
+	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt")
 	if err != nil {
 		t.Fatalf("SpeciesDetail() error = %v", err)
 	}
@@ -72,7 +72,7 @@ func TestSpeciesDetailNoPhoto(t *testing.T) {
 		speciesRow: store.Species{ID: 99, ScientificName: "Rallus aquaticus"},
 	}
 
-	got, err := NewService(fake).SpeciesDetail(context.Background(), 1, 99, "lt")
+	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 99, "lt")
 	if err != nil {
 		t.Fatalf("SpeciesDetail() error = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestSpeciesDetailPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	_, err := NewService(fakeStore{speciesErr: wantErr}).SpeciesDetail(context.Background(), 1, 10, "lt")
+	_, err := NewService(fakeStore{speciesErr: wantErr}, nil).SpeciesDetail(context.Background(), 1, 10, "lt")
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SpeciesDetail() error = %v, want wrapping %v", err, wantErr)
 	}

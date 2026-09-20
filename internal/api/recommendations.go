@@ -49,6 +49,10 @@ func resolveLanguage(r *http.Request) string {
 // every chosen target can appear on it.
 const maxTargetSpecies = 10
 
+// maxDriveMinutes bounds ?max_minutes=. Four hours already reaches every
+// hotspot in the Baltics from anywhere in them.
+const maxDriveMinutes = 240
+
 type recommendationService interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
 	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string) (birding.SpeciesDetail, error)
@@ -86,10 +90,23 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 			http.Error(w, "lon must be a number between -180 and 180", http.StatusBadRequest)
 			return
 		}
-		radiusKM, err := strconv.ParseFloat(query.Get("radius_km"), 64)
-		if err != nil || radiusKM <= 0 {
-			http.Error(w, "radius_km must be a positive number", http.StatusBadRequest)
-			return
+
+		// A drive time limit replaces the radius when both are given.
+		var radiusKM, maxMinutes float64
+		if raw := query.Get("max_minutes"); raw != "" {
+			maxMinutes, err = strconv.ParseFloat(raw, 64)
+			// Written as a positive test so NaN, which fails every
+			// comparison, is rejected too.
+			if err != nil || !(maxMinutes > 0 && maxMinutes <= maxDriveMinutes) {
+				http.Error(w, fmt.Sprintf("max_minutes must be a number above 0 and at most %d", maxDriveMinutes), http.StatusBadRequest)
+				return
+			}
+		} else {
+			radiusKM, err = strconv.ParseFloat(query.Get("radius_km"), 64)
+			if err != nil || radiusKM <= 0 {
+				http.Error(w, "radius_km must be a positive number, or max_minutes must be given", http.StatusBadRequest)
+				return
+			}
 		}
 
 		date := time.Now()
@@ -112,11 +129,19 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 			Latitude:   latitude,
 			Longitude:  longitude,
 			RadiusKM:   radiusKM,
+			MaxMinutes: maxMinutes,
 			Week:       int16(week),
 			Lang:       resolveLanguage(r),
 			SpeciesIDs: speciesIDs,
 		})
-		if err != nil {
+		switch {
+		case errors.Is(err, birding.ErrTravelTimeUnavailable):
+			http.Error(w, "travel time is not available; search by radius_km instead", http.StatusServiceUnavailable)
+			return
+		case errors.Is(err, birding.ErrNoRoadNearOrigin):
+			http.Error(w, "no road near that location", http.StatusUnprocessableEntity)
+			return
+		case err != nil:
 			logger.Error("ranking recommendations failed", slog.Any("error", err))
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return

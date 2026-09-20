@@ -16,7 +16,8 @@
 
 	let lat = $state('');
 	let lon = $state('');
-	let radiusKm = $state('25');
+	let maxMinutes = $state('60');
+	let radiusKm = $state('');
 	let date = $state('');
 
 	let targetSpecies = $state<SpeciesMatch[]>([]);
@@ -208,12 +209,17 @@
 	async function search(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
+		if (!maxMinutes && !radiusKm) {
+			error = 'Enter a drive time or a radius';
+			return;
+		}
 		loading = true;
 		try {
 			recommendations = await getRecommendations({
 				lat: Number(lat),
 				lon: Number(lon),
-				radiusKm: Number(radiusKm),
+				maxMinutes: maxMinutes ? Number(maxMinutes) : undefined,
+				radiusKm: radiusKm ? Number(radiusKm) : undefined,
 				date: date || undefined,
 				speciesIds: targetSpecies.map((target) => target.species_id)
 			});
@@ -221,6 +227,9 @@
 			updateMarkers();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'search failed';
+			recommendations = [];
+			searched = false;
+			updateMarkers();
 		} finally {
 			loading = false;
 		}
@@ -243,8 +252,12 @@
 			{locating ? 'Locating…' : 'Use my location'}
 		</button>
 		<label>
-			Radius (km)
-			<input type="number" step="any" bind:value={radiusKm} required />
+			Max drive time (min)
+			<input type="number" min="1" max="240" step="any" bind:value={maxMinutes} />
+		</label>
+		<label>
+			Or radius (km)
+			<input type="number" min="0" step="any" bind:value={radiusKm} />
 		</label>
 		<label>
 			Date
@@ -310,7 +323,12 @@
 		{#each recommendations as hotspot (hotspot.hotspot_id)}
 			<li id={`hotspot-${hotspot.hotspot_id}`} class:selected={hotspot.hotspot_id === selectedHotspotId}>
 				<button type="button" onclick={() => selectHotspot(hotspot.hotspot_id)}>
-					<strong>{hotspot.hotspot_name}</strong> — {hotspot.distance_km.toFixed(1)} km
+					<strong>{hotspot.hotspot_name}</strong> —
+					{#if hotspot.drive_minutes}
+						{hotspot.drive_minutes} min drive · {hotspot.distance_km.toFixed(1)} km away
+					{:else}
+						{hotspot.distance_km.toFixed(1)} km
+					{/if}
 					{#if targetSpecies.length > 0}
 						— {hotspot.score.toFixed(1)} of {targetSpecies.length} targets expected
 					{/if}

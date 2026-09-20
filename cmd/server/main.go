@@ -19,6 +19,7 @@ import (
 	"github.com/Kontora20/where-to-bird-today/internal/api"
 	"github.com/Kontora20/where-to-bird-today/internal/birding"
 	"github.com/Kontora20/where-to-bird-today/internal/config"
+	"github.com/Kontora20/where-to-bird-today/internal/routing"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 	"github.com/Kontora20/where-to-bird-today/web"
 )
@@ -72,7 +73,14 @@ func run() error {
 	logger.Info("database connected")
 
 	queries := store.New(pool)
-	recommendations := birding.NewService(queries)
+
+	// A nil *routing.Client stored in the interface would not compare equal to
+	// nil, so the interface is only assigned when a server is configured.
+	var driveTimes birding.DriveTimeFinder
+	if cfg.OSRMURL != "" {
+		driveTimes = routing.NewClient(cfg.OSRMURL)
+	}
+	recommendations := birding.NewService(queries, driveTimes)
 
 	// The embedded FS has everything under a "build" prefix (that's what
 	// //go:embed all:build captured); Sub strips it so a request for

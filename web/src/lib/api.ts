@@ -15,6 +15,8 @@ export interface Recommendation {
 	latitude: number;
 	longitude: number;
 	distance_km: number;
+	// Present only when the search was limited by drive time.
+	drive_minutes?: number;
 	score: number;
 	top_species: ExpectedSpecies[];
 	// Absent when the hotspot's source has no public page to link to.
@@ -38,15 +40,21 @@ export async function searchSpecies(query: string): Promise<SpeciesMatch[]> {
 export async function getRecommendations(query: {
 	lat: number;
 	lon: number;
-	radiusKm: number;
+	// Exactly one of these limits the search; maxMinutes wins if both are given.
+	maxMinutes?: number;
+	radiusKm?: number;
 	date?: string;
 	speciesIds?: number[];
 }): Promise<Recommendation[]> {
 	const params = new URLSearchParams({
 		lat: String(query.lat),
-		lon: String(query.lon),
-		radius_km: String(query.radiusKm)
+		lon: String(query.lon)
 	});
+	if (query.maxMinutes) {
+		params.set('max_minutes', String(query.maxMinutes));
+	} else if (query.radiusKm) {
+		params.set('radius_km', String(query.radiusKm));
+	}
 	if (query.date) {
 		params.set('date', query.date);
 	}
@@ -56,7 +64,9 @@ export async function getRecommendations(query: {
 
 	const response = await fetch(`/recommendations?${params}`);
 	if (!response.ok) {
-		throw new Error(`recommendations request failed: ${response.status}`);
+		// The server's plain-text reason ("no road near that location") is
+		// meant to be shown.
+		throw new Error((await response.text()).trim() || `recommendations request failed: ${response.status}`);
 	}
 	return response.json();
 }

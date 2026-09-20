@@ -39,6 +39,7 @@ func TestLoad(t *testing.T) {
 		wantLevel       slog.Level
 		wantDatabaseURL string
 		wantEbirdAPIKey string
+		wantOSRMURL     string
 		wantRegions     []string
 	}{
 		{
@@ -96,6 +97,26 @@ func TestLoad(t *testing.T) {
 			wantRegions:     []string{"LT", "LV", "EE"},
 		},
 		{
+			name: "OSRM_URL is read but stays optional",
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/wheretobird",
+				"OSRM_URL":     " http://127.0.0.1:5000 ",
+			},
+			wantPort:        8080,
+			wantLevel:       slog.LevelInfo,
+			wantDatabaseURL: "postgres://localhost/wheretobird",
+			wantOSRMURL:     "http://127.0.0.1:5000",
+			wantRegions:     []string{"LT", "LV", "EE"},
+		},
+		{
+			name: "OSRM_URL that is not an http URL is an error",
+			env: map[string]string{
+				"DATABASE_URL": "postgres://localhost/wheretobird",
+				"OSRM_URL":     "127.0.0.1:5000",
+			},
+			wantErr: true,
+		},
+		{
 			name: "EBIRD_REGIONS overrides the Baltics default",
 			env: map[string]string{
 				"DATABASE_URL":  "postgres://localhost/wheretobird",
@@ -118,7 +139,7 @@ func TestLoad(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			clearEnv(t, "PORT", "LOG_LEVEL", "DATABASE_URL", "EBIRD_API_KEY", "EBIRD_REGIONS")
+			clearEnv(t, "PORT", "LOG_LEVEL", "DATABASE_URL", "EBIRD_API_KEY", "EBIRD_REGIONS", "OSRM_URL")
 			for key, value := range tc.env {
 				t.Setenv(key, value)
 			}
@@ -146,6 +167,9 @@ func TestLoad(t *testing.T) {
 			}
 			if cfg.EbirdAPIKey != tc.wantEbirdAPIKey {
 				t.Errorf("Load().EbirdAPIKey = %q, want %q", cfg.EbirdAPIKey, tc.wantEbirdAPIKey)
+			}
+			if cfg.OSRMURL != tc.wantOSRMURL {
+				t.Errorf("Load().OSRMURL = %q, want %q", cfg.OSRMURL, tc.wantOSRMURL)
 			}
 			if !slices.Equal(cfg.Regions, tc.wantRegions) {
 				t.Errorf("Load().Regions = %v, want %v", cfg.Regions, tc.wantRegions)

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -30,6 +31,11 @@ type Config struct {
 	// EbirdAPIKey authenticates requests to the eBird API. No default, same
 	// reasoning as DatabaseURL.
 	EbirdAPIKey string
+
+	// OSRMURL is the base URL of the OSRM routing server. Optional: without
+	// it, searches limited by drive time are refused and searches by radius
+	// still work.
+	OSRMURL string
 
 	// Regions lists the eBird region codes hotspot and observation ingestion
 	// covers. Defaults to the Baltics.
@@ -74,6 +80,13 @@ func Load() (Config, error) {
 	// never touch eBird. Whatever needs it checks for itself.
 	cfg.EbirdAPIKey = strings.TrimSpace(os.Getenv("EBIRD_API_KEY"))
 
+	if v := strings.TrimSpace(os.Getenv("OSRM_URL")); v != "" {
+		if err := checkOSRMURL(v); err != nil {
+			return Config{}, err
+		}
+		cfg.OSRMURL = v
+	}
+
 	if v, ok := os.LookupEnv("EBIRD_REGIONS"); ok {
 		regions, err := parseRegions(v)
 		if err != nil {
@@ -94,6 +107,14 @@ func parsePort(s string) (int, error) {
 		return 0, fmt.Errorf("PORT %d is outside the valid range 1-65535", port)
 	}
 	return port, nil
+}
+
+func checkOSRMURL(s string) error {
+	parsed, err := url.Parse(s)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return fmt.Errorf("OSRM_URL %q is not an http or https URL", s)
+	}
+	return nil
 }
 
 func parseRegions(s string) ([]string, error) {

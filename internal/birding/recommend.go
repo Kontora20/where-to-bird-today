@@ -4,16 +4,33 @@ package birding
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/Kontora20/where-to-bird-today/internal/routing"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
 
 // topSpeciesPerHotspot caps how many expected species come back per hotspot.
 // A plain constant: nothing today needs it tunable per request.
 const topSpeciesPerHotspot = 10
+
+// maxSpeedKMPerMinute is 130 km/h, the fastest legal road speed in the
+// Baltics. No route covers more straight-line distance than this in a given
+// time, so hotspots beyond it can be dropped before asking for drive times.
+const maxSpeedKMPerMinute = 130.0 / 60
+
+// ErrTravelTimeUnavailable means the request asked for a drive time limit
+// but no routing server is configured.
+var ErrTravelTimeUnavailable = errors.New("travel time is not available")
+
+// ErrNoRoadNearOrigin means no road lies close enough to the search point to
+// start a route from it.
+var ErrNoRoadNearOrigin = routing.ErrOriginOffRoad
 
 // supportedLangs are the only two the app ships today (ADR 0005). otherOf
 // keeps that fact in this one place rather than spreading a hardcoded pair
@@ -34,9 +51,12 @@ func otherOf(lang string) string {
 // Lang is the single language resolved by the caller (content negotiation
 // is an HTTP concern, decided in internal/api, not here).
 type Params struct {
-	Latitude   float64
-	Longitude  float64
-	RadiusKM   float64
+	Latitude  float64
+	Longitude float64
+	RadiusKM  float64
+	// MaxMinutes, when above zero, limits results by drive time instead of
+	// RadiusKM.
+	MaxMinutes float64
 	Week       int16
 	Lang       string
 	SpeciesIDs []int64
@@ -59,6 +79,10 @@ type Recommendation struct {
 	DistanceKM  float64           `json:"distance_km"`
 	Score       float64           `json:"score"`
 	TopSpecies  []ExpectedSpecies `json:"top_species"`
+
+	// DriveMinutes is the drive time from the search point, rounded up to
+	// whole minutes. Zero (omitted) when the request used a radius.
+	DriveMinutes int `json:"drive_minutes,omitempty"`
 
 	// VerificationURL links back to the hotspot on the site it came from, so
 	// nothing this read-only app says has to be taken on faith. Empty for a
@@ -99,23 +123,41 @@ type Store interface {
 	GetSpeciesSeasonalityAtHotspot(ctx context.Context, arg store.GetSpeciesSeasonalityAtHotspotParams) ([]store.GetSpeciesSeasonalityAtHotspotRow, error)
 }
 
-// Service ranks hotspots for a recommendation request.
+// DriveTimeFinder measures the drive time from one point to many.
+type DriveTimeFinder interface {
+	DriveTimes(ctx context.Context, origin routing.Point, destinations []routing.Point) ([]time.Duration, error)
+}
+
+// Service ranks hotspots for a recommendation request. driveTimes may be nil,
+// in which case requests limited by drive time fail with
+// ErrTravelTimeUnavailable.
 type Service struct {
-	store Store
+	store      Store
+	driveTimes DriveTimeFinder
 }
 
-// NewService builds a Service backed by store.
-func NewService(store Store) *Service {
-	return &Service{store: store}
+// NewService builds a Service backed by store and, for drive time limits,
+// driveTimes.
+func NewService(store Store, driveTimes DriveTimeFinder) *Service {
+	return &Service{store: store, driveTimes: driveTimes}
 }
 
-// Recommend returns hotspots within p.RadiusKM of the point, ranked by
-// expected species richness for p.Week, each with its top expected species.
+// Recommend returns hotspots within p.RadiusKM of the point, or within
+// p.MaxMinutes of driving when that is set, ranked by expected species
+// richness for p.Week, each with its top expected species.
 func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, error) {
+	radiusKM := p.RadiusKM
+	if p.MaxMinutes > 0 {
+		if s.driveTimes == nil {
+			return nil, ErrTravelTimeUnavailable
+		}
+		radiusKM = p.MaxMinutes * maxSpeedKMPerMinute
+	}
+
 	rows, err := s.store.RecommendHotspots(ctx, store.RecommendHotspotsParams{
 		Latitude:        pgtype.Float8{Float64: p.Latitude, Valid: true},
 		Longitude:       pgtype.Float8{Float64: p.Longitude, Valid: true},
-		RadiusMeters:    pgtype.Float8{Float64: p.RadiusKM * 1000, Valid: true},
+		RadiusMeters:    pgtype.Float8{Float64: radiusKM * 1000, Valid: true},
 		WeekOfYear:      pgtype.Int2{Int16: p.Week, Valid: true},
 		SpeciesIds:      p.SpeciesIDs,
 		TopSpeciesLimit: pgtype.Int8{Int64: topSpeciesPerHotspot, Valid: true},
@@ -124,9 +166,17 @@ func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, er
 		return nil, fmt.Errorf("ranking hotspots: %w", err)
 	}
 
-	recommendations, speciesIDs := groupByHotspot(rows)
+	recommendations := groupByHotspot(rows)
 
-	names, err := s.commonNames(ctx, speciesIDs, p.Lang)
+	if p.MaxMinutes > 0 {
+		origin := routing.Point{Latitude: p.Latitude, Longitude: p.Longitude}
+		recommendations, err = s.withinDriveTime(ctx, recommendations, origin, p.MaxMinutes)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	names, err := s.commonNames(ctx, speciesIDs(recommendations), p.Lang)
 	if err != nil {
 		return nil, err
 	}
@@ -143,17 +193,52 @@ func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, er
 	return recommendations, nil
 }
 
+// withinDriveTime keeps the recommendations reachable from origin within
+// maxMinutes of driving, in their existing order, and records each drive
+// time. It returns an empty non-nil slice when none qualify.
+func (s *Service) withinDriveTime(ctx context.Context, recommendations []Recommendation, origin routing.Point, maxMinutes float64) ([]Recommendation, error) {
+	destinations := make([]routing.Point, len(recommendations))
+	for i, recommendation := range recommendations {
+		destinations[i] = routing.Point{Latitude: recommendation.Latitude, Longitude: recommendation.Longitude}
+	}
+
+	times, err := s.driveTimes.DriveTimes(ctx, origin, destinations)
+	if err != nil {
+		return nil, fmt.Errorf("finding drive times: %w", err)
+	}
+
+	limit := time.Duration(maxMinutes * float64(time.Minute))
+	reachable := make([]Recommendation, 0, len(recommendations))
+	for i, recommendation := range recommendations {
+		if times[i] == routing.Unreachable || times[i] > limit {
+			continue
+		}
+		recommendation.DriveMinutes = max(1, int(math.Ceil(times[i].Minutes())))
+		reachable = append(reachable, recommendation)
+	}
+	return reachable, nil
+}
+
+// speciesIDs lists the species shown across recommendations, so the caller
+// can resolve their names in one batched call.
+func speciesIDs(recommendations []Recommendation) []int64 {
+	var ids []int64
+	for _, recommendation := range recommendations {
+		for _, species := range recommendation.TopSpecies {
+			ids = append(ids, species.SpeciesID)
+		}
+	}
+	return ids
+}
+
 // groupByHotspot rolls the flat SQL rows back up into one Recommendation per
-// hotspot, and collects the distinct species IDs seen so the caller can
-// resolve their names in one batched call. Rows for the same hotspot are
-// guaranteed adjacent by the query's ORDER BY, so this is a single pass with
-// no map keyed by hotspot ID.
-func groupByHotspot(rows []store.RecommendHotspotsRow) ([]Recommendation, []int64) {
+// hotspot. Rows for the same hotspot are guaranteed adjacent by the query's
+// ORDER BY, so this is a single pass with no map keyed by hotspot ID.
+func groupByHotspot(rows []store.RecommendHotspotsRow) []Recommendation {
 	// Not `var recommendations []Recommendation`: a nil slice marshals to
 	// JSON `null`, and the Svelte app's `{#each recommendations}` throws on
 	// null rather than treating it as empty.
 	recommendations := []Recommendation{}
-	var speciesIDs []int64
 
 	for _, row := range rows {
 		if len(recommendations) == 0 || recommendations[len(recommendations)-1].HotspotID != row.HotspotID {
@@ -180,10 +265,9 @@ func groupByHotspot(rows []store.RecommendHotspotsRow) ([]Recommendation, []int6
 			ScientificName: row.ScientificName.String,
 			Frequency:      row.Frequency.Float32,
 		})
-		speciesIDs = append(speciesIDs, row.SpeciesID.Int64)
 	}
 
-	return recommendations, speciesIDs
+	return recommendations
 }
 
 // commonNames batches one lookup for every species across every hotspot,

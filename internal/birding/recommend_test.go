@@ -13,6 +13,8 @@ import (
 type fakeStore struct {
 	recommendErr error
 	rows         []store.RecommendHotspotsRow
+	// recommendArgs is a pointer for the same reason as searchArgs below.
+	recommendArgs *store.RecommendHotspotsParams
 	// nameCandidates simulates species_names rows: speciesID -> lang -> name.
 	nameCandidates map[int64]map[string]string
 
@@ -40,7 +42,10 @@ func (f fakeStore) SearchSpecies(_ context.Context, arg store.SearchSpeciesParam
 	return f.searchRows, nil
 }
 
-func (f fakeStore) RecommendHotspots(_ context.Context, _ store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error) {
+func (f fakeStore) RecommendHotspots(_ context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error) {
+	if f.recommendArgs != nil {
+		*f.recommendArgs = arg
+	}
 	if f.recommendErr != nil {
 		return nil, f.recommendErr
 	}
@@ -109,7 +114,7 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
+	got, err := NewService(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -159,7 +164,7 @@ func TestRecommendRespectsRequestedLanguage(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "en"})
+	got, err := NewService(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "en"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -182,7 +187,7 @@ func TestRecommendFallsBackToScientificName(t *testing.T) {
 		// No candidates for species 99 in any language.
 	}
 
-	got, err := NewService(fake).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
+	got, err := NewService(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -202,7 +207,7 @@ func TestRecommendFallsBackToScientificName(t *testing.T) {
 func TestRecommendReturnsEmptySliceNotNil(t *testing.T) {
 	t.Parallel()
 
-	got, err := NewService(fakeStore{}).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
+	got, err := NewService(fakeStore{}, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -219,7 +224,7 @@ func TestRecommendPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	_, err := NewService(fakeStore{recommendErr: wantErr}).Recommend(context.Background(), Params{})
+	_, err := NewService(fakeStore{recommendErr: wantErr}, nil).Recommend(context.Background(), Params{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("Recommend() error = %v, want wrapping %v", err, wantErr)
 	}

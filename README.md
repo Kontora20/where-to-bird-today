@@ -104,6 +104,28 @@ Open a psql shell:
 docker exec -it wtbt-postgres psql -U birder -d wheretobird
 ```
 
+## Travel time
+
+Searches by drive time (`max_minutes`) ask a local OSRM routing server how long it takes to drive to
+each hotspot. It is opt-in, because it needs about 1.3 GB of road data built first.
+
+Build the road graph for Lithuania, Latvia and Estonia into `data/osm/` (git-ignored). It downloads
+about 490 MB of OpenStreetMap extracts from Geofabrik, then needs about 3.3 GB of free RAM and around
+10 minutes for the one-time build. Each step is skipped if its output exists.
+
+```powershell
+.\scripts\build-osrm.ps1
+```
+
+Start the routing server (512 MB memory limit, port 5000) and set `OSRM_URL` in `.env`:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.yml --profile routing up -d osrm
+```
+
+Without `OSRM_URL`, a `max_minutes` request answers `503` and searches by `radius_km` still work.
+Map data © OpenStreetMap contributors (ODbL).
+
 ## Configuration
 
 All configuration is environment variables. Copy `.env.example` to `.env` and fill it in.
@@ -114,6 +136,7 @@ All configuration is environment variables. Copy `.env.example` to `.env` and fi
 | `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` |
 | `DATABASE_URL` | **Required.** Postgres connection string — no default, startup fails without it |
 | `EBIRD_API_KEY` | **Secret.** eBird API 2.0 token — Phase 2 |
+| `OSRM_URL` | Optional. OSRM routing server, e.g. `http://127.0.0.1:5000`; enables `max_minutes` searches |
 
 > **The eBird key is a secret.** It lives in `.env` (gitignored) locally and in GitHub Actions /
 > Container Apps secrets in CI and production. It must never appear in source, compose files,
