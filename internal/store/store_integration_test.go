@@ -541,6 +541,7 @@ func TestSearchSpecies(t *testing.T) {
 	seedSpecies("Ciconia ciconia", "whitestk", "Baltasis gandras", "White Stork", true)
 	seedSpecies("Ciconia nigra", "blackstk", "Juodasis gandras", "Black Stork", true)
 	seedSpecies("Testus unseen", "unseenstk", "Nematytas gandras", "Unseen Stork", false)
+	seedSpecies("Passer domesticus", "housesprw", "Naminis žvirblis", "House Sparrow", true)
 
 	search := func(query string, langPriority ...string) []string {
 		t.Helper()
@@ -566,6 +567,8 @@ func TestSearchSpecies(t *testing.T) {
 		{"matches in one language, shown in the requested one", "gandras", []string{"en", "lt"}, []string{"Black Stork", "White Stork"}},
 		{"matches the scientific name", "ciconia nigra", []string{"en", "lt"}, []string{"Black Stork"}},
 		{"treats % as a plain character", "%", []string{"en", "lt"}, nil},
+		{"finds a diacritic name typed without diacritics", "zvirbl", []string{"lt", "en"}, []string{"Naminis žvirblis"}},
+		{"finds a plain name typed with diacritics", "gąndras", []string{"lt", "en"}, []string{"Baltasis gandras", "Juodasis gandras"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

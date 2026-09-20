@@ -5,8 +5,9 @@ SELECT * FROM species WHERE id = sqlc.arg(id);
 -- Species whose common name (any language) or scientific name contains the
 -- query, for the target-species picker. Only species with a hotspot
 -- observation are offered: a bird the app holds no data for cannot rank
--- anything. strpos on lowered text, not ILIKE, so a % or _ typed by the user
--- is a plain character rather than a pattern.
+-- anything. strpos on lowered, unaccented text, not ILIKE, so a % or _ typed
+-- by the user is a plain character rather than a pattern, and "zuvedra"
+-- finds "Žuvėdra" (and the reverse).
 SELECT
     sp.id AS species_id,
     sp.scientific_name,
@@ -20,11 +21,11 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) best ON true
 WHERE (
-        strpos(lower(sp.scientific_name), lower(sqlc.arg(query)::text)) > 0
+        strpos(lower(unaccent(sp.scientific_name)), lower(unaccent(sqlc.arg(query)::text))) > 0
         OR EXISTS (
             SELECT 1 FROM species_names m
             WHERE m.species_id = sp.id
-              AND strpos(lower(m.common_name), lower(sqlc.arg(query)::text)) > 0
+              AND strpos(lower(unaccent(m.common_name)), lower(unaccent(sqlc.arg(query)::text))) > 0
         )
     )
   AND EXISTS (

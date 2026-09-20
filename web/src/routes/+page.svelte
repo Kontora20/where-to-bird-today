@@ -159,16 +159,11 @@
 
 	const speciesLabel = (species: SpeciesMatch) => `${species.common_name} (${species.scientific_name})`;
 
-	// The datalist writes the chosen option's label into the input, so an input
-	// value equal to a suggestion's label means the person picked it. Anything
-	// else is still being typed, so the suggestions are refreshed after a pause.
+	// Suggestions are refreshed after a pause in typing. They are a plain list
+	// rather than a <datalist> because a browser hides any datalist option that
+	// does not contain the typed text, and the server also matches through the
+	// other language and through unaccented text.
 	function onSpeciesInput() {
-		const chosen = speciesSuggestions.find((species) => speciesLabel(species) === speciesQuery);
-		if (chosen) {
-			addTargetSpecies(chosen);
-			return;
-		}
-
 		clearTimeout(suggestionTimer);
 		const typed = speciesQuery.trim();
 		if (typed.length < 2) {
@@ -184,6 +179,15 @@
 				error = err instanceof Error ? err.message : 'species search failed';
 			}
 		}, 200);
+	}
+
+	function onSpeciesKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			speciesSuggestions = [];
+		} else if (event.key === 'Enter' && speciesSuggestions.length > 0) {
+			event.preventDefault();
+			addTargetSpecies(speciesSuggestions[0]);
+		}
 	}
 
 	function addTargetSpecies(species: SpeciesMatch) {
@@ -246,22 +250,31 @@
 			Date
 			<input type="date" bind:value={date} />
 		</label>
-		<label>
-			Target species
-			<input
-				type="search"
-				list="species-suggestions"
-				placeholder={targetSpecies.length >= maxTargetSpecies ? 'Limit reached' : 'Type a bird name'}
-				disabled={targetSpecies.length >= maxTargetSpecies}
-				bind:value={speciesQuery}
-				oninput={onSpeciesInput}
-			/>
-			<datalist id="species-suggestions">
-				{#each speciesSuggestions as suggestion (suggestion.species_id)}
-					<option value={speciesLabel(suggestion)}></option>
-				{/each}
-			</datalist>
-		</label>
+		<div class="species-field">
+			<label>
+				Target species
+				<input
+					type="search"
+					autocomplete="off"
+					placeholder={targetSpecies.length >= maxTargetSpecies ? 'Limit reached' : 'Type a bird name'}
+					disabled={targetSpecies.length >= maxTargetSpecies}
+					bind:value={speciesQuery}
+					oninput={onSpeciesInput}
+					onkeydown={onSpeciesKeydown}
+				/>
+			</label>
+			{#if speciesSuggestions.length > 0}
+				<ul class="suggestions">
+					{#each speciesSuggestions as suggestion (suggestion.species_id)}
+						<li>
+							<button type="button" onclick={() => addTargetSpecies(suggestion)}>
+								{speciesLabel(suggestion)}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</div>
 		<button type="submit" class="primary" disabled={loading}>
 			{loading ? 'Searching…' : 'Search'}
 		</button>
@@ -446,6 +459,41 @@
 	.search-form button:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.species-field {
+		position: relative;
+	}
+
+	.suggestions {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		/* Above Leaflet's controls, which go up to z-index 1000. */
+		z-index: 1100;
+		min-width: 100%;
+		width: max-content;
+		max-width: min(420px, 90vw);
+		margin: 0.2rem 0 0;
+		padding: 0.25rem 0;
+		list-style: none;
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		background: var(--color-bg);
+	}
+
+	.suggestions button {
+		all: unset;
+		display: block;
+		box-sizing: border-box;
+		width: 100%;
+		padding: 0.35rem 0.75rem;
+		cursor: pointer;
+	}
+
+	.suggestions button:hover,
+	.suggestions button:focus-visible {
+		background: var(--color-accent-bg);
 	}
 
 	.targets {

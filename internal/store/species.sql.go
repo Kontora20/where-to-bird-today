@@ -48,11 +48,11 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) best ON true
 WHERE (
-        strpos(lower(sp.scientific_name), lower($2::text)) > 0
+        strpos(lower(unaccent(sp.scientific_name)), lower(unaccent($2::text))) > 0
         OR EXISTS (
             SELECT 1 FROM species_names m
             WHERE m.species_id = sp.id
-              AND strpos(lower(m.common_name), lower($2::text)) > 0
+              AND strpos(lower(unaccent(m.common_name)), lower(unaccent($2::text))) > 0
         )
     )
   AND EXISTS (
@@ -78,8 +78,9 @@ type SearchSpeciesRow struct {
 // Species whose common name (any language) or scientific name contains the
 // query, for the target-species picker. Only species with a hotspot
 // observation are offered: a bird the app holds no data for cannot rank
-// anything. strpos on lowered text, not ILIKE, so a % or _ typed by the user
-// is a plain character rather than a pattern.
+// anything. strpos on lowered, unaccented text, not ILIKE, so a % or _ typed
+// by the user is a plain character rather than a pattern, and "zuvedra"
+// finds "Žuvėdra" (and the reverse).
 func (q *Queries) SearchSpecies(ctx context.Context, arg SearchSpeciesParams) ([]SearchSpeciesRow, error) {
 	rows, err := q.db.Query(ctx, searchSpecies, arg.LangPriority, arg.Query, arg.ResultLimit)
 	if err != nil {
