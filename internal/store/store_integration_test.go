@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"slices"
@@ -353,6 +354,12 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 		if _, err := queries.RecomputeSpeciesSeasonality(ctx, 5); err != nil {
 			t.Fatalf("RecomputeSpeciesSeasonality: %v", err)
 		}
+		if err := queries.TruncateLastSeen(ctx); err != nil {
+			t.Fatalf("TruncateLastSeen: %v", err)
+		}
+		if _, err := queries.RecomputeLastSeen(ctx); err != nil {
+			t.Fatalf("RecomputeLastSeen: %v", err)
+		}
 	}
 	recompute()
 
@@ -381,15 +388,38 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 	// The latest checklist that recorded species A at the hotspot is S2 (the
 	// personal-location S7 is later but not at this hotspot). A species never
 	// recorded there has none.
-	latest, err := queries.GetLatestChecklistWithSpecies(ctx, GetLatestChecklistWithSpeciesParams{SpeciesID: speciesA, HotspotID: pgtype.Int8{Int64: hotspot.ID, Valid: true}})
+	latest, err := queries.GetLatestChecklistWithSpecies(ctx, GetLatestChecklistWithSpeciesParams{SpeciesID: speciesA, HotspotID: hotspot.ID})
 	if err != nil {
 		t.Fatalf("GetLatestChecklistWithSpecies: %v", err)
 	}
 	if latest.SamplingEventID != "S2" {
 		t.Errorf("latest checklist for species A = %q, want S2", latest.SamplingEventID)
 	}
-	if _, err := queries.GetLatestChecklistWithSpecies(ctx, GetLatestChecklistWithSpeciesParams{SpeciesID: speciesD, HotspotID: pgtype.Int8{Int64: hotspot.ID, Valid: true}}); !errors.Is(err, pgx.ErrNoRows) {
+	if _, err := queries.GetLatestChecklistWithSpecies(ctx, GetLatestChecklistWithSpeciesParams{SpeciesID: speciesD, HotspotID: hotspot.ID}); !errors.Is(err, pgx.ErrNoRows) {
 		t.Errorf("GetLatestChecklistWithSpecies for an unrecorded species error = %v, want pgx.ErrNoRows", err)
+	}
+
+	// Last seen, for two hotspots and three species. Species B was recorded on
+	// 5 March by two checklists, and the lower sampling event id wins the tie.
+	// Species D was never recorded, and S7 has no hotspot, so neither appears.
+	lastSeen, err := queries.GetLastSeen(ctx, GetLastSeenParams{
+		HotspotIds: []int64{hotspot.ID, otherHotspot.ID},
+		SpeciesIds: []int64{speciesA, speciesB, speciesD},
+	})
+	if err != nil {
+		t.Fatalf("GetLastSeen: %v", err)
+	}
+	var gotLastSeen []string
+	for _, row := range lastSeen {
+		gotLastSeen = append(gotLastSeen, fmt.Sprintf("%d/%d/%s/%s", row.HotspotID, row.SpeciesID, row.SamplingEventID, row.ObservedOn.Time.Format("2006-01-02")))
+	}
+	wantLastSeen := []string{
+		fmt.Sprintf("%d/%d/S4/2026-03-05", hotspot.ID, speciesB),
+		fmt.Sprintf("%d/%d/S2/2026-03-03", hotspot.ID, speciesA),
+		fmt.Sprintf("%d/%d/S8/2026-03-03", otherHotspot.ID, speciesA),
+	}
+	if !slices.Equal(gotLastSeen, wantLastSeen) {
+		t.Errorf("GetLastSeen() = %v, want %v", gotLastSeen, wantLastSeen)
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
@@ -127,7 +126,7 @@ func (p *SpeciesPanel) SpeciesDetail(ctx context.Context, hotspotID, speciesID i
 	var latestChecklist *LatestChecklist
 	latest, err := p.store.GetLatestChecklistWithSpecies(ctx, store.GetLatestChecklistWithSpeciesParams{
 		SpeciesID: speciesID,
-		HotspotID: pgtype.Int8{Int64: hotspotID, Valid: true},
+		HotspotID: hotspotID,
 	})
 	switch {
 	case err == nil:

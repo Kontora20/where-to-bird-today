@@ -12,17 +12,14 @@ import (
 )
 
 const getLatestChecklistWithSpecies = `-- name: GetLatestChecklistWithSpecies :one
-SELECT c.sampling_event_id, c.observed_on
-FROM observations o
-JOIN checklists c ON c.id = o.checklist_id
-WHERE o.species_id = $1 AND o.hotspot_id = $2
-ORDER BY o.observed_on DESC
-LIMIT 1
+SELECT sampling_event_id, observed_on
+FROM hotspot_species_last_seen
+WHERE species_id = $1 AND hotspot_id = $2
 `
 
 type GetLatestChecklistWithSpeciesParams struct {
-	SpeciesID int64       `json:"species_id"`
-	HotspotID pgtype.Int8 `json:"hotspot_id"`
+	SpeciesID int64 `json:"species_id"`
+	HotspotID int64 `json:"hotspot_id"`
 }
 
 type GetLatestChecklistWithSpeciesRow struct {
@@ -32,7 +29,8 @@ type GetLatestChecklistWithSpeciesRow struct {
 
 // The most recent checklist at a hotspot that recorded a species, so the
 // species panel can link to the eBird page behind the numbers. No row means
-// the species was never recorded there.
+// the species was never recorded there. Read from hotspot_species_last_seen,
+// which compute-seasonality fills.
 func (q *Queries) GetLatestChecklistWithSpecies(ctx context.Context, arg GetLatestChecklistWithSpeciesParams) (GetLatestChecklistWithSpeciesRow, error) {
 	row := q.db.QueryRow(ctx, getLatestChecklistWithSpecies, arg.SpeciesID, arg.HotspotID)
 	var i GetLatestChecklistWithSpeciesRow

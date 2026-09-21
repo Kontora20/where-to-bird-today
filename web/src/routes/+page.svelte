@@ -6,6 +6,7 @@
 	import HotspotList from '$lib/HotspotList.svelte';
 	import HotspotMap from '$lib/HotspotMap.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
+	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
 	import {
 		getAreaWeeks,
 		getRecommendations,
@@ -33,7 +34,7 @@
 	// 'sv' formats a date as YYYY-MM-DD.
 	let date = $state(new Date().toLocaleDateString('sv'));
 
-	let targetSpecies = $state<SpeciesMatch[]>([]);
+	let targetSpecies = $state<SpeciesMatch[]>(loadYourBirds(maxTargetSpecies));
 
 	let recommendations = $state<Recommendation[]>([]);
 	// The best weeks of the target species over the area searched, and how many
@@ -156,11 +157,13 @@
 			return;
 		}
 		targetSpecies = [...targetSpecies, species];
+		saveYourBirds(targetSpecies);
 		return runSearch();
 	}
 
 	function removeTargetSpecies(speciesId: number) {
 		targetSpecies = targetSpecies.filter((target) => target.species_id !== speciesId);
+		saveYourBirds(targetSpecies);
 		return runSearch();
 	}
 
@@ -244,7 +247,7 @@
 				<HotspotList
 					hotspots={recommendations}
 					selectedId={selectedHotspotId}
-					birdCount={targetSpecies.length}
+					birds={targetSpecies}
 					onselect={selectHotspot}
 				/>
 			</section>
@@ -271,6 +274,7 @@
 			{#if selectedHotspot}
 				<HotspotCard
 					hotspot={selectedHotspot}
+					birds={targetSpecies}
 					onclose={() => (selectedHotspotId = null)}
 					onpickspecies={(speciesId) => openSpeciesDetail(selectedHotspot.hotspot_id, speciesId)}
 					onsearchhere={() =>

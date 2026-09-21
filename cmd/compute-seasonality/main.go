@@ -12,6 +12,7 @@ import (
 
 	"github.com/Kontora20/where-to-bird-today/internal/config"
 	"github.com/Kontora20/where-to-bird-today/internal/ingest"
+	"github.com/Kontora20/where-to-bird-today/internal/ingest/lastseen"
 	"github.com/Kontora20/where-to-bird-today/internal/ingest/seasonality"
 	"github.com/Kontora20/where-to-bird-today/internal/ingest/timeofday"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
@@ -53,5 +54,12 @@ func run() error {
 	}
 
 	slog.Info("time-of-day counts recomputed", slog.Int("rows", count))
+
+	count, err = ingest.Run(ctx, pool, queries, lastseen.Source, lastseen.Recompute)
+	if err != nil {
+		return err
+	}
+
+	slog.Info("last-seen rows recomputed", slog.Int("rows", count))
 	return nil
 }

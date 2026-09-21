@@ -40,6 +40,13 @@ type Hotspot struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type HotspotSpeciesLastSeen struct {
+	HotspotID       int64       `json:"hotspot_id"`
+	SpeciesID       int64       `json:"species_id"`
+	ObservedOn      pgtype.Date `json:"observed_on"`
+	SamplingEventID string      `json:"sampling_event_id"`
+}
+
 type IngestionRun struct {
 	ID         int64              `json:"id"`
 	Source     string             `json:"source"`

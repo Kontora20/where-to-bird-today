@@ -37,6 +37,9 @@ type fakeRecommendStore struct {
 	rows           []store.RecommendHotspotsRow
 	recommendArgs  *store.RecommendHotspotsParams
 	nameCandidates map[int64]map[string]string
+	lastSeenRows   []store.HotspotSpeciesLastSeen
+	lastSeenArgs   *store.GetLastSeenParams
+	lastSeenErr    error
 }
 
 func (f fakeRecommendStore) RecommendHotspots(_ context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error) {
@@ -47,6 +50,16 @@ func (f fakeRecommendStore) RecommendHotspots(_ context.Context, arg store.Recom
 		return nil, f.recommendErr
 	}
 	return f.rows, nil
+}
+
+func (f fakeRecommendStore) GetLastSeen(_ context.Context, arg store.GetLastSeenParams) ([]store.HotspotSpeciesLastSeen, error) {
+	if f.lastSeenArgs != nil {
+		*f.lastSeenArgs = arg
+	}
+	if f.lastSeenErr != nil {
+		return nil, f.lastSeenErr
+	}
+	return f.lastSeenRows, nil
 }
 
 func (f fakeRecommendStore) GetCommonNames(_ context.Context, arg store.GetCommonNamesParams) ([]store.GetCommonNamesRow, error) {

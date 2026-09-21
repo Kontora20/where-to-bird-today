@@ -133,6 +133,9 @@ week 52.
 It also works out how long after sunrise each checklist started and counts checklists per hotspot and hour
 after sunrise (0 to 23, around the clock, so night birds are included). The species panel reads those counts for its
 time-of-day strip.
+Last, it stores the most recent record of each species at each hotspot (`hotspot_species_last_seen`), which the
+hotspot list and card use to say when your birds were last seen, and the species panel uses for its link to the
+latest checklist.
 
 **Run `compute-seasonality` only after the checklists are loaded.** It rebuilds its tables from
 `checklists`, so with none loaded it replaces them with nothing.

@@ -11,6 +11,15 @@ export interface ExpectedSpecies {
 	checklists: number;
 }
 
+// The most recent record of one species at a hotspot, with a link to the
+// checklist behind it.
+export interface LastSeen {
+	species_id: number;
+	// YYYY-MM-DD
+	observed_on: string;
+	checklist_url: string;
+}
+
 export interface Recommendation {
 	hotspot_id: number;
 	hotspot_name: string;
@@ -21,6 +30,9 @@ export interface Recommendation {
 	drive_minutes?: number;
 	score: number;
 	top_species: ExpectedSpecies[];
+	// For the species of the search that were ever recorded here, latest first;
+	// absent when the search had no species.
+	last_seen?: LastSeen[];
 	// Absent when the hotspot's source has no public page to link to.
 	verification_url?: string;
 }

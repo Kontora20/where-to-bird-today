@@ -1,27 +1,58 @@
 <script lang="ts">
-	import type { Recommendation } from '$lib/api';
-	import { checklistCount, distanceText } from '$lib/format';
+	import type { Recommendation, SpeciesMatch } from '$lib/api';
+	import { checklistCount, distanceText, sighting } from '$lib/format';
 
 	interface Props {
 		hotspot: Recommendation;
+		birds: SpeciesMatch[];
 		onclose: () => void;
 		onpickspecies: (speciesId: number) => void;
 		onsearchhere: () => void;
 	}
 
-	let { hotspot, onclose, onpickspecies, onsearchhere }: Props = $props();
+	let { hotspot, birds, onclose, onpickspecies, onsearchhere }: Props = $props();
 
+	const today = new Date();
+	const checklists = $derived(checklistCount(hotspot));
 	const shown = $derived(hotspot.top_species.slice(0, 5));
+	const mine = $derived(
+		birds.map((bird) => ({
+			bird,
+			...sighting(
+				hotspot.last_seen?.find((seen) => seen.species_id === bird.species_id),
+				today
+			)
+		}))
+	);
 </script>
 
 <section class="card" aria-label={hotspot.hotspot_name}>
 	<div class="head">
 		<div>
 			<h2>{hotspot.hotspot_name}</h2>
-			<p class="meta">{checklistCount(hotspot)} checklists in this week of the year · {distanceText(hotspot)}</p>
+			<p class="meta">
+				{checklists} {checklists === 1 ? 'checklist' : 'checklists'} in this week of the year · {distanceText(hotspot)}
+			</p>
 		</div>
 		<button type="button" class="close" onclick={onclose} aria-label="Close">✕</button>
 	</div>
+
+	{#if mine.length > 0}
+		<h3>Your birds here</h3>
+		<ul class="mine">
+			{#each mine as entry (entry.bird.species_id)}
+				<li>
+					<span class="dot" class:recent={entry.recent}></span>
+					<span class="bird">{entry.bird.common_name}</span>
+					{#if entry.url}
+						<a href={entry.url} class:recent={entry.recent} target="_blank" rel="noopener noreferrer">{entry.text}</a>
+					{:else}
+						<span class="when">{entry.text}</span>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+	{/if}
 
 	{#if shown.length > 0}
 		<h3>Most likely this week</h3>
@@ -107,6 +138,52 @@
 		color: var(--color-text);
 		font: inherit;
 		cursor: pointer;
+	}
+
+	.mine {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin: 0;
+		padding: 10px 12px;
+		border-radius: 10px;
+		background: var(--color-selected);
+		list-style: none;
+	}
+
+	.mine li {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 0.9rem;
+	}
+
+	.bird {
+		flex: 1;
+		font-weight: 600;
+	}
+
+	.when,
+	.mine a {
+		color: var(--color-muted);
+		font-size: 0.8rem;
+	}
+
+	.mine a.recent {
+		color: var(--color-accent-text);
+		font-weight: 600;
+	}
+
+	.dot {
+		flex-shrink: 0;
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--color-control-border);
+	}
+
+	.dot.recent {
+		background: var(--color-accent-strong);
 	}
 
 	.seen {

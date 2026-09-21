@@ -3,7 +3,10 @@ package birding
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -149,5 +152,81 @@ func TestRecommendPropagatesStoreError(t *testing.T) {
 	_, err := newRecommender(fakeRecommendStore{recommendErr: wantErr}, nil).Recommend(context.Background(), Params{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("Recommend() error = %v, want wrapping %v", err, wantErr)
+	}
+}
+
+func TestRecommendAttachesLastSeenForTheRequestedSpecies(t *testing.T) {
+	t.Parallel()
+
+	rows := []store.RecommendHotspotsRow{
+		{HotspotID: 1, HotspotName: "Nemunas Delta", Score: 1, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia")},
+		{HotspotID: 2, HotspotName: "Kaunas Lagoon", Score: 0.5, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia")},
+	}
+	day := func(month time.Month, d int) pgtype.Date {
+		return pgtype.Date{Time: time.Date(2026, month, d, 0, 0, 0, 0, time.UTC), Valid: true}
+	}
+	lastSeenRows := []store.HotspotSpeciesLastSeen{
+		{HotspotID: 1, SpeciesID: 10, ObservedOn: day(time.July, 19), SamplingEventID: "S100"},
+		{HotspotID: 1, SpeciesID: 11, ObservedOn: day(time.June, 2), SamplingEventID: "S90"},
+	}
+
+	tests := []struct {
+		name       string
+		speciesIDs []int64
+		wantAsked  bool
+		want       map[int64][]LastSeen // by hotspot id
+	}{
+		{
+			name:       "species requested",
+			speciesIDs: []int64{10, 11},
+			wantAsked:  true,
+			want: map[int64][]LastSeen{
+				1: {
+					{SpeciesID: 10, ObservedOn: "2026-07-19", ChecklistURL: "https://ebird.org/checklist/S100"},
+					{SpeciesID: 11, ObservedOn: "2026-06-02", ChecklistURL: "https://ebird.org/checklist/S90"},
+				},
+			},
+		},
+		{name: "no species requested"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var asked store.GetLastSeenParams
+			fake := fakeRecommendStore{rows: rows, lastSeenRows: lastSeenRows, lastSeenArgs: &asked}
+
+			got, err := newRecommender(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "en", SpeciesIDs: tc.speciesIDs})
+			if err != nil {
+				t.Fatalf("Recommend() error = %v", err)
+			}
+
+			if gotAsked := asked.HotspotIds != nil; gotAsked != tc.wantAsked {
+				t.Errorf("last seen was asked for = %t, want %t", gotAsked, tc.wantAsked)
+			}
+			if tc.wantAsked && (!slices.Equal(asked.HotspotIds, []int64{1, 2}) || !slices.Equal(asked.SpeciesIds, tc.speciesIDs)) {
+				t.Errorf("last seen was asked for hotspots %v and species %v, want [1 2] and %v", asked.HotspotIds, asked.SpeciesIds, tc.speciesIDs)
+			}
+			for _, hotspot := range got {
+				if !slices.Equal(hotspot.LastSeen, tc.want[hotspot.HotspotID]) {
+					t.Errorf("hotspot %d LastSeen = %v, want %v", hotspot.HotspotID, hotspot.LastSeen, tc.want[hotspot.HotspotID])
+				}
+			}
+		})
+	}
+}
+
+func TestRecommendReportsALastSeenFailure(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeRecommendStore{
+		rows:        []store.RecommendHotspotsRow{{HotspotID: 1, HotspotName: "Nemunas Delta"}},
+		lastSeenErr: errors.New("boom"),
+	}
+
+	_, err := newRecommender(fake, nil).Recommend(context.Background(), Params{Week: 20, Lang: "en", RadiusKM: 25, SpeciesIDs: []int64{10}})
+	if err == nil || !strings.Contains(err.Error(), "loading last seen") {
+		t.Errorf("Recommend() error = %v, want one mentioning \"loading last seen\"", err)
 	}
 }

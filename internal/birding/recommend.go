@@ -72,10 +72,22 @@ type Recommendation struct {
 	// whole minutes. Zero (omitted) when the request used a radius.
 	DriveMinutes int `json:"drive_minutes,omitempty"`
 
+	// LastSeen says when each of the requested species was last recorded at
+	// the hotspot, and links to the checklist. A species never recorded there
+	// has no entry, and a request with no species has none at all.
+	LastSeen []LastSeen `json:"last_seen,omitempty"`
+
 	// VerificationURL links back to the hotspot on the site it came from, so
 	// nothing this read-only app says has to be taken on faith. Empty for a
 	// source with no public page to point at.
 	VerificationURL string `json:"verification_url,omitempty"`
+}
+
+// LastSeen is the most recent record of one species at a hotspot.
+type LastSeen struct {
+	SpeciesID    int64  `json:"species_id"`
+	ObservedOn   string `json:"observed_on"`
+	ChecklistURL string `json:"checklist_url"`
 }
 
 // sourceEBird is the hotspots.source value eBird-sourced hotspots carry
@@ -110,6 +122,7 @@ type nameStore interface {
 type recommendStore interface {
 	nameStore
 	RecommendHotspots(ctx context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error)
+	GetLastSeen(ctx context.Context, arg store.GetLastSeenParams) ([]store.HotspotSpeciesLastSeen, error)
 }
 
 // Recommender ranks hotspots for a recommendation request. Its drive times may
@@ -155,6 +168,12 @@ func (r *Recommender) Recommend(ctx context.Context, p Params) ([]Recommendation
 		}
 	}
 
+	if len(p.SpeciesIDs) > 0 {
+		if err := r.attachLastSeen(ctx, recommendations, p.SpeciesIDs); err != nil {
+			return nil, err
+		}
+	}
+
 	names, err := commonNames(ctx, r.store, speciesIDs(recommendations), p.Lang)
 	if err != nil {
 		return nil, err
@@ -170,6 +189,34 @@ func (r *Recommender) Recommend(ctx context.Context, p Params) ([]Recommendation
 	}
 
 	return recommendations, nil
+}
+
+// attachLastSeen fills in LastSeen for the requested species, in one query for
+// all the hotspots that are left.
+func (r *Recommender) attachLastSeen(ctx context.Context, recommendations []Recommendation, speciesIDs []int64) error {
+	if len(recommendations) == 0 {
+		return nil
+	}
+	hotspotIDs := make([]int64, len(recommendations))
+	position := make(map[int64]int, len(recommendations))
+	for i, recommendation := range recommendations {
+		hotspotIDs[i] = recommendation.HotspotID
+		position[recommendation.HotspotID] = i
+	}
+
+	rows, err := r.store.GetLastSeen(ctx, store.GetLastSeenParams{HotspotIds: hotspotIDs, SpeciesIds: speciesIDs})
+	if err != nil {
+		return fmt.Errorf("loading last seen: %w", err)
+	}
+	for _, row := range rows {
+		i := position[row.HotspotID]
+		recommendations[i].LastSeen = append(recommendations[i].LastSeen, LastSeen{
+			SpeciesID:    row.SpeciesID,
+			ObservedOn:   row.ObservedOn.Time.Format("2006-01-02"),
+			ChecklistURL: "https://ebird.org/checklist/" + row.SamplingEventID,
+		})
+	}
+	return nil
 }
 
 // withinDriveTime keeps the recommendations reachable from origin within

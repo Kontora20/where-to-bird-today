@@ -1,19 +1,22 @@
 <script lang="ts">
-	import type { Recommendation } from '$lib/api';
-	import { checklistCount, distanceText } from '$lib/format';
+	import type { Recommendation, SpeciesMatch } from '$lib/api';
+	import { checklistCount, distanceText, lastSeenStatus } from '$lib/format';
 
 	interface Props {
 		hotspots: Recommendation[];
 		selectedId: number | null;
-		birdCount: number;
+		birds: SpeciesMatch[];
 		onselect: (hotspotId: number) => void;
 	}
 
-	let { hotspots, selectedId, birdCount, onselect }: Props = $props();
+	let { hotspots, selectedId, birds, onselect }: Props = $props();
+
+	const today = new Date();
 </script>
 
 <ul class="list">
 	{#each hotspots as hotspot (hotspot.hotspot_id)}
+		{@const status = lastSeenStatus(hotspot, birds, today)}
 		<li id="hotspot-{hotspot.hotspot_id}">
 			<button
 				type="button"
@@ -28,9 +31,14 @@
 						<span class="count" title="Checklists in this week of the year">{checklistCount(hotspot)}</span>
 					</span>
 					<span class="meta">
-						{distanceText(hotspot)}{#if birdCount > 0}
-							· {hotspot.score.toFixed(1)} of {birdCount} of your birds expected{/if}
+						{distanceText(hotspot)}{#if birds.length > 0}
+							· {hotspot.score.toFixed(1)} of {birds.length} of your birds expected{/if}
 					</span>
+					{#if status}
+						<span class="status" class:recent={status.recent}>
+							<span class="dot"></span>{status.text}
+						</span>
+					{/if}
 				</span>
 			</button>
 		</li>
@@ -102,5 +110,30 @@
 	.meta {
 		color: var(--color-muted);
 		font-size: 0.8rem;
+	}
+
+	.status {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--color-muted);
+		font-size: 0.8rem;
+		font-weight: 600;
+	}
+
+	.status.recent {
+		color: var(--color-accent-text);
+	}
+
+	.dot {
+		flex-shrink: 0;
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--color-control-border);
+	}
+
+	.recent .dot {
+		background: var(--color-accent-strong);
 	}
 </style>

@@ -20,10 +20,8 @@ RETURNING id;
 -- name: GetLatestChecklistWithSpecies :one
 -- The most recent checklist at a hotspot that recorded a species, so the
 -- species panel can link to the eBird page behind the numbers. No row means
--- the species was never recorded there.
-SELECT c.sampling_event_id, c.observed_on
-FROM observations o
-JOIN checklists c ON c.id = o.checklist_id
-WHERE o.species_id = sqlc.arg(species_id) AND o.hotspot_id = sqlc.arg(hotspot_id)
-ORDER BY o.observed_on DESC
-LIMIT 1;
+-- the species was never recorded there. Read from hotspot_species_last_seen,
+-- which compute-seasonality fills.
+SELECT sampling_event_id, observed_on
+FROM hotspot_species_last_seen
+WHERE species_id = sqlc.arg(species_id) AND hotspot_id = sqlc.arg(hotspot_id);
