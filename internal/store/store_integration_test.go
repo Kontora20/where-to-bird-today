@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"math"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -56,10 +57,13 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatalf("setting goose dialect: %v", err)
+	// A Provider holds its own state. goose.SetDialect and goose.Up share a
+	// package-level variable, which tests running in parallel would race on.
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, os.DirFS(migrationsDir))
+	if err != nil {
+		t.Fatalf("creating migration provider: %v", err)
 	}
-	if err := goose.Up(sqlDB, migrationsDir); err != nil {
+	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("running migrations: %v", err)
 	}
 
@@ -495,7 +499,7 @@ func TestTimeOfDay(t *testing.T) {
 		t.Errorf("rows written = %d totals and %d with the species, want 5 and 4", totals, withSpecies)
 	}
 
-	read := func(hotspot Hotspot, minRegionChecklists int64) []GetSpeciesTimeOfDayRow {
+	read := func(t *testing.T, hotspot Hotspot, minRegionChecklists int64) []GetSpeciesTimeOfDayRow {
 		t.Helper()
 		rows, err := queries.GetSpeciesTimeOfDay(ctx, GetSpeciesTimeOfDayParams{
 			HotspotID:             pgtype.Int8{Int64: hotspot.ID, Valid: true},
@@ -509,7 +513,7 @@ func TestTimeOfDay(t *testing.T) {
 		}
 		return rows
 	}
-	check := func(got GetSpeciesTimeOfDayRow, hour int16, checklists, withSpecies int32, adjusted float64) {
+	check := func(t *testing.T, got GetSpeciesTimeOfDayRow, hour int16, checklists, withSpecies int32, adjusted float64) {
 		t.Helper()
 		if got.HourBin != hour || got.Checklists != checklists || got.WithSpecies != withSpecies || math.Abs(float64(got.AdjustedFrequency)-adjusted) > 1e-4 {
 			t.Errorf("hour %d = %d of %d, adjusted %v; want hour %d = %d of %d, adjusted %v",
@@ -518,22 +522,22 @@ func TestTimeOfDay(t *testing.T) {
 	}
 
 	t.Run("adjusts a hotspot toward its country", func(t *testing.T) {
-		rows := read(hotspotA, 1)
+		rows := read(t, hotspotA, 1)
 		if len(rows) != 3 {
 			t.Fatalf("got %d hours, want 3 (0, 1 and 2)", len(rows))
 		}
-		check(rows[0], 0, 3, 2, (2+5*(3+3*5.0/7)/8)/8)
-		check(rows[1], 1, 1, 1, (1+5*(1+3*5.0/7)/4)/6)
-		check(rows[2], 2, 0, 0, (1+3*5.0/7)/4)
+		check(t, rows[0], 0, 3, 2, (2+5*(3+3*5.0/7)/8)/8)
+		check(t, rows[1], 1, 1, 1, (1+5*(1+3*5.0/7)/4)/6)
+		check(t, rows[2], 2, 0, 0, (1+3*5.0/7)/4)
 	})
 
 	t.Run("an hour the hotspot has no species in counts as none", func(t *testing.T) {
-		rows := read(hotspotB, 1)
-		check(rows[0], 0, 1, 0, (5*(3+3*5.0/7)/8)/6)
+		rows := read(t, hotspotB, 1)
+		check(t, rows[0], 0, 1, 0, (5*(3+3*5.0/7)/8)/6)
 	})
 
 	t.Run("leaves out hours the region has too few checklists in", func(t *testing.T) {
-		rows := read(hotspotA, 2)
+		rows := read(t, hotspotA, 2)
 		if len(rows) != 1 || rows[0].HourBin != 0 {
 			t.Errorf("got %+v, want only hour 0, the one hour with 2 or more checklists in the region", rows)
 		}
@@ -604,7 +608,7 @@ func TestCountryAndHotspotWeeks(t *testing.T) {
 		t.Errorf("RecomputeCountrySeasonality wrote %d rows, want 4 (LT week 10 X and Y, LT week 11 Y, LV week 10 X)", rows)
 	}
 
-	weeks := func(hotspotID, speciesID int64) []GetHotspotSpeciesWeeksRow {
+	weeks := func(t *testing.T, hotspotID, speciesID int64) []GetHotspotSpeciesWeeksRow {
 		t.Helper()
 		got, err := queries.GetHotspotSpeciesWeeks(ctx, GetHotspotSpeciesWeeksParams{HotspotID: hotspotID, SpeciesID: speciesID})
 		if err != nil {
@@ -615,7 +619,7 @@ func TestCountryAndHotspotWeeks(t *testing.T) {
 		}
 		return got
 	}
-	check := func(got GetHotspotSpeciesWeeksRow, week int16, checklists, withSpecies int32, countryFrequency float64) {
+	check := func(t *testing.T, got GetHotspotSpeciesWeeksRow, week int16, checklists, withSpecies int32, countryFrequency float64) {
 		t.Helper()
 		if got.WeekOfYear != week || got.Checklists != checklists || got.WithSpecies != withSpecies || math.Abs(float64(got.CountryFrequency)-countryFrequency) > 1e-6 {
 			t.Errorf("week %d = %d of %d checklists, country %v; want week %d = %d of %d, country %v",
@@ -624,23 +628,23 @@ func TestCountryAndHotspotWeeks(t *testing.T) {
 	}
 
 	t.Run("a hotspot's year of a species", func(t *testing.T) {
-		got := weeks(hotspotA, speciesX)
-		check(got[0], 1, 0, 0, 0)
-		check(got[9], 10, 4, 2, 0.6)
+		got := weeks(t, hotspotA, speciesX)
+		check(t, got[0], 1, 0, 0, 0)
+		check(t, got[9], 10, 4, 2, 0.6)
 		// Week 11 has 3 checklists at A but none with X, and X has no country
 		// row that week.
-		check(got[10], 11, 3, 0, 0)
-		check(got[11], 12, 0, 0, 0)
+		check(t, got[10], 11, 3, 0, 0)
+		check(t, got[11], 12, 0, 0, 0)
 	})
 
 	t.Run("a hotspot takes its own country's frequency", func(t *testing.T) {
-		got := weeks(hotspotC, speciesX)
-		check(got[9], 10, 2, 2, 1.0)
+		got := weeks(t, hotspotC, speciesX)
+		check(t, got[9], 10, 2, 2, 1.0)
 	})
 
 	t.Run("a hotspot with no data is all zeros", func(t *testing.T) {
-		got := weeks(emptyHotspot, speciesX)
-		check(got[9], 10, 0, 0, 0.6)
+		got := weeks(t, emptyHotspot, speciesX)
+		check(t, got[9], 10, 0, 0, 0.6)
 	})
 }
 
@@ -777,7 +781,7 @@ func TestAreaWeeks(t *testing.T) {
 		}
 	})
 
-	weeks := func(speciesIDs ...int64) []GetAreaWeeksRow {
+	weeks := func(t *testing.T, speciesIDs ...int64) []GetAreaWeeksRow {
 		t.Helper()
 		got, err := queries.GetAreaWeeks(ctx, GetAreaWeeksParams{HotspotIds: []int64{near1, near2}, SpeciesIds: speciesIDs})
 		if err != nil {
@@ -788,7 +792,7 @@ func TestAreaWeeks(t *testing.T) {
 		}
 		return got
 	}
-	check := func(got GetAreaWeeksRow, week int16, checklists, withSpecies int32) {
+	check := func(t *testing.T, got GetAreaWeeksRow, week int16, checklists, withSpecies int32) {
 		t.Helper()
 		if got.WeekOfYear != week || got.Checklists != checklists || got.WithSpecies != withSpecies {
 			t.Errorf("week %d = %d of %d checklists; want week %d = %d of %d", got.WeekOfYear, got.WithSpecies, got.Checklists, week, withSpecies, checklists)
@@ -796,17 +800,17 @@ func TestAreaWeeks(t *testing.T) {
 	}
 
 	t.Run("pools the hotspots for one species", func(t *testing.T) {
-		got := weeks(speciesX)
-		check(got[0], 1, 0, 0)
-		check(got[9], 10, 5, 3)
-		check(got[10], 11, 2, 2)
-		check(got[11], 12, 2, 0)
+		got := weeks(t, speciesX)
+		check(t, got[0], 1, 0, 0)
+		check(t, got[9], 10, 5, 3)
+		check(t, got[10], 11, 2, 2)
+		check(t, got[11], 12, 2, 0)
 	})
 
 	t.Run("adds up several species", func(t *testing.T) {
-		got := weeks(speciesX, speciesY)
-		check(got[9], 10, 5, 4)
-		check(got[11], 12, 2, 1)
+		got := weeks(t, speciesX, speciesY)
+		check(t, got[9], 10, 5, 4)
+		check(t, got[11], 12, 2, 1)
 	})
 }
 

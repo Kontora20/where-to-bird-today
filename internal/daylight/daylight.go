@@ -5,6 +5,7 @@ package daylight
 import (
 	"math"
 	"time"
+
 	// The zone database is embedded so LoadLocation works in a container
 	// image that ships none.
 	_ "time/tzdata"
