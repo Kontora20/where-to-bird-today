@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,64 +9,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Kontora20/where-to-bird-today/internal/birding"
 )
-
-type fakeRecommendationService struct {
-	err          error
-	results      []birding.Recommendation
-	speciesErr   error
-	speciesFound birding.SpeciesDetail
-	searchErr    error
-	searchFound  []birding.SpeciesMatch
-	// gotParams is a pointer because the methods have value receivers: a
-	// plain field would be written to a copy.
-	gotParams *birding.Params
-	gotDate   *time.Time
-
-	weeks         birding.AreaWeeks
-	weeksErr      error
-	gotAreaParams *birding.AreaParams
-}
-
-func (f fakeRecommendationService) Recommend(_ context.Context, params birding.Params) ([]birding.Recommendation, error) {
-	if f.gotParams != nil {
-		*f.gotParams = params
-	}
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.results, nil
-}
-
-func (f fakeRecommendationService) AreaWeeks(_ context.Context, params birding.AreaParams) (birding.AreaWeeks, error) {
-	if f.gotAreaParams != nil {
-		*f.gotAreaParams = params
-	}
-	if f.weeksErr != nil {
-		return birding.AreaWeeks{}, f.weeksErr
-	}
-	return f.weeks, nil
-}
-
-func (f fakeRecommendationService) SearchSpecies(_ context.Context, _, _ string) ([]birding.SpeciesMatch, error) {
-	if f.searchErr != nil {
-		return nil, f.searchErr
-	}
-	return f.searchFound, nil
-}
-
-func (f fakeRecommendationService) SpeciesDetail(_ context.Context, _, _ int64, _ string, date time.Time) (birding.SpeciesDetail, error) {
-	if f.gotDate != nil {
-		*f.gotDate = date
-	}
-	if f.speciesErr != nil {
-		return birding.SpeciesDetail{}, f.speciesErr
-	}
-	return f.speciesFound, nil
-}
 
 func TestGetRecommendations(t *testing.T) {
 	t.Parallel()
@@ -77,7 +21,7 @@ func TestGetRecommendations(t *testing.T) {
 	tests := []struct {
 		name       string
 		query      string
-		service    fakeRecommendationService
+		service    fakeRecommender
 		wantStatus int
 	}{
 		{
@@ -173,19 +117,19 @@ func TestGetRecommendations(t *testing.T) {
 		{
 			name:       "no routing server",
 			query:      "lat=55.3167&lon=21.3667&max_minutes=45",
-			service:    fakeRecommendationService{err: fmt.Errorf("ranking: %w", birding.ErrTravelTimeUnavailable)},
+			service:    fakeRecommender{err: fmt.Errorf("ranking: %w", birding.ErrTravelTimeUnavailable)},
 			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:       "no road near the search point",
 			query:      "lat=55.3167&lon=21.3667&max_minutes=45",
-			service:    fakeRecommendationService{err: fmt.Errorf("finding drive times: %w", birding.ErrNoRoadNearOrigin)},
+			service:    fakeRecommender{err: fmt.Errorf("finding drive times: %w", birding.ErrNoRoadNearOrigin)},
 			wantStatus: http.StatusUnprocessableEntity,
 		},
 		{
 			name:       "service error",
 			query:      validQuery,
-			service:    fakeRecommendationService{err: errors.New("db down")},
+			service:    fakeRecommender{err: errors.New("db down")},
 			wantStatus: http.StatusInternalServerError,
 		},
 	}
@@ -213,7 +157,7 @@ func TestGetRecommendationsPassesMaxMinutes(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/recommendations?lat=55.3&lon=21.3&max_minutes=45.5&radius_km=10", nil)
 	rec := httptest.NewRecorder()
 
-	handleGetRecommendations(testLogger(), fakeRecommendationService{gotParams: &gotParams}).ServeHTTP(rec, req)
+	handleGetRecommendations(testLogger(), fakeRecommender{gotParams: &gotParams}).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (body: %q)", rec.Code, http.StatusOK, rec.Body.String())
@@ -243,7 +187,7 @@ func TestGetRecommendationsPassesSpeciesIDs(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/recommendations?lat=55.3&lon=21.3&radius_km=25"+tc.query, nil)
 			rec := httptest.NewRecorder()
 
-			handleGetRecommendations(testLogger(), fakeRecommendationService{gotParams: &gotParams}).ServeHTTP(rec, req)
+			handleGetRecommendations(testLogger(), fakeRecommender{gotParams: &gotParams}).ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d (body: %q)", rec.Code, http.StatusOK, rec.Body.String())
@@ -336,7 +280,7 @@ func TestGetRecommendationsResponseBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/recommendations?lat=55.3167&lon=21.3667&radius_km=25", nil)
 	rec := httptest.NewRecorder()
 
-	handleGetRecommendations(testLogger(), fakeRecommendationService{results: want}).ServeHTTP(rec, req)
+	handleGetRecommendations(testLogger(), fakeRecommender{results: want}).ServeHTTP(rec, req)
 
 	if got, wantStatus := rec.Code, http.StatusOK; got != wantStatus {
 		t.Fatalf("status = %d, want %d (body: %q)", got, wantStatus, rec.Body.String())

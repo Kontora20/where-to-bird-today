@@ -55,18 +55,38 @@ type SpeciesDetail struct {
 	LatestChecklist     *LatestChecklist `json:"latest_checklist,omitempty"`
 }
 
+// panelStore is what SpeciesPanel needs from persistence: the species itself,
+// and the three parts of the panel that have their own interfaces.
+type panelStore interface {
+	nameStore
+	weekStore
+	timeOfDayStore
+	GetSpecies(ctx context.Context, id int64) (store.Species, error)
+	ListSpeciesMedia(ctx context.Context, speciesID int64) ([]store.SpeciesMedium, error)
+	GetLatestChecklistWithSpecies(ctx context.Context, arg store.GetLatestChecklistWithSpeciesParams) (store.GetLatestChecklistWithSpeciesRow, error)
+}
+
+// SpeciesPanel assembles the species detail panel.
+type SpeciesPanel struct {
+	store panelStore
+}
+
+func newSpeciesPanel(store panelStore) *SpeciesPanel {
+	return &SpeciesPanel{store: store}
+}
+
 // SpeciesDetail returns the detail panel's contents for one species, scoped
 // to how it behaves at one hotspot -- species_seasonality is measured per
 // hotspot, so "seasonality" only means anything alongside a hotspot to
 // measure it at. date sets the clock times the time of day is shown at; only
 // its calendar date is used.
-func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string, date time.Time) (SpeciesDetail, error) {
-	species, err := s.store.GetSpecies(ctx, speciesID)
+func (p *SpeciesPanel) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string, date time.Time) (SpeciesDetail, error) {
+	species, err := p.store.GetSpecies(ctx, speciesID)
 	if err != nil {
 		return SpeciesDetail{}, fmt.Errorf("loading species: %w", err)
 	}
 
-	names, err := s.commonNames(ctx, []int64{speciesID}, lang)
+	names, err := commonNames(ctx, p.store, []int64{speciesID}, lang)
 	if err != nil {
 		return SpeciesDetail{}, err
 	}
@@ -75,7 +95,7 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		commonName = species.ScientificName
 	}
 
-	media, err := s.store.ListSpeciesMedia(ctx, speciesID)
+	media, err := p.store.ListSpeciesMedia(ctx, speciesID)
 	if err != nil {
 		return SpeciesDetail{}, fmt.Errorf("loading species media: %w", err)
 	}
@@ -94,18 +114,18 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		}
 	}
 
-	seasonality, bestWeeks, err := s.seasonality(ctx, hotspotID, speciesID, date)
+	weeks, bestWeeks, err := seasonality(ctx, p.store, hotspotID, speciesID, date)
 	if err != nil {
 		return SpeciesDetail{}, err
 	}
 
-	timeOfDay, err := s.timeOfDay(ctx, hotspotID, speciesID, date)
+	hours, err := timeOfDay(ctx, p.store, hotspotID, speciesID, date)
 	if err != nil {
 		return SpeciesDetail{}, err
 	}
 
 	var latestChecklist *LatestChecklist
-	latest, err := s.store.GetLatestChecklistWithSpecies(ctx, store.GetLatestChecklistWithSpeciesParams{
+	latest, err := p.store.GetLatestChecklistWithSpecies(ctx, store.GetLatestChecklistWithSpeciesParams{
 		SpeciesID: speciesID,
 		HotspotID: pgtype.Int8{Int64: hotspotID, Valid: true},
 	})
@@ -132,9 +152,9 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		BirdLifeDataZoneURL: species.BirdlifeDatazoneUrl.String,
 		EBirdURL:            ebirdURL,
 		Photo:               photo,
-		Seasonality:         seasonality,
+		Seasonality:         weeks,
 		BestWeeks:           bestWeeks,
-		TimeOfDay:           timeOfDay,
+		TimeOfDay:           hours,
 		LatestChecklist:     latestChecklist,
 	}, nil
 }

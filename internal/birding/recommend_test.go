@@ -5,151 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
-
-type fakeStore struct {
-	recommendErr error
-	rows         []store.RecommendHotspotsRow
-	// recommendArgs is a pointer for the same reason as searchArgs below.
-	recommendArgs *store.RecommendHotspotsParams
-	// nameCandidates simulates species_names rows: speciesID -> lang -> name.
-	nameCandidates map[int64]map[string]string
-
-	speciesErr      error
-	speciesRow      store.Species
-	mediaErr        error
-	mediaRows       []store.SpeciesMedium
-	seasonalityErr  error
-	seasonalityRows []store.GetHotspotSpeciesWeeksRow
-
-	// latestRow is the latest checklist for the species; nil means the
-	// species was never recorded at the hotspot.
-	latestRow *store.GetLatestChecklistWithSpeciesRow
-	latestErr error
-
-	// hotspotRow is the hotspot; nil means it does not exist.
-	hotspotRow      *store.GetHotspotRow
-	timeOfDayErr    error
-	timeOfDayRows   []store.GetSpeciesTimeOfDayRow
-	timeOfDayParams *store.GetSpeciesTimeOfDayParams
-
-	// hotspotsWithin and areaWeeksRows are what the area queries return;
-	// areaWeeksArgs records the hotspots and species the weeks were asked for.
-	hotspotsWithin []store.ListHotspotsWithinRow
-	areaWeeksRows  []store.GetAreaWeeksRow
-	areaWeeksErr   error
-	areaWeeksArgs  *store.GetAreaWeeksParams
-
-	searchErr  error
-	searchRows []store.SearchSpeciesRow
-	// searchArgs is a pointer because fakeStore's methods have value
-	// receivers: a plain field would be written to a copy.
-	searchArgs *store.SearchSpeciesParams
-}
-
-func (f fakeStore) GetLatestChecklistWithSpecies(_ context.Context, _ store.GetLatestChecklistWithSpeciesParams) (store.GetLatestChecklistWithSpeciesRow, error) {
-	if f.latestErr != nil {
-		return store.GetLatestChecklistWithSpeciesRow{}, f.latestErr
-	}
-	if f.latestRow == nil {
-		return store.GetLatestChecklistWithSpeciesRow{}, pgx.ErrNoRows
-	}
-	return *f.latestRow, nil
-}
-
-func (f fakeStore) GetHotspot(_ context.Context, _ int64) (store.GetHotspotRow, error) {
-	if f.hotspotRow == nil {
-		return store.GetHotspotRow{}, pgx.ErrNoRows
-	}
-	return *f.hotspotRow, nil
-}
-
-func (f fakeStore) GetSpeciesTimeOfDay(_ context.Context, arg store.GetSpeciesTimeOfDayParams) ([]store.GetSpeciesTimeOfDayRow, error) {
-	if f.timeOfDayParams != nil {
-		*f.timeOfDayParams = arg
-	}
-	if f.timeOfDayErr != nil {
-		return nil, f.timeOfDayErr
-	}
-	return f.timeOfDayRows, nil
-}
-
-func (f fakeStore) ListHotspotsWithin(_ context.Context, _ store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error) {
-	return f.hotspotsWithin, nil
-}
-
-func (f fakeStore) GetAreaWeeks(_ context.Context, arg store.GetAreaWeeksParams) ([]store.GetAreaWeeksRow, error) {
-	if f.areaWeeksArgs != nil {
-		*f.areaWeeksArgs = arg
-	}
-	if f.areaWeeksErr != nil {
-		return nil, f.areaWeeksErr
-	}
-	return f.areaWeeksRows, nil
-}
-
-func (f fakeStore) SearchSpecies(_ context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error) {
-	if f.searchArgs != nil {
-		*f.searchArgs = arg
-	}
-	if f.searchErr != nil {
-		return nil, f.searchErr
-	}
-	return f.searchRows, nil
-}
-
-func (f fakeStore) RecommendHotspots(_ context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error) {
-	if f.recommendArgs != nil {
-		*f.recommendArgs = arg
-	}
-	if f.recommendErr != nil {
-		return nil, f.recommendErr
-	}
-	return f.rows, nil
-}
-
-// GetCommonNames mimics the real query's DISTINCT ON + array_position
-// ranking closely enough to test arg.LangPriority actually mattering: for
-// each species, it picks the first language in the priority list that has a
-// candidate, skipping species with no candidate in any priority language --
-// the same shape as a species with no matching row in real Postgres.
-func (f fakeStore) GetCommonNames(_ context.Context, arg store.GetCommonNamesParams) ([]store.GetCommonNamesRow, error) {
-	var rows []store.GetCommonNamesRow
-	for _, speciesID := range arg.SpeciesIds {
-		for _, lang := range arg.LangPriority {
-			if name, ok := f.nameCandidates[speciesID][lang]; ok {
-				rows = append(rows, store.GetCommonNamesRow{SpeciesID: speciesID, CommonName: name})
-				break
-			}
-		}
-	}
-	return rows, nil
-}
-
-func (f fakeStore) GetSpecies(_ context.Context, _ int64) (store.Species, error) {
-	if f.speciesErr != nil {
-		return store.Species{}, f.speciesErr
-	}
-	return f.speciesRow, nil
-}
-
-func (f fakeStore) ListSpeciesMedia(_ context.Context, _ int64) ([]store.SpeciesMedium, error) {
-	if f.mediaErr != nil {
-		return nil, f.mediaErr
-	}
-	return f.mediaRows, nil
-}
-
-func (f fakeStore) GetHotspotSpeciesWeeks(_ context.Context, _ store.GetHotspotSpeciesWeeksParams) ([]store.GetHotspotSpeciesWeeksRow, error) {
-	if f.seasonalityErr != nil {
-		return nil, f.seasonalityErr
-	}
-	return f.seasonalityRows, nil
-}
 
 // Named pgtypeX, not X: int8 is a predeclared Go type, so a function named
 // int8 would shadow it. The others aren't, but pgtypeX keeps all four
@@ -162,7 +21,7 @@ func pgtypeText(v string) pgtype.Text      { return pgtype.Text{String: v, Valid
 func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{
+	fake := fakeRecommendStore{
 		rows: []store.RecommendHotspotsRow{
 			{HotspotID: 1, HotspotName: "Nemunas Delta", HotspotSource: "ebird", HotspotSourceRef: "L123456", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia"), Frequency: pgtypeFloat4(0.9), Checklists: pgtype.Int4{Int32: 12, Valid: true}},
 			{HotspotID: 1, HotspotName: "Nemunas Delta", HotspotSource: "ebird", HotspotSourceRef: "L123456", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(11), ScientificName: pgtypeText("Anas platyrhynchos"), Frequency: pgtypeFloat4(0.6)},
@@ -174,7 +33,7 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
+	got, err := newRecommender(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -218,7 +77,7 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 func TestRecommendRespectsRequestedLanguage(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{
+	fake := fakeRecommendStore{
 		rows: []store.RecommendHotspotsRow{
 			{HotspotID: 1, HotspotName: "Nemunas Delta", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia"), Frequency: pgtypeFloat4(0.9)},
 		},
@@ -227,7 +86,7 @@ func TestRecommendRespectsRequestedLanguage(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "en"})
+	got, err := newRecommender(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "en"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -243,14 +102,14 @@ func TestRecommendRespectsRequestedLanguage(t *testing.T) {
 func TestRecommendFallsBackToScientificName(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{
+	fake := fakeRecommendStore{
 		rows: []store.RecommendHotspotsRow{
 			{HotspotID: 1, HotspotName: "Nemunas Delta", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1, SpeciesID: pgtypeInt8(99), ScientificName: pgtypeText("Rallus aquaticus"), Frequency: pgtypeFloat4(0.4)},
 		},
 		// No candidates for species 99 in any language.
 	}
 
-	got, err := NewService(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
+	got, err := newRecommender(fake, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -270,7 +129,7 @@ func TestRecommendFallsBackToScientificName(t *testing.T) {
 func TestRecommendReturnsEmptySliceNotNil(t *testing.T) {
 	t.Parallel()
 
-	got, err := NewService(fakeStore{}, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
+	got, err := newRecommender(fakeRecommendStore{}, nil).Recommend(context.Background(), Params{Latitude: 55.3, Longitude: 21.3, RadiusKM: 25, Week: 20, Lang: "lt"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -287,7 +146,7 @@ func TestRecommendPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	_, err := NewService(fakeStore{recommendErr: wantErr}, nil).Recommend(context.Background(), Params{})
+	_, err := newRecommender(fakeRecommendStore{recommendErr: wantErr}, nil).Recommend(context.Background(), Params{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("Recommend() error = %v, want wrapping %v", err, wantErr)
 	}

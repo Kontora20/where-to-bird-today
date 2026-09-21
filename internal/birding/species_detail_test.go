@@ -15,7 +15,7 @@ import (
 func TestSpeciesDetail(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{
+	fake := fakePanelStore{
 		speciesRow: store.Species{
 			ID:                  10,
 			EbirdSpeciesCode:    pgtypeText("whistor1"),
@@ -30,17 +30,17 @@ func TestSpeciesDetail(t *testing.T) {
 			{SpeciesID: 10, ImageUrl: "https://example.org/stork-best.jpg", License: "CC BY 4.0", Attribution: "Someone", Rank: 0},
 			{SpeciesID: 10, ImageUrl: "https://example.org/stork-second.jpg", License: "CC BY 4.0", Attribution: "Someone Else", Rank: 1},
 		},
-		seasonalityRows: yearOfWeeks(map[int16]store.GetHotspotSpeciesWeeksRow{
+		fakeWeekStore: fakeWeekStore{seasonalityRows: yearOfWeeks(map[int16]store.GetHotspotSpeciesWeeksRow{
 			18: {Checklists: 10, WithSpecies: 4},
 			19: {Checklists: 5, WithSpecies: 3},
-		}),
+		})},
 		latestRow: &store.GetLatestChecklistWithSpeciesRow{
 			SamplingEventID: "S123456",
 			ObservedOn:      pgtype.Date{Time: time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC), Valid: true},
 		},
 	}
 
-	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC))
+	got, err := newSpeciesPanel(fake).SpeciesDetail(context.Background(), 1, 10, "lt", time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("SpeciesDetail() error = %v", err)
 	}
@@ -91,11 +91,11 @@ func TestSpeciesDetail(t *testing.T) {
 func TestSpeciesDetailNoPhoto(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{
+	fake := fakePanelStore{
 		speciesRow: store.Species{ID: 99, ScientificName: "Rallus aquaticus"},
 	}
 
-	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 99, "lt", time.Time{})
+	got, err := newSpeciesPanel(fake).SpeciesDetail(context.Background(), 1, 99, "lt", time.Time{})
 	if err != nil {
 		t.Fatalf("SpeciesDetail() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestSpeciesDetailPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	_, err := NewService(fakeStore{speciesErr: wantErr}, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
+	_, err := newSpeciesPanel(fakePanelStore{speciesErr: wantErr}).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SpeciesDetail() error = %v, want wrapping %v", err, wantErr)
 	}
@@ -124,8 +124,8 @@ func TestSpeciesDetailPropagatesLatestChecklistError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	fake := fakeStore{speciesRow: store.Species{ID: 10, ScientificName: "Ciconia ciconia"}, latestErr: wantErr}
-	_, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
+	fake := fakePanelStore{speciesRow: store.Species{ID: 10, ScientificName: "Ciconia ciconia"}, latestErr: wantErr}
+	_, err := newSpeciesPanel(fake).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SpeciesDetail() error = %v, want wrapping %v", err, wantErr)
 	}

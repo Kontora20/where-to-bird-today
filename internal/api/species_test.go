@@ -20,21 +20,21 @@ func TestGetSpeciesDetail(t *testing.T) {
 		name       string
 		hotspotID  string
 		speciesID  string
-		service    fakeRecommendationService
+		service    fakeSpeciesDetailer
 		wantStatus int
 	}{
 		{
 			name:       "found",
 			hotspotID:  "1",
 			speciesID:  "10",
-			service:    fakeRecommendationService{speciesFound: birding.SpeciesDetail{SpeciesID: 10, CommonName: "White Stork"}},
+			service:    fakeSpeciesDetailer{speciesFound: birding.SpeciesDetail{SpeciesID: 10, CommonName: "White Stork"}},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:       "species not found",
 			hotspotID:  "1",
 			speciesID:  "404",
-			service:    fakeRecommendationService{speciesErr: pgx.ErrNoRows},
+			service:    fakeSpeciesDetailer{speciesErr: pgx.ErrNoRows},
 			wantStatus: http.StatusNotFound,
 		},
 		{
@@ -53,7 +53,7 @@ func TestGetSpeciesDetail(t *testing.T) {
 			name:       "service error",
 			hotspotID:  "1",
 			speciesID:  "10",
-			service:    fakeRecommendationService{speciesErr: errors.New("db down")},
+			service:    fakeSpeciesDetailer{speciesErr: errors.New("db down")},
 			wantStatus: http.StatusInternalServerError,
 		},
 	}
@@ -104,7 +104,7 @@ func TestGetSpeciesDetailDate(t *testing.T) {
 			t.Parallel()
 
 			var gotDate time.Time
-			service := fakeRecommendationService{gotDate: &gotDate}
+			service := fakeSpeciesDetailer{gotDate: &gotDate}
 			req := httptest.NewRequest(http.MethodGet, "/hotspots/1/species/10"+tc.query, nil)
 			req.SetPathValue("hotspotId", "1")
 			req.SetPathValue("speciesId", "10")
@@ -128,13 +128,13 @@ func TestSearchSpecies(t *testing.T) {
 	tests := []struct {
 		name       string
 		query      string
-		service    fakeRecommendationService
+		service    fakeSpeciesSearcher
 		wantStatus int
 	}{
 		{
 			name:       "found",
 			query:      "q=stork",
-			service:    fakeRecommendationService{searchFound: []birding.SpeciesMatch{{SpeciesID: 10, CommonName: "White Stork"}}},
+			service:    fakeSpeciesSearcher{searchFound: []birding.SpeciesMatch{{SpeciesID: 10, CommonName: "White Stork"}}},
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -150,7 +150,7 @@ func TestSearchSpecies(t *testing.T) {
 		{
 			name:       "service error",
 			query:      "q=stork",
-			service:    fakeRecommendationService{searchErr: errors.New("db down")},
+			service:    fakeSpeciesSearcher{searchErr: errors.New("db down")},
 			wantStatus: http.StatusInternalServerError,
 		},
 	}

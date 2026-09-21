@@ -4,10 +4,8 @@ package birding
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -18,19 +16,6 @@ import (
 // topSpeciesPerHotspot caps how many expected species come back per hotspot.
 // A plain constant: nothing today needs it tunable per request.
 const topSpeciesPerHotspot = 10
-
-// maxSpeedKMPerMinute is 130 km/h, the fastest legal road speed in the
-// Baltics. No route covers more straight-line distance than this in a given
-// time, so hotspots beyond it can be dropped before asking for drive times.
-const maxSpeedKMPerMinute = 130.0 / 60
-
-// ErrTravelTimeUnavailable means the request asked for a drive time limit
-// but no routing server is configured.
-var ErrTravelTimeUnavailable = errors.New("travel time is not available")
-
-// ErrNoRoadNearOrigin means no road lies close enough to the search point to
-// start a route from it.
-var ErrNoRoadNearOrigin = routing.ErrOriginOffRoad
 
 // supportedLangs are the only two the app ships today (ADR 0005). otherOf
 // keeps that fact in this one place rather than spreading a hardcoded pair
@@ -113,53 +98,42 @@ func verificationURL(source, sourceRef string) string {
 	}
 }
 
-// Store is the persistence this service needs, declared on the consuming
-// side rather than in the store package. Go interfaces are satisfied
-// implicitly, so *store.Queries already implements this without importing
-// birding or knowing it exists.
-type Store interface {
-	RecommendHotspots(ctx context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error)
+// nameStore looks up species names, which several parts of the engine show.
+type nameStore interface {
 	GetCommonNames(ctx context.Context, arg store.GetCommonNamesParams) ([]store.GetCommonNamesRow, error)
-	SearchSpecies(ctx context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error)
-	GetSpecies(ctx context.Context, id int64) (store.Species, error)
-	ListSpeciesMedia(ctx context.Context, speciesID int64) ([]store.SpeciesMedium, error)
-	GetHotspotSpeciesWeeks(ctx context.Context, arg store.GetHotspotSpeciesWeeksParams) ([]store.GetHotspotSpeciesWeeksRow, error)
-	GetLatestChecklistWithSpecies(ctx context.Context, arg store.GetLatestChecklistWithSpeciesParams) (store.GetLatestChecklistWithSpeciesRow, error)
-	GetHotspot(ctx context.Context, id int64) (store.GetHotspotRow, error)
-	ListHotspotsWithin(ctx context.Context, arg store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error)
-	GetAreaWeeks(ctx context.Context, arg store.GetAreaWeeksParams) ([]store.GetAreaWeeksRow, error)
-	GetSpeciesTimeOfDay(ctx context.Context, arg store.GetSpeciesTimeOfDayParams) ([]store.GetSpeciesTimeOfDayRow, error)
 }
 
-// DriveTimeFinder measures the drive time from one point to many.
-type DriveTimeFinder interface {
-	DriveTimes(ctx context.Context, origin routing.Point, destinations []routing.Point) ([]time.Duration, error)
+// recommendStore is what Recommender needs from persistence, declared on the
+// consuming side rather than in the store package. Go interfaces are satisfied
+// implicitly, so *store.Queries already implements it without importing
+// birding or knowing it exists.
+type recommendStore interface {
+	nameStore
+	RecommendHotspots(ctx context.Context, arg store.RecommendHotspotsParams) ([]store.RecommendHotspotsRow, error)
 }
 
-// Service ranks hotspots for a recommendation request. driveTimes may be nil,
-// in which case requests limited by drive time fail with
+// Recommender ranks hotspots for a recommendation request. Its drive times may
+// be nil, in which case requests limited by drive time fail with
 // ErrTravelTimeUnavailable.
-type Service struct {
-	store      Store
-	driveTimes DriveTimeFinder
+type Recommender struct {
+	store recommendStore
+	travel
 }
 
-// NewService builds a Service backed by store and, for drive time limits,
-// driveTimes.
-func NewService(store Store, driveTimes DriveTimeFinder) *Service {
-	return &Service{store: store, driveTimes: driveTimes}
+func newRecommender(store recommendStore, driveTimes DriveTimeFinder) *Recommender {
+	return &Recommender{store: store, travel: travel{driveTimes: driveTimes}}
 }
 
 // Recommend returns hotspots within p.RadiusKM of the point, or within
 // p.MaxMinutes of driving when that is set, ranked by expected species
 // richness for p.Week, each with its top expected species.
-func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, error) {
-	radiusKM, err := s.searchRadiusKM(p.RadiusKM, p.MaxMinutes)
+func (r *Recommender) Recommend(ctx context.Context, p Params) ([]Recommendation, error) {
+	radiusKM, err := r.searchRadiusKM(p.RadiusKM, p.MaxMinutes)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.store.RecommendHotspots(ctx, store.RecommendHotspotsParams{
+	rows, err := r.store.RecommendHotspots(ctx, store.RecommendHotspotsParams{
 		Latitude:        pgtype.Float8{Float64: p.Latitude, Valid: true},
 		Longitude:       pgtype.Float8{Float64: p.Longitude, Valid: true},
 		RadiusMeters:    pgtype.Float8{Float64: radiusKM * 1000, Valid: true},
@@ -175,13 +149,13 @@ func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, er
 
 	if p.MaxMinutes > 0 {
 		origin := routing.Point{Latitude: p.Latitude, Longitude: p.Longitude}
-		recommendations, err = s.withinDriveTime(ctx, recommendations, origin, p.MaxMinutes)
+		recommendations, err = r.withinDriveTime(ctx, recommendations, origin, p.MaxMinutes)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	names, err := s.commonNames(ctx, speciesIDs(recommendations), p.Lang)
+	names, err := commonNames(ctx, r.store, speciesIDs(recommendations), p.Lang)
 	if err != nil {
 		return nil, err
 	}
@@ -198,50 +172,16 @@ func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, er
 	return recommendations, nil
 }
 
-// searchRadiusKM is how far from the point to look for hotspots. A drive time
-// limit replaces the radius, at the fastest speed any road allows, and needs a
-// routing server.
-func (s *Service) searchRadiusKM(radiusKM, maxMinutes float64) (float64, error) {
-	if maxMinutes <= 0 {
-		return radiusKM, nil
-	}
-	if s.driveTimes == nil {
-		return 0, ErrTravelTimeUnavailable
-	}
-	return maxMinutes * maxSpeedKMPerMinute, nil
-}
-
-// reachable returns the positions in destinations that are within maxMinutes of
-// driving from origin, in order, and the drive time to each of them.
-func (s *Service) reachable(ctx context.Context, origin routing.Point, destinations []routing.Point, maxMinutes float64) ([]int, []time.Duration, error) {
-	all, err := s.driveTimes.DriveTimes(ctx, origin, destinations)
-	if err != nil {
-		return nil, nil, fmt.Errorf("finding drive times: %w", err)
-	}
-
-	limit := time.Duration(maxMinutes * float64(time.Minute))
-	var positions []int
-	var times []time.Duration
-	for i, driveTime := range all {
-		if driveTime == routing.Unreachable || driveTime > limit {
-			continue
-		}
-		positions = append(positions, i)
-		times = append(times, driveTime)
-	}
-	return positions, times, nil
-}
-
 // withinDriveTime keeps the recommendations reachable from origin within
 // maxMinutes of driving, in their existing order, and records each drive
 // time. It returns an empty non-nil slice when none qualify.
-func (s *Service) withinDriveTime(ctx context.Context, recommendations []Recommendation, origin routing.Point, maxMinutes float64) ([]Recommendation, error) {
+func (r *Recommender) withinDriveTime(ctx context.Context, recommendations []Recommendation, origin routing.Point, maxMinutes float64) ([]Recommendation, error) {
 	destinations := make([]routing.Point, len(recommendations))
 	for i, recommendation := range recommendations {
 		destinations[i] = routing.Point{Latitude: recommendation.Latitude, Longitude: recommendation.Longitude}
 	}
 
-	positions, times, err := s.reachable(ctx, origin, destinations, maxMinutes)
+	positions, times, err := r.reachable(ctx, origin, destinations, maxMinutes)
 	if err != nil {
 		return nil, err
 	}
@@ -313,12 +253,12 @@ func groupByHotspot(rows []store.RecommendHotspotsRow) []Recommendation {
 // fallback between lang and its alternate is resolved in SQL (ADR 0005),
 // so the result already has at most one name per species -- no picking
 // left to do here, unlike before this query existed.
-func (s *Service) commonNames(ctx context.Context, speciesIDs []int64, lang string) (map[int64]string, error) {
+func commonNames(ctx context.Context, lookup nameStore, speciesIDs []int64, lang string) (map[int64]string, error) {
 	if len(speciesIDs) == 0 {
 		return nil, nil
 	}
 
-	rows, err := s.store.GetCommonNames(ctx, store.GetCommonNamesParams{
+	rows, err := lookup.GetCommonNames(ctx, store.GetCommonNamesParams{
 		SpeciesIds:   speciesIDs,
 		LangPriority: []string{lang, otherOf(lang)},
 	})

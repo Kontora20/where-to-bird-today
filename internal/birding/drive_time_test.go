@@ -38,7 +38,7 @@ func TestRecommendLimitsByDriveTime(t *testing.T) {
 
 	var gotArgs store.RecommendHotspotsParams
 	var gotDestinations []routing.Point
-	fake := fakeStore{
+	fake := fakeRecommendStore{
 		recommendArgs: &gotArgs,
 		rows:          []store.RecommendHotspotsRow{hotspotRow(1, 54.1), hotspotRow(2, 54.2), hotspotRow(3, 54.3), hotspotRow(4, 54.4)},
 	}
@@ -52,7 +52,7 @@ func TestRecommendLimitsByDriveTime(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake, driveTimes).Recommend(context.Background(), Params{Latitude: 54, Longitude: 25, MaxMinutes: 30, Week: 20, Lang: "en"})
+	got, err := newRecommender(fake, driveTimes).Recommend(context.Background(), Params{Latitude: 54, Longitude: 25, MaxMinutes: 30, Week: 20, Lang: "en"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -77,10 +77,10 @@ func TestRecommendLimitsByDriveTime(t *testing.T) {
 func TestRecommendWithNoHotspotWithinDriveTimeReturnsEmptySliceNotNil(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{rows: []store.RecommendHotspotsRow{hotspotRow(1, 54.1)}}
+	fake := fakeRecommendStore{rows: []store.RecommendHotspotsRow{hotspotRow(1, 54.1)}}
 	driveTimes := fakeDriveTimes{times: []time.Duration{time.Hour}}
 
-	got, err := NewService(fake, driveTimes).Recommend(context.Background(), Params{MaxMinutes: 30, Lang: "en"})
+	got, err := newRecommender(fake, driveTimes).Recommend(context.Background(), Params{MaxMinutes: 30, Lang: "en"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -92,9 +92,9 @@ func TestRecommendWithNoHotspotWithinDriveTimeReturnsEmptySliceNotNil(t *testing
 func TestRecommendByRadiusIgnoresDriveTimes(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{rows: []store.RecommendHotspotsRow{hotspotRow(1, 54.1)}}
+	fake := fakeRecommendStore{rows: []store.RecommendHotspotsRow{hotspotRow(1, 54.1)}}
 
-	got, err := NewService(fake, fakeDriveTimes{err: errors.New("must not be called")}).Recommend(context.Background(), Params{RadiusKM: 25, Lang: "en"})
+	got, err := newRecommender(fake, fakeDriveTimes{err: errors.New("must not be called")}).Recommend(context.Background(), Params{RadiusKM: 25, Lang: "en"})
 	if err != nil {
 		t.Fatalf("Recommend() error = %v", err)
 	}
@@ -106,7 +106,7 @@ func TestRecommendByRadiusIgnoresDriveTimes(t *testing.T) {
 func TestRecommendByDriveTimeWithoutRoutingServer(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewService(fakeStore{recommendErr: errors.New("must not be called")}, nil).Recommend(context.Background(), Params{MaxMinutes: 30})
+	_, err := newRecommender(fakeRecommendStore{recommendErr: errors.New("must not be called")}, nil).Recommend(context.Background(), Params{MaxMinutes: 30})
 	if !errors.Is(err, ErrTravelTimeUnavailable) {
 		t.Errorf("Recommend() error = %v, want %v", err, ErrTravelTimeUnavailable)
 	}
@@ -115,9 +115,9 @@ func TestRecommendByDriveTimeWithoutRoutingServer(t *testing.T) {
 func TestRecommendReportsOriginOffRoad(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{rows: []store.RecommendHotspotsRow{hotspotRow(1, 54.1)}}
+	fake := fakeRecommendStore{rows: []store.RecommendHotspotsRow{hotspotRow(1, 54.1)}}
 
-	_, err := NewService(fake, fakeDriveTimes{err: routing.ErrOriginOffRoad}).Recommend(context.Background(), Params{MaxMinutes: 30})
+	_, err := newRecommender(fake, fakeDriveTimes{err: routing.ErrOriginOffRoad}).Recommend(context.Background(), Params{MaxMinutes: 30})
 	if !errors.Is(err, ErrNoRoadNearOrigin) {
 		t.Errorf("Recommend() error = %v, want %v", err, ErrNoRoadNearOrigin)
 	}

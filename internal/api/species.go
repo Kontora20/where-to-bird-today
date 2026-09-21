@@ -12,7 +12,7 @@ import (
 
 // handleSearchSpecies serves the target-species picker: species whose name
 // contains ?q=, named in the request's language.
-func handleSearchSpecies(logger *slog.Logger, recommendations recommendationService) http.Handler {
+func handleSearchSpecies(logger *slog.Logger, species speciesSearcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
 		if query == "" {
@@ -20,7 +20,7 @@ func handleSearchSpecies(logger *slog.Logger, recommendations recommendationServ
 			return
 		}
 
-		matches, err := recommendations.SearchSpecies(r.Context(), query, resolveLanguage(r))
+		matches, err := species.SearchSpecies(r.Context(), query, resolveLanguage(r))
 		if err != nil {
 			logger.Error("searching species failed", slog.Any("error", err))
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -36,7 +36,7 @@ func handleSearchSpecies(logger *slog.Logger, recommendations recommendationServ
 // hotspot's week-by-week seasonality and hour-by-hour time of day for the
 // species. Both are measured per hotspot, so the hotspot is part of the URL,
 // not optional. ?date= sets the day the time of day is shown at.
-func handleGetSpeciesDetail(logger *slog.Logger, recommendations recommendationService) http.Handler {
+func handleGetSpeciesDetail(logger *slog.Logger, species speciesDetailer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hotspotID, err := strconv.ParseInt(r.PathValue("hotspotId"), 10, 64)
 		if err != nil {
@@ -55,7 +55,7 @@ func handleGetSpeciesDetail(logger *slog.Logger, recommendations recommendationS
 			return
 		}
 
-		detail, err := recommendations.SpeciesDetail(r.Context(), hotspotID, speciesID, resolveLanguage(r), date)
+		detail, err := species.SpeciesDetail(r.Context(), hotspotID, speciesID, resolveLanguage(r), date)
 		if errors.Is(err, pgx.ErrNoRows) {
 			http.Error(w, "species not found", http.StatusNotFound)
 			return

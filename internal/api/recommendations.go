@@ -52,11 +52,34 @@ const maxTargetSpecies = 10
 // hotspot in the Baltics from anywhere in them.
 const maxDriveMinutes = 240
 
-type recommendationService interface {
+// recommender ranks hotspots for a search.
+type recommender interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
+}
+
+// weekFinder finds the best weeks of species in an area.
+type weekFinder interface {
 	AreaWeeks(ctx context.Context, params birding.AreaParams) (birding.AreaWeeks, error)
+}
+
+// speciesDetailer assembles the species detail panel.
+type speciesDetailer interface {
 	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string, date time.Time) (birding.SpeciesDetail, error)
+}
+
+// speciesSearcher finds species by name.
+type speciesSearcher interface {
 	SearchSpecies(ctx context.Context, query, lang string) ([]birding.SpeciesMatch, error)
+}
+
+// recommendationService is everything the router's handlers ask of the engine.
+// Each handler takes only the part it calls, so its test needs a fake of only
+// that.
+type recommendationService interface {
+	recommender
+	weekFinder
+	speciesDetailer
+	speciesSearcher
 }
 
 // parseDate reads ?date=, which is today when absent.
@@ -155,7 +178,7 @@ func writeSearchError(w http.ResponseWriter, logger *slog.Logger, err error, act
 	}
 }
 
-func handleGetRecommendations(logger *slog.Logger, recommendations recommendationService) http.Handler {
+func handleGetRecommendations(logger *slog.Logger, recommendations recommender) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		parsed, err := parseSearch(r.URL.Query())
 		if err != nil {
@@ -184,7 +207,7 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 // handleGetAreaWeeks serves the best weeks of the requested species over the
 // hotspots of an area: the same query as the recommendations, but at least one
 // species is required.
-func handleGetAreaWeeks(logger *slog.Logger, recommendations recommendationService) http.Handler {
+func handleGetAreaWeeks(logger *slog.Logger, weeks weekFinder) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		parsed, err := parseSearch(r.URL.Query())
 		if err != nil {
@@ -196,7 +219,7 @@ func handleGetAreaWeeks(logger *slog.Logger, recommendations recommendationServi
 			return
 		}
 
-		weeks, err := recommendations.AreaWeeks(r.Context(), birding.AreaParams{
+		found, err := weeks.AreaWeeks(r.Context(), birding.AreaParams{
 			Latitude:   parsed.latitude,
 			Longitude:  parsed.longitude,
 			RadiusKM:   parsed.radiusKM,
@@ -209,6 +232,6 @@ func handleGetAreaWeeks(logger *slog.Logger, recommendations recommendationServi
 			return
 		}
 
-		writeJSON(w, logger, http.StatusOK, weeks)
+		writeJSON(w, logger, http.StatusOK, found)
 	})
 }

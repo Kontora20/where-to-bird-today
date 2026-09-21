@@ -31,17 +31,35 @@ type AreaWeeks struct {
 	BestWeeks []WeekRange     `json:"best_weeks"`
 }
 
+// areaStore is what WeekFinder needs from persistence.
+type areaStore interface {
+	ListHotspotsWithin(ctx context.Context, arg store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error)
+	GetAreaWeeks(ctx context.Context, arg store.GetAreaWeeksParams) ([]store.GetAreaWeeksRow, error)
+}
+
+// WeekFinder finds the best weeks of species in an area. Its drive times may
+// be nil, in which case requests limited by drive time fail with
+// ErrTravelTimeUnavailable.
+type WeekFinder struct {
+	store areaStore
+	travel
+}
+
+func newWeekFinder(store areaStore, driveTimes DriveTimeFinder) *WeekFinder {
+	return &WeekFinder{store: store, travel: travel{driveTimes: driveTimes}}
+}
+
 // AreaWeeks pools the weekly checklists of every hotspot in the area and finds
 // the weeks in which the species are most likely to be seen. An area has so
 // many checklists in a week that, unlike at one hotspot, the pooled share needs
 // no adjustment toward the country's.
-func (s *Service) AreaWeeks(ctx context.Context, p AreaParams) (AreaWeeks, error) {
-	radiusKM, err := s.searchRadiusKM(p.RadiusKM, p.MaxMinutes)
+func (f *WeekFinder) AreaWeeks(ctx context.Context, p AreaParams) (AreaWeeks, error) {
+	radiusKM, err := f.searchRadiusKM(p.RadiusKM, p.MaxMinutes)
 	if err != nil {
 		return AreaWeeks{}, err
 	}
 
-	hotspots, err := s.store.ListHotspotsWithin(ctx, store.ListHotspotsWithinParams{
+	hotspots, err := f.store.ListHotspotsWithin(ctx, store.ListHotspotsWithinParams{
 		Latitude:     p.Latitude,
 		Longitude:    p.Longitude,
 		RadiusMeters: radiusKM * 1000,
@@ -55,7 +73,7 @@ func (s *Service) AreaWeeks(ctx context.Context, p AreaParams) (AreaWeeks, error
 		for i, hotspot := range hotspots {
 			destinations[i] = routing.Point{Latitude: hotspot.Latitude.Float64, Longitude: hotspot.Longitude.Float64}
 		}
-		positions, _, err := s.reachable(ctx, routing.Point{Latitude: p.Latitude, Longitude: p.Longitude}, destinations, p.MaxMinutes)
+		positions, _, err := f.reachable(ctx, routing.Point{Latitude: p.Latitude, Longitude: p.Longitude}, destinations, p.MaxMinutes)
 		if err != nil {
 			return AreaWeeks{}, err
 		}
@@ -75,7 +93,7 @@ func (s *Service) AreaWeeks(ctx context.Context, p AreaParams) (AreaWeeks, error
 	for i, hotspot := range hotspots {
 		hotspotIDs[i] = hotspot.ID
 	}
-	rows, err := s.store.GetAreaWeeks(ctx, store.GetAreaWeeksParams{HotspotIds: hotspotIDs, SpeciesIds: p.SpeciesIDs})
+	rows, err := f.store.GetAreaWeeks(ctx, store.GetAreaWeeksParams{HotspotIds: hotspotIDs, SpeciesIds: p.SpeciesIDs})
 	if err != nil {
 		return AreaWeeks{}, fmt.Errorf("loading area weeks: %w", err)
 	}

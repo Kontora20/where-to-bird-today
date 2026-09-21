@@ -20,7 +20,7 @@ func TestTimeOfDayShowsClockTimesForTheDate(t *testing.T) {
 	t.Parallel()
 
 	var gotParams store.GetSpeciesTimeOfDayParams
-	fake := fakeStore{
+	fake := fakeTimeOfDayStore{
 		hotspotRow: vilnius,
 		timeOfDayRows: []store.GetSpeciesTimeOfDayRow{
 			{HourBin: 0, Checklists: 4, WithSpecies: 2, AdjustedFrequency: 0.44},
@@ -29,7 +29,7 @@ func TestTimeOfDayShowsClockTimesForTheDate(t *testing.T) {
 		timeOfDayParams: &gotParams,
 	}
 
-	got, err := NewService(fake, nil).timeOfDay(context.Background(), 1, 10, time.Date(2026, 6, 21, 0, 0, 0, 0, time.UTC))
+	got, err := timeOfDay(context.Background(), fake, 1, 10, time.Date(2026, 6, 21, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("timeOfDay() error = %v", err)
 	}
@@ -54,12 +54,12 @@ func TestTimeOfDayShowsClockTimesForTheDate(t *testing.T) {
 func TestTimeOfDayFollowsTheSeason(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{
+	fake := fakeTimeOfDayStore{
 		hotspotRow:    vilnius,
 		timeOfDayRows: []store.GetSpeciesTimeOfDayRow{{HourBin: 0, Checklists: 1, WithSpecies: 1, AdjustedFrequency: 0.3}},
 	}
 
-	got, err := NewService(fake, nil).timeOfDay(context.Background(), 1, 10, time.Date(2026, 12, 21, 0, 0, 0, 0, time.UTC))
+	got, err := timeOfDay(context.Background(), fake, 1, 10, time.Date(2026, 12, 21, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("timeOfDay() error = %v", err)
 	}
@@ -73,7 +73,7 @@ func TestTimeOfDayFollowsTheSeason(t *testing.T) {
 func TestTimeOfDayIsEmptyForAnUnknownHotspot(t *testing.T) {
 	t.Parallel()
 
-	got, err := NewService(fakeStore{}, nil).timeOfDay(context.Background(), 1, 10, time.Date(2026, 6, 21, 0, 0, 0, 0, time.UTC))
+	got, err := timeOfDay(context.Background(), fakeTimeOfDayStore{}, 1, 10, time.Date(2026, 6, 21, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("timeOfDay() error = %v", err)
 	}
@@ -86,9 +86,9 @@ func TestTimeOfDayPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	fake := fakeStore{hotspotRow: vilnius, timeOfDayErr: wantErr}
+	fake := fakeTimeOfDayStore{hotspotRow: vilnius, timeOfDayErr: wantErr}
 
-	_, err := NewService(fake, nil).timeOfDay(context.Background(), 1, 10, time.Date(2026, 6, 21, 0, 0, 0, 0, time.UTC))
+	_, err := timeOfDay(context.Background(), fake, 1, 10, time.Date(2026, 6, 21, 0, 0, 0, 0, time.UTC))
 	if !errors.Is(err, wantErr) {
 		t.Errorf("timeOfDay() error = %v, want wrapping %v", err, wantErr)
 	}

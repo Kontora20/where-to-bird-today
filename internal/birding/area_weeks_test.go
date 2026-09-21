@@ -38,7 +38,7 @@ func TestAreaWeeksPoolsTheHotspotsOfAnArea(t *testing.T) {
 	t.Parallel()
 
 	var gotArgs store.GetAreaWeeksParams
-	fake := fakeStore{
+	fake := fakeAreaStore{
 		hotspotsWithin: []store.ListHotspotsWithinRow{hotspotWithin(1), hotspotWithin(2)},
 		areaWeeksRows: yearOfAreaWeeks(map[int16]store.GetAreaWeeksRow{
 			20: {Checklists: 10, WithSpecies: 5},
@@ -48,7 +48,7 @@ func TestAreaWeeksPoolsTheHotspotsOfAnArea(t *testing.T) {
 		areaWeeksArgs: &gotArgs,
 	}
 
-	got, err := NewService(fake, nil).AreaWeeks(context.Background(), AreaParams{
+	got, err := newWeekFinder(fake, nil).AreaWeeks(context.Background(), AreaParams{
 		Latitude: 54.7, Longitude: 25.3, RadiusKM: 30, SpeciesIDs: []int64{10, 11}, Date: may15,
 	})
 	if err != nil {
@@ -83,7 +83,7 @@ func TestAreaWeeksLimitsByDriveTime(t *testing.T) {
 
 	var gotArgs store.GetAreaWeeksParams
 	var gotDestinations []routing.Point
-	fake := fakeStore{
+	fake := fakeAreaStore{
 		hotspotsWithin: []store.ListHotspotsWithinRow{hotspotWithin(1), hotspotWithin(2), hotspotWithin(3)},
 		areaWeeksRows:  yearOfAreaWeeks(map[int16]store.GetAreaWeeksRow{20: {Checklists: 4, WithSpecies: 2}}),
 		areaWeeksArgs:  &gotArgs,
@@ -93,7 +93,7 @@ func TestAreaWeeksLimitsByDriveTime(t *testing.T) {
 		times:           []time.Duration{10 * time.Minute, routing.Unreachable, 40 * time.Minute},
 	}
 
-	_, err := NewService(fake, driveTimes).AreaWeeks(context.Background(), AreaParams{
+	_, err := newWeekFinder(fake, driveTimes).AreaWeeks(context.Background(), AreaParams{
 		Latitude: 54.7, Longitude: 25.3, MaxMinutes: 30, SpeciesIDs: []int64{10}, Date: may15,
 	})
 	if err != nil {
@@ -111,13 +111,13 @@ func TestAreaWeeksLimitsByDriveTime(t *testing.T) {
 func TestAreaWeeksByRadiusIgnoresDriveTimes(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{
+	fake := fakeAreaStore{
 		hotspotsWithin: []store.ListHotspotsWithinRow{hotspotWithin(1)},
 		areaWeeksRows:  yearOfAreaWeeks(map[int16]store.GetAreaWeeksRow{20: {Checklists: 4, WithSpecies: 2}}),
 	}
 	driveTimes := fakeDriveTimes{err: errors.New("routing must not be called for a radius")}
 
-	if _, err := NewService(fake, driveTimes).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15}); err != nil {
+	if _, err := newWeekFinder(fake, driveTimes).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15}); err != nil {
 		t.Errorf("AreaWeeks() error = %v, want none: a radius needs no drive times", err)
 	}
 }
@@ -125,7 +125,7 @@ func TestAreaWeeksByRadiusIgnoresDriveTimes(t *testing.T) {
 func TestAreaWeeksByDriveTimeWithoutRoutingServer(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewService(fakeStore{}, nil).AreaWeeks(context.Background(), AreaParams{MaxMinutes: 30, SpeciesIDs: []int64{10}, Date: may15})
+	_, err := newWeekFinder(fakeAreaStore{}, nil).AreaWeeks(context.Background(), AreaParams{MaxMinutes: 30, SpeciesIDs: []int64{10}, Date: may15})
 	if !errors.Is(err, ErrTravelTimeUnavailable) {
 		t.Errorf("AreaWeeks() error = %v, want %v", err, ErrTravelTimeUnavailable)
 	}
@@ -135,9 +135,9 @@ func TestAreaWeeksWithNoHotspotsIsEmpty(t *testing.T) {
 	t.Parallel()
 
 	var gotArgs store.GetAreaWeeksParams
-	fake := fakeStore{areaWeeksArgs: &gotArgs}
+	fake := fakeAreaStore{areaWeeksArgs: &gotArgs}
 
-	got, err := NewService(fake, nil).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15})
+	got, err := newWeekFinder(fake, nil).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15})
 	if err != nil {
 		t.Fatalf("AreaWeeks() error = %v", err)
 	}
@@ -153,9 +153,9 @@ func TestAreaWeeksWithNoHotspotsIsEmpty(t *testing.T) {
 func TestAreaWeeksWithNoChecklistsIsEmpty(t *testing.T) {
 	t.Parallel()
 
-	fake := fakeStore{hotspotsWithin: []store.ListHotspotsWithinRow{hotspotWithin(1)}, areaWeeksRows: yearOfAreaWeeks(nil)}
+	fake := fakeAreaStore{hotspotsWithin: []store.ListHotspotsWithinRow{hotspotWithin(1)}, areaWeeksRows: yearOfAreaWeeks(nil)}
 
-	got, err := NewService(fake, nil).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15})
+	got, err := newWeekFinder(fake, nil).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15})
 	if err != nil {
 		t.Fatalf("AreaWeeks() error = %v", err)
 	}
@@ -168,9 +168,9 @@ func TestAreaWeeksPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	fake := fakeStore{hotspotsWithin: []store.ListHotspotsWithinRow{hotspotWithin(1)}, areaWeeksErr: wantErr}
+	fake := fakeAreaStore{hotspotsWithin: []store.ListHotspotsWithinRow{hotspotWithin(1)}, areaWeeksErr: wantErr}
 
-	_, err := NewService(fake, nil).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15})
+	_, err := newWeekFinder(fake, nil).AreaWeeks(context.Background(), AreaParams{RadiusKM: 30, SpeciesIDs: []int64{10}, Date: may15})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("AreaWeeks() error = %v, want wrapping %v", err, wantErr)
 	}

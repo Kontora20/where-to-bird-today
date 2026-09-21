@@ -17,9 +17,23 @@ type SpeciesMatch struct {
 	ScientificName string `json:"scientific_name"`
 }
 
+// searchStore is what SpeciesSearcher needs from persistence.
+type searchStore interface {
+	SearchSpecies(ctx context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error)
+}
+
+// SpeciesSearcher finds species by name for the target-species picker.
+type SpeciesSearcher struct {
+	store searchStore
+}
+
+func newSpeciesSearcher(store searchStore) *SpeciesSearcher {
+	return &SpeciesSearcher{store: store}
+}
+
 // SearchSpecies returns species whose name contains query, named in lang
 // (falling back to the other supported language, then the scientific name).
-func (s *Service) SearchSpecies(ctx context.Context, query, lang string) ([]SpeciesMatch, error) {
+func (s *SpeciesSearcher) SearchSpecies(ctx context.Context, query, lang string) ([]SpeciesMatch, error) {
 	rows, err := s.store.SearchSpecies(ctx, store.SearchSpeciesParams{
 		Query:        query,
 		LangPriority: []string{lang, otherOf(lang)},

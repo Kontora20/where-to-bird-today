@@ -52,12 +52,18 @@ type HourFrequency struct {
 	AdjustedFrequency float32 `json:"adjusted_frequency"`
 }
 
+// timeOfDayStore is what timeOfDay needs from persistence.
+type timeOfDayStore interface {
+	GetHotspot(ctx context.Context, id int64) (store.GetHotspotRow, error)
+	GetSpeciesTimeOfDay(ctx context.Context, arg store.GetSpeciesTimeOfDayParams) ([]store.GetSpeciesTimeOfDayRow, error)
+}
+
 // timeOfDay returns the species' hours after sunrise at the hotspot, with the
 // clock times they fall at on date. It returns an empty list, not an error,
 // when the hotspot is unknown. The list is never nil, which would marshal to
 // JSON null.
-func (s *Service) timeOfDay(ctx context.Context, hotspotID, speciesID int64, date time.Time) ([]HourFrequency, error) {
-	hotspot, err := s.store.GetHotspot(ctx, hotspotID)
+func timeOfDay(ctx context.Context, source timeOfDayStore, hotspotID, speciesID int64, date time.Time) ([]HourFrequency, error) {
+	hotspot, err := source.GetHotspot(ctx, hotspotID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return []HourFrequency{}, nil
 	}
@@ -71,7 +77,7 @@ func (s *Service) timeOfDay(ctx context.Context, hotspotID, speciesID int64, dat
 	year, month, day := date.Date()
 	sunrise := daylight.Sunrise(time.Date(year, month, day, 0, 0, 0, 0, zone), hotspot.Latitude.Float64, hotspot.Longitude.Float64).Round(time.Minute)
 
-	rows, err := s.store.GetSpeciesTimeOfDay(ctx, store.GetSpeciesTimeOfDayParams{
+	rows, err := source.GetSpeciesTimeOfDay(ctx, store.GetSpeciesTimeOfDayParams{
 		HotspotID:             pgtype.Int8{Int64: hotspotID, Valid: true},
 		SpeciesID:             pgtype.Int8{Int64: speciesID, Valid: true},
 		PriorChecklists:       pgtype.Float4{Float32: timeOfDayPriorChecklists, Valid: true},

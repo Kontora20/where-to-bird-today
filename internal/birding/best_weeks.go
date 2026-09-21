@@ -58,11 +58,16 @@ type WeekRange struct {
 	End      string `json:"end"`
 }
 
+// weekStore is what seasonality needs from persistence.
+type weekStore interface {
+	GetHotspotSpeciesWeeks(ctx context.Context, arg store.GetHotspotSpeciesWeeksParams) ([]store.GetHotspotSpeciesWeeksRow, error)
+}
+
 // seasonality returns the species' weeks at the hotspot and the ranges of
 // best weeks among them. Both are empty lists, never nil, when the hotspot has
 // no checklists.
-func (s *Service) seasonality(ctx context.Context, hotspotID, speciesID int64, date time.Time) ([]WeekFrequency, []WeekRange, error) {
-	rows, err := s.store.GetHotspotSpeciesWeeks(ctx, store.GetHotspotSpeciesWeeksParams{HotspotID: hotspotID, SpeciesID: speciesID})
+func seasonality(ctx context.Context, weekRows weekStore, hotspotID, speciesID int64, date time.Time) ([]WeekFrequency, []WeekRange, error) {
+	rows, err := weekRows.GetHotspotSpeciesWeeks(ctx, store.GetHotspotSpeciesWeeksParams{HotspotID: hotspotID, SpeciesID: speciesID})
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading species seasonality: %w", err)
 	}

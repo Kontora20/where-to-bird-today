@@ -17,13 +17,13 @@ func TestGetAreaWeeks(t *testing.T) {
 	tests := []struct {
 		name       string
 		query      string
-		service    fakeRecommendationService
+		service    fakeWeekFinder
 		wantStatus int
 	}{
 		{
 			name:       "by radius",
 			query:      "lat=54.7&lon=25.3&radius_km=30&species=10&date=2026-05-15",
-			service:    fakeRecommendationService{weeks: birding.AreaWeeks{Week: 20}},
+			service:    fakeWeekFinder{weeks: birding.AreaWeeks{Week: 20}},
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -39,19 +39,19 @@ func TestGetAreaWeeks(t *testing.T) {
 		{
 			name:       "no routing server",
 			query:      "lat=54.7&lon=25.3&max_minutes=45&species=10",
-			service:    fakeRecommendationService{weeksErr: birding.ErrTravelTimeUnavailable},
+			service:    fakeWeekFinder{weeksErr: birding.ErrTravelTimeUnavailable},
 			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:       "no road near the point",
 			query:      "lat=54.7&lon=25.3&max_minutes=45&species=10",
-			service:    fakeRecommendationService{weeksErr: birding.ErrNoRoadNearOrigin},
+			service:    fakeWeekFinder{weeksErr: birding.ErrNoRoadNearOrigin},
 			wantStatus: http.StatusUnprocessableEntity,
 		},
 		{
 			name:       "service error",
 			query:      "lat=54.7&lon=25.3&radius_km=30&species=10",
-			service:    fakeRecommendationService{weeksErr: errors.New("db down")},
+			service:    fakeWeekFinder{weeksErr: errors.New("db down")},
 			wantStatus: http.StatusInternalServerError,
 		},
 	}
@@ -82,7 +82,7 @@ func TestGetAreaWeeksPassesTheSearchOn(t *testing.T) {
 	t.Parallel()
 
 	var got birding.AreaParams
-	service := fakeRecommendationService{gotAreaParams: &got}
+	service := fakeWeekFinder{gotAreaParams: &got}
 	req := httptest.NewRequest(http.MethodGet, "/recommendations/weeks?lat=54.7&lon=25.3&max_minutes=45&species=10&species=11&date=2026-05-15", nil)
 	rec := httptest.NewRecorder()
 
