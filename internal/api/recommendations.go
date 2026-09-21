@@ -129,12 +129,13 @@ func parseSearch(query url.Values) (search, error) {
 	var parsed search
 	var err error
 
+	// The ranges are written as positive tests so NaN is rejected too.
 	parsed.latitude, err = strconv.ParseFloat(query.Get("lat"), 64)
-	if err != nil || parsed.latitude < -90 || parsed.latitude > 90 {
+	if err != nil || !(parsed.latitude >= -90 && parsed.latitude <= 90) {
 		return search{}, errors.New("lat must be a number between -90 and 90")
 	}
 	parsed.longitude, err = strconv.ParseFloat(query.Get("lon"), 64)
-	if err != nil || parsed.longitude < -180 || parsed.longitude > 180 {
+	if err != nil || !(parsed.longitude >= -180 && parsed.longitude <= 180) {
 		return search{}, errors.New("lon must be a number between -180 and 180")
 	}
 

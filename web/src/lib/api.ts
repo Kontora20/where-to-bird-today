@@ -52,7 +52,7 @@ export interface SearchQuery {
 
 // The server's plain-text reason ("no road near that location") is meant to
 // be shown.
-async function getSearch<T>(path: string, query: SearchQuery): Promise<T> {
+async function getSearch<T>(path: string, query: SearchQuery, signal?: AbortSignal): Promise<T> {
 	const params = new URLSearchParams({
 		lat: String(query.lat),
 		lon: String(query.lon)
@@ -69,15 +69,15 @@ async function getSearch<T>(path: string, query: SearchQuery): Promise<T> {
 		params.append('species', String(speciesId));
 	}
 
-	const response = await fetch(`${path}?${params}`);
+	const response = await fetch(`${path}?${params}`, { signal });
 	if (!response.ok) {
 		throw new Error((await response.text()).trim() || `${path} request failed: ${response.status}`);
 	}
 	return response.json();
 }
 
-export function getRecommendations(query: SearchQuery): Promise<Recommendation[]> {
-	return getSearch('/recommendations', query);
+export function getRecommendations(query: SearchQuery, signal?: AbortSignal): Promise<Recommendation[]> {
+	return getSearch('/recommendations', query, signal);
 }
 
 // The year over the hotspots of an area for the species in the query, which
@@ -91,8 +91,8 @@ export interface AreaWeeks {
 	best_weeks: WeekRange[];
 }
 
-export function getAreaWeeks(query: SearchQuery): Promise<AreaWeeks> {
-	return getSearch('/recommendations/weeks', query);
+export function getAreaWeeks(query: SearchQuery, signal?: AbortSignal): Promise<AreaWeeks> {
+	return getSearch('/recommendations/weeks', query, signal);
 }
 
 export interface Photo {

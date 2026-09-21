@@ -19,6 +19,10 @@
 	// The API accepts at most this many target species.
 	const maxTargetSpecies = 10;
 
+	// A change of range or date often comes as several in a row (arrow keys in
+	// the list, typing in the date), so the search waits for a pause.
+	const searchDelayMs = 300;
+
 	const ranges = [
 		...[30, 45, 60, 90, 120].map((minutes) => ({ value: `min:${minutes}`, label: `Within ${minutes} min` })),
 		...[10, 25, 50, 100].map((km) => ({ value: `km:${km}`, label: `Within ${km} km` }))
@@ -49,13 +53,21 @@
 
 	onMount(runSearch);
 
-	// Each search gets a number so that the answer to an older search, arriving
-	// late, does not replace the answer to a newer one.
-	let latestSearch = 0;
+	let pendingSearch: ReturnType<typeof setTimeout> | undefined;
+	// The search in progress. Starting another aborts it, which also stops the
+	// server's work for it, and its answer is never used.
+	let searchInProgress: AbortController | undefined;
+
+	function runSearchSoon() {
+		clearTimeout(pendingSearch);
+		pendingSearch = setTimeout(runSearch, searchDelayMs);
+	}
 
 	async function runSearch() {
+		clearTimeout(pendingSearch);
+		searchInProgress?.abort();
+		const { signal } = (searchInProgress = new AbortController());
 		error = '';
-		const thisSearch = ++latestSearch;
 		loading = true;
 		const [unit, amount] = range.split(':');
 		const query = {
@@ -68,24 +80,24 @@
 		};
 		try {
 			const [found, weeks] = await Promise.all([
-				getRecommendations(query),
-				query.speciesIds.length > 0 ? getAreaWeeks(query) : null
+				getRecommendations(query, signal),
+				query.speciesIds.length > 0 ? getAreaWeeks(query, signal) : null
 			]);
-			if (thisSearch !== latestSearch) return;
+			if (signal.aborted) return;
 			recommendations = found;
 			areaWeeks = weeks;
 			areaSpeciesCount = query.speciesIds.length;
 			searched = true;
 			if (!found.some((hotspot) => hotspot.hotspot_id === selectedHotspotId)) selectedHotspotId = null;
 		} catch (err) {
-			if (thisSearch !== latestSearch) return;
+			if (signal.aborted) return;
 			error = err instanceof Error ? err.message : 'search failed';
 			recommendations = [];
 			areaWeeks = null;
 			searched = false;
 			selectedHotspotId = null;
 		} finally {
-			if (thisSearch === latestSearch) loading = false;
+			if (!signal.aborted) loading = false;
 		}
 	}
 
@@ -174,7 +186,7 @@
 				<div class="controls">
 					<label class="pill">
 						<span class="visually-hidden">How far to travel</span>
-						<select bind:value={range} onchange={runSearch}>
+						<select bind:value={range} onchange={runSearchSoon}>
 							{#each ranges as option (option.value)}
 								<option value={option.value}>{option.label}</option>
 							{/each}
@@ -182,7 +194,7 @@
 					</label>
 					<label class="pill">
 						<span class="visually-hidden">Date</span>
-						<input type="date" bind:value={date} onchange={runSearch} />
+						<input type="date" bind:value={date} onchange={runSearchSoon} />
 					</label>
 				</div>
 				<button type="button" class="link" onclick={useMyLocation} disabled={locating}>
