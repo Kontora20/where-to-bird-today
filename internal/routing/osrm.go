@@ -43,6 +43,7 @@ type Client struct {
 	httpClient *http.Client
 }
 
+// NewClient returns a Client for the OSRM server at baseURL.
 func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),

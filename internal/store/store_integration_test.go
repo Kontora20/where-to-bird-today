@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"math"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -202,13 +204,17 @@ func TestUpsertHotspotIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestRecomputeSpeciesSeasonality seeds one hotspot, two species, and five
-// observations spread across one ISO week, then checks the recomputed
-// frequency and sample_size by hand. Species A is seen on 3 of the week's 4
-// active days (frequency 0.75), species B on 2 of them (0.5). It then
-// removes one of those active days and recomputes again: a stale
-// sample_size of 4 surviving that second run would mean the table wasn't
-// actually truncated first, only appended to.
+// TestRecomputeSpeciesSeasonality seeds one ISO week at one hotspot and
+// checks the recomputed frequency and sample_size by hand. Complete
+// checklists there: S1 (species A and B), S2 (A), S3 (no species, so it
+// only counts in the denominator), and a shared checklist submitted twice as
+// S4 and S5 (species B, both copies). Around them sit rows that must not
+// count: S6 is incomplete (species C) and S7 is at a personal location
+// (species A). Four checklists make the denominator, because the two shared
+// copies are one checklist: A is on 2 of 4 (0.5), B on S1 and the shared one
+// (0.5, not 3 of 5), C nowhere. It then deletes S3 and recomputes: a stale
+// sample_size of 4 surviving would mean the table was appended to, not
+// rebuilt.
 func TestRecomputeSpeciesSeasonality(t *testing.T) {
 	t.Parallel()
 
@@ -228,44 +234,73 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 		t.Fatalf("UpsertHotspot: %v", err)
 	}
 
-	speciesA, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
-		ScientificName: "Testus speciesa",
-		AvibaseID:      pgtype.Text{String: "avibase-TESTAAA1", Valid: true},
-	})
-	if err != nil {
-		t.Fatalf("UpsertSpecies (A): %v", err)
-	}
-	speciesB, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
-		ScientificName: "Testus speciesb",
-		AvibaseID:      pgtype.Text{String: "avibase-TESTBBB1", Valid: true},
-	})
-	if err != nil {
-		t.Fatalf("UpsertSpecies (B): %v", err)
-	}
-
-	seedObservation := func(sourceRef string, speciesID int64, day int) {
+	seedSpecies := func(scientificName, avibaseID string) int64 {
 		t.Helper()
-		_, err := queries.UpsertObservation(ctx, UpsertObservationParams{
-			SpeciesID:  speciesID,
-			HotspotID:  pgtype.Int8{Int64: hotspot.ID, Valid: true},
-			Longitude:  25.0,
-			Latitude:   55.0,
-			ObservedOn: pgtype.Date{Time: time.Date(2026, 3, day, 0, 0, 0, 0, time.UTC), Valid: true},
-			Source:     "test",
-			SourceRef:  sourceRef,
+		species, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+			ScientificName: scientificName,
+			AvibaseID:      pgtype.Text{String: avibaseID, Valid: true},
 		})
 		if err != nil {
+			t.Fatalf("UpsertSpecies (%s): %v", scientificName, err)
+		}
+		return species.ID
+	}
+	speciesA := seedSpecies("Testus speciesa", "avibase-TESTAAA1")
+	speciesB := seedSpecies("Testus speciesb", "avibase-TESTBBB1")
+	speciesC := seedSpecies("Testus speciesc", "avibase-TESTCCC1")
+	speciesD := seedSpecies("Testus speciesd", "avibase-TESTDDD1")
+
+	seedChecklist := func(samplingEventID, groupID string, atHotspot bool, day int, complete bool) int64 {
+		t.Helper()
+		params := UpsertChecklistParams{
+			SamplingEventID:    samplingEventID,
+			GroupID:            pgtype.Text{String: groupID, Valid: groupID != ""},
+			ObservedOn:         pgtype.Date{Time: time.Date(2026, 3, day, 0, 0, 0, 0, time.UTC), Valid: true},
+			AllSpeciesReported: complete,
+		}
+		if atHotspot {
+			params.HotspotID = pgtype.Int8{Int64: hotspot.ID, Valid: true}
+		}
+		id, err := queries.UpsertChecklist(ctx, params)
+		if err != nil {
+			t.Fatalf("seeding checklist %s: %v", samplingEventID, err)
+		}
+		return id
+	}
+	seedObservation := func(checklistID, speciesID int64, atHotspot bool, day int, sourceRef string) {
+		t.Helper()
+		params := UpsertObservationParams{
+			SpeciesID:   speciesID,
+			ChecklistID: pgtype.Int8{Int64: checklistID, Valid: true},
+			Longitude:   25.0,
+			Latitude:    55.0,
+			ObservedOn:  pgtype.Date{Time: time.Date(2026, 3, day, 0, 0, 0, 0, time.UTC), Valid: true},
+			Source:      "test",
+			SourceRef:   sourceRef,
+		}
+		if atHotspot {
+			params.HotspotID = pgtype.Int8{Int64: hotspot.ID, Valid: true}
+		}
+		if _, err := queries.UpsertObservation(ctx, params); err != nil {
 			t.Fatalf("seeding observation %s: %v", sourceRef, err)
 		}
 	}
-	// All within the same ISO week (Mon 2026-03-02 to Fri 2026-03-06):
-	// species A on the 2nd, 3rd and 4th; species B on the 2nd and 5th. Four
-	// distinct days of activity at the hotspot in total.
-	seedObservation("test-obs-a-1", speciesA.ID, 2)
-	seedObservation("test-obs-a-2", speciesA.ID, 3)
-	seedObservation("test-obs-a-3", speciesA.ID, 4)
-	seedObservation("test-obs-b-1", speciesB.ID, 2)
-	seedObservation("test-obs-b-2", speciesB.ID, 5)
+
+	// All within the same ISO week: Monday 2026-03-02 to Friday 2026-03-06.
+	s1 := seedChecklist("S1", "", true, 2, true)
+	s2 := seedChecklist("S2", "", true, 3, true)
+	s3 := seedChecklist("S3", "", true, 4, true)
+	s4 := seedChecklist("S4", "G1", true, 5, true)
+	s5 := seedChecklist("S5", "G1", true, 5, true)
+	s6 := seedChecklist("S6", "", true, 5, false)
+	s7 := seedChecklist("S7", "", false, 6, true)
+	seedObservation(s1, speciesA, true, 2, "obs-s1-a")
+	seedObservation(s1, speciesB, true, 2, "obs-s1-b")
+	seedObservation(s2, speciesA, true, 3, "obs-s2-a")
+	seedObservation(s4, speciesB, true, 5, "obs-s4-b")
+	seedObservation(s5, speciesB, true, 5, "obs-s5-b")
+	seedObservation(s6, speciesC, true, 5, "obs-s6-c")
+	seedObservation(s7, speciesA, false, 6, "obs-s7-a")
 
 	recompute := func() {
 		t.Helper()
@@ -280,17 +315,38 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 
 	_, weekOfYear := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC).ISOWeek()
 
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA.ID, weekOfYear, 3.0/4.0, 4)
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB.ID, weekOfYear, 2.0/4.0, 4)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA, weekOfYear, 2.0/4.0, 4)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB, weekOfYear, 2.0/4.0, 4)
 
-	if _, err := pool.Exec(ctx, "DELETE FROM observations WHERE source_ref = $1", "test-obs-b-2"); err != nil {
-		t.Fatalf("removing observation: %v", err)
+	var rowsForC int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM species_seasonality WHERE species_id = $1", speciesC).Scan(&rowsForC); err != nil {
+		t.Fatalf("counting rows for the incomplete-checklist species: %v", err)
+	}
+	if rowsForC != 0 {
+		t.Errorf("species seen only on an incomplete checklist has %d seasonality rows, want 0", rowsForC)
+	}
+
+	if _, err := pool.Exec(ctx, "DELETE FROM checklists WHERE id = $1", s3); err != nil {
+		t.Fatalf("removing checklist: %v", err)
 	}
 	recompute()
 
-	// Species A is now seen on all 3 remaining active days.
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA.ID, weekOfYear, 1.0, 3)
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB.ID, weekOfYear, 1.0/3.0, 3)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA, weekOfYear, 2.0/3.0, 3)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB, weekOfYear, 2.0/3.0, 3)
+
+	// The latest checklist that recorded species A at the hotspot is S2 (the
+	// personal-location S7 is later but not at this hotspot). A species never
+	// recorded there has none.
+	latest, err := queries.GetLatestChecklistWithSpecies(ctx, GetLatestChecklistWithSpeciesParams{SpeciesID: speciesA, HotspotID: pgtype.Int8{Int64: hotspot.ID, Valid: true}})
+	if err != nil {
+		t.Fatalf("GetLatestChecklistWithSpecies: %v", err)
+	}
+	if latest.SamplingEventID != "S2" {
+		t.Errorf("latest checklist for species A = %q, want S2", latest.SamplingEventID)
+	}
+	if _, err := queries.GetLatestChecklistWithSpecies(ctx, GetLatestChecklistWithSpeciesParams{SpeciesID: speciesD, HotspotID: pgtype.Int8{Int64: hotspot.ID, Valid: true}}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("GetLatestChecklistWithSpecies for an unrecorded species error = %v, want pgx.ErrNoRows", err)
+	}
 }
 
 func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32) {

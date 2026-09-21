@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Kontora20/where-to-bird-today/internal/store"
@@ -25,11 +26,26 @@ type fakeStore struct {
 	seasonalityErr  error
 	seasonalityRows []store.GetSpeciesSeasonalityAtHotspotRow
 
+	// latestRow is the latest checklist for the species; nil means the
+	// species was never recorded at the hotspot.
+	latestRow *store.GetLatestChecklistWithSpeciesRow
+	latestErr error
+
 	searchErr  error
 	searchRows []store.SearchSpeciesRow
 	// searchArgs is a pointer because fakeStore's methods have value
 	// receivers: a plain field would be written to a copy.
 	searchArgs *store.SearchSpeciesParams
+}
+
+func (f fakeStore) GetLatestChecklistWithSpecies(_ context.Context, _ store.GetLatestChecklistWithSpeciesParams) (store.GetLatestChecklistWithSpeciesRow, error) {
+	if f.latestErr != nil {
+		return store.GetLatestChecklistWithSpeciesRow{}, f.latestErr
+	}
+	if f.latestRow == nil {
+		return store.GetLatestChecklistWithSpeciesRow{}, pgx.ErrNoRows
+	}
+	return *f.latestRow, nil
 }
 
 func (f fakeStore) SearchSpecies(_ context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error) {

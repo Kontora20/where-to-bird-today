@@ -2,7 +2,11 @@ package birding
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
@@ -18,12 +22,21 @@ type Photo struct {
 	AttributionURL string `json:"attribution_url,omitempty"`
 }
 
-// WeekFrequency is how often a species was recorded at one hotspot in one
-// ISO week, out of everything recorded there that week. A week missing from
-// the list was never recorded, not recorded at zero frequency.
+// WeekFrequency is the share of complete checklists at one hotspot in one ISO
+// week that recorded a species, and how many complete checklists that share
+// is out of. A week missing from the list was never recorded, not recorded at
+// zero frequency.
 type WeekFrequency struct {
-	Week      int16   `json:"week"`
-	Frequency float32 `json:"frequency"`
+	Week       int16   `json:"week"`
+	Frequency  float32 `json:"frequency"`
+	Checklists int32   `json:"checklists"`
+}
+
+// LatestChecklist is the most recent eBird checklist at the hotspot that
+// recorded the species: a link to the record behind the numbers.
+type LatestChecklist struct {
+	URL        string `json:"url"`
+	ObservedOn string `json:"observed_on"`
 }
 
 // SpeciesDetail is everything the species detail panel shows (ADR 0004):
@@ -36,14 +49,15 @@ type WeekFrequency struct {
 // translates the name, which is the one field eBird already gives us. See
 // ADR 0004's addendum.
 type SpeciesDetail struct {
-	SpeciesID           int64           `json:"species_id"`
-	CommonName          string          `json:"common_name"`
-	ScientificName      string          `json:"scientific_name"`
-	BirdsOfTheWorldURL  string          `json:"birds_of_the_world_url,omitempty"`
-	BirdLifeDataZoneURL string          `json:"birdlife_datazone_url,omitempty"`
-	EBirdURL            string          `json:"ebird_url,omitempty"`
-	Photo               *Photo          `json:"photo,omitempty"`
-	Seasonality         []WeekFrequency `json:"seasonality"`
+	SpeciesID           int64            `json:"species_id"`
+	CommonName          string           `json:"common_name"`
+	ScientificName      string           `json:"scientific_name"`
+	BirdsOfTheWorldURL  string           `json:"birds_of_the_world_url,omitempty"`
+	BirdLifeDataZoneURL string           `json:"birdlife_datazone_url,omitempty"`
+	EBirdURL            string           `json:"ebird_url,omitempty"`
+	Photo               *Photo           `json:"photo,omitempty"`
+	Seasonality         []WeekFrequency  `json:"seasonality"`
+	LatestChecklist     *LatestChecklist `json:"latest_checklist,omitempty"`
 }
 
 // SpeciesDetail returns the detail panel's contents for one species, scoped
@@ -93,7 +107,22 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 	}
 	seasonality := make([]WeekFrequency, len(seasonalityRows))
 	for i, row := range seasonalityRows {
-		seasonality[i] = WeekFrequency{Week: row.WeekOfYear, Frequency: row.Frequency}
+		seasonality[i] = WeekFrequency{Week: row.WeekOfYear, Frequency: row.Frequency, Checklists: row.SampleSize}
+	}
+
+	var latestChecklist *LatestChecklist
+	latest, err := s.store.GetLatestChecklistWithSpecies(ctx, store.GetLatestChecklistWithSpeciesParams{
+		SpeciesID: speciesID,
+		HotspotID: pgtype.Int8{Int64: hotspotID, Valid: true},
+	})
+	switch {
+	case err == nil:
+		latestChecklist = &LatestChecklist{
+			URL:        "https://ebird.org/checklist/" + latest.SamplingEventID,
+			ObservedOn: latest.ObservedOn.Time.Format("2006-01-02"),
+		}
+	case !errors.Is(err, pgx.ErrNoRows):
+		return SpeciesDetail{}, fmt.Errorf("loading latest checklist: %w", err)
 	}
 
 	var ebirdURL string
@@ -110,5 +139,6 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		EBirdURL:            ebirdURL,
 		Photo:               photo,
 		Seasonality:         seasonality,
+		LatestChecklist:     latestChecklist,
 	}, nil
 }

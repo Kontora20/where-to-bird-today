@@ -83,6 +83,8 @@ export interface Photo {
 export interface WeekFrequency {
 	week: number;
 	frequency: number;
+	// How many complete checklists the frequency is out of.
+	checklists: number;
 }
 
 export interface SpeciesDetail {
@@ -94,6 +96,8 @@ export interface SpeciesDetail {
 	ebird_url?: string;
 	photo?: Photo;
 	seasonality: WeekFrequency[];
+	// Absent when the species was never recorded at the hotspot.
+	latest_checklist?: { url: string; observed_on: string };
 }
 
 export async function getSpeciesDetail(hotspotId: number, speciesId: number): Promise<SpeciesDetail> {

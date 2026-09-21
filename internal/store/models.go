@@ -10,6 +10,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Checklist struct {
+	ID                 int64       `json:"id"`
+	SamplingEventID    string      `json:"sampling_event_id"`
+	GroupID            pgtype.Text `json:"group_id"`
+	HotspotID          pgtype.Int8 `json:"hotspot_id"`
+	ObservedOn         pgtype.Date `json:"observed_on"`
+	StartedAt          pgtype.Time `json:"started_at"`
+	AllSpeciesReported bool        `json:"all_species_reported"`
+}
+
 type Hotspot struct {
 	ID        int64              `json:"id"`
 	Name      string             `json:"name"`
@@ -33,15 +43,16 @@ type IngestionRun struct {
 }
 
 type Observation struct {
-	ID         int64              `json:"id"`
-	SpeciesID  int64              `json:"species_id"`
-	HotspotID  pgtype.Int8        `json:"hotspot_id"`
-	Location   interface{}        `json:"location"`
-	ObservedOn pgtype.Date        `json:"observed_on"`
-	Count      pgtype.Int4        `json:"count"`
-	Source     string             `json:"source"`
-	SourceRef  string             `json:"source_ref"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID          int64              `json:"id"`
+	SpeciesID   int64              `json:"species_id"`
+	HotspotID   pgtype.Int8        `json:"hotspot_id"`
+	Location    interface{}        `json:"location"`
+	ObservedOn  pgtype.Date        `json:"observed_on"`
+	Count       pgtype.Int4        `json:"count"`
+	Source      string             `json:"source"`
+	SourceRef   string             `json:"source_ref"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ChecklistID pgtype.Int8        `json:"checklist_id"`
 }
 
 type Species struct {

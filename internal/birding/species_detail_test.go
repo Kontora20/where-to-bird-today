@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
@@ -27,8 +30,12 @@ func TestSpeciesDetail(t *testing.T) {
 			{SpeciesID: 10, ImageUrl: "https://example.org/stork-second.jpg", License: "CC BY 4.0", Attribution: "Someone Else", Rank: 1},
 		},
 		seasonalityRows: []store.GetSpeciesSeasonalityAtHotspotRow{
-			{WeekOfYear: 18, Frequency: 0.4},
-			{WeekOfYear: 19, Frequency: 0.6},
+			{WeekOfYear: 18, Frequency: 0.4, SampleSize: 10},
+			{WeekOfYear: 19, Frequency: 0.6, SampleSize: 5},
+		},
+		latestRow: &store.GetLatestChecklistWithSpeciesRow{
+			SamplingEventID: "S123456",
+			ObservedOn:      pgtype.Date{Time: time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC), Valid: true},
 		},
 	}
 
@@ -60,6 +67,14 @@ func TestSpeciesDetail(t *testing.T) {
 	if len(got.Seasonality) != 2 || got.Seasonality[0].Week != 18 || got.Seasonality[1].Week != 19 {
 		t.Errorf("Seasonality = %+v, want weeks 18 and 19 in order", got.Seasonality)
 	}
+	if got.Seasonality[0].Checklists != 10 || got.Seasonality[1].Checklists != 5 {
+		t.Errorf("Seasonality = %+v, want the checklist counts 10 and 5", got.Seasonality)
+	}
+
+	want := &LatestChecklist{URL: "https://ebird.org/checklist/S123456", ObservedOn: "2026-05-03"}
+	if got.LatestChecklist == nil || *got.LatestChecklist != *want {
+		t.Errorf("LatestChecklist = %+v, want %+v", got.LatestChecklist, want)
+	}
 }
 
 // TestSpeciesDetailNoPhoto guards the nil case: a species with no
@@ -79,6 +94,9 @@ func TestSpeciesDetailNoPhoto(t *testing.T) {
 	if got.Photo != nil {
 		t.Errorf("Photo = %+v, want nil (no species_media rows)", got.Photo)
 	}
+	if got.LatestChecklist != nil {
+		t.Errorf("LatestChecklist = %+v, want nil (species never recorded at the hotspot)", got.LatestChecklist)
+	}
 	if got.CommonName != "Rallus aquaticus" {
 		t.Errorf("CommonName = %q, want scientific-name fallback %q", got.CommonName, "Rallus aquaticus")
 	}
@@ -89,6 +107,17 @@ func TestSpeciesDetailPropagatesStoreError(t *testing.T) {
 
 	wantErr := errors.New("db down")
 	_, err := NewService(fakeStore{speciesErr: wantErr}, nil).SpeciesDetail(context.Background(), 1, 10, "lt")
+	if !errors.Is(err, wantErr) {
+		t.Errorf("SpeciesDetail() error = %v, want wrapping %v", err, wantErr)
+	}
+}
+
+func TestSpeciesDetailPropagatesLatestChecklistError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("db down")
+	fake := fakeStore{speciesRow: store.Species{ID: 10, ScientificName: "Ciconia ciconia"}, latestErr: wantErr}
+	_, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt")
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SpeciesDetail() error = %v, want wrapping %v", err, wantErr)
 	}

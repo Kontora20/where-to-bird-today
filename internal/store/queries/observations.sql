@@ -10,10 +10,11 @@ SELECT id, source_ref FROM hotspots WHERE source = sqlc.arg(source);
 
 -- name: UpsertObservation :one
 INSERT INTO observations (
-    species_id, hotspot_id, location, observed_on, count, source, source_ref
+    species_id, hotspot_id, checklist_id, location, observed_on, count, source, source_ref
 ) VALUES (
     sqlc.arg(species_id),
     sqlc.narg(hotspot_id),
+    sqlc.arg(checklist_id),
     ST_SetSRID(ST_MakePoint(sqlc.arg(longitude), sqlc.arg(latitude)), 4326)::geography,
     sqlc.arg(observed_on),
     sqlc.narg(count),
@@ -23,6 +24,7 @@ INSERT INTO observations (
 ON CONFLICT (source, source_ref) DO UPDATE SET
     species_id  = EXCLUDED.species_id,
     hotspot_id  = EXCLUDED.hotspot_id,
+    checklist_id = EXCLUDED.checklist_id,
     location    = EXCLUDED.location,
     observed_on = EXCLUDED.observed_on,
     count       = EXCLUDED.count

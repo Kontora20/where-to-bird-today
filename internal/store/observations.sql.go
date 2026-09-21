@@ -75,19 +75,21 @@ func (q *Queries) ListSpeciesAvibaseIDs(ctx context.Context) ([]ListSpeciesAviba
 
 const upsertObservation = `-- name: UpsertObservation :one
 INSERT INTO observations (
-    species_id, hotspot_id, location, observed_on, count, source, source_ref
+    species_id, hotspot_id, checklist_id, location, observed_on, count, source, source_ref
 ) VALUES (
     $1,
     $2,
-    ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography,
-    $5,
+    $3,
+    ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
     $6,
     $7,
-    $8
+    $8,
+    $9
 )
 ON CONFLICT (source, source_ref) DO UPDATE SET
     species_id  = EXCLUDED.species_id,
     hotspot_id  = EXCLUDED.hotspot_id,
+    checklist_id = EXCLUDED.checklist_id,
     location    = EXCLUDED.location,
     observed_on = EXCLUDED.observed_on,
     count       = EXCLUDED.count
@@ -95,20 +97,22 @@ RETURNING id
 `
 
 type UpsertObservationParams struct {
-	SpeciesID  int64       `json:"species_id"`
-	HotspotID  pgtype.Int8 `json:"hotspot_id"`
-	Longitude  float64     `json:"longitude"`
-	Latitude   float64     `json:"latitude"`
-	ObservedOn pgtype.Date `json:"observed_on"`
-	Count      pgtype.Int4 `json:"count"`
-	Source     string      `json:"source"`
-	SourceRef  string      `json:"source_ref"`
+	SpeciesID   int64       `json:"species_id"`
+	HotspotID   pgtype.Int8 `json:"hotspot_id"`
+	ChecklistID pgtype.Int8 `json:"checklist_id"`
+	Longitude   float64     `json:"longitude"`
+	Latitude    float64     `json:"latitude"`
+	ObservedOn  pgtype.Date `json:"observed_on"`
+	Count       pgtype.Int4 `json:"count"`
+	Source      string      `json:"source"`
+	SourceRef   string      `json:"source_ref"`
 }
 
 func (q *Queries) UpsertObservation(ctx context.Context, arg UpsertObservationParams) (int64, error) {
 	row := q.db.QueryRow(ctx, upsertObservation,
 		arg.SpeciesID,
 		arg.HotspotID,
+		arg.ChecklistID,
 		arg.Longitude,
 		arg.Latitude,
 		arg.ObservedOn,

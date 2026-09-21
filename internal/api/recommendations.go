@@ -16,11 +16,9 @@ import (
 
 // dateParamLayout matches the plain "YYYY-MM-DD" a birder would type, not
 // RFC 3339. This isn't a claim that time-of-day never matters for birding --
-// it's that nothing downstream could use one yet: the EBD loader never reads
-// TIME OBSERVATIONS STARTED (internal/ingest/ebd/ebd.go's requiredColumns),
-// observations.observed_on is a date column with no time part, and
-// species_seasonality aggregates by week_of_year only. Accepting a
-// timestamp today would mean silently discarding the time half of it.
+// it's that nothing downstream could use one yet: species_seasonality
+// aggregates by week_of_year only. Accepting a timestamp today would mean
+// silently discarding the time half of it.
 const dateParamLayout = "2006-01-02"
 
 // supportedLanguages is Lithuanian-first: NewMatcher uses the first tag as

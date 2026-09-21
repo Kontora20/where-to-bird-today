@@ -1,5 +1,7 @@
 // Package ebd loads the eBird Basic Dataset -- a tab-separated export of
-// individual observations -- into the observations table.
+// individual observations -- into the checklists and observations tables. It
+// also loads the export's sampling event file, which lists every checklist
+// (including those with no observation rows) and nothing else.
 package ebd
 
 import (
@@ -8,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +30,8 @@ const maxLineSize = 10 * 1024 * 1024
 
 // Stats summarizes one Load call.
 type Stats struct {
+	// Checklists is the number of distinct checklists upserted.
+	Checklists int
 	// Inserted is the number of observations upserted.
 	Inserted int
 	// SkippedUnmatchedSpecies counts species-category rows whose
@@ -43,19 +48,27 @@ type Stats struct {
 // abort the load; Load counts it instead of failing.
 var errSpeciesNotFound = errors.New("no matching species for avibase_id")
 
-// requiredColumns are the EBD columns Load reads, by name rather than
-// position: this is an external vendor export whose column order and count
-// have changed across releases (the file has 52 columns; we only need
-// these).
-var requiredColumns = []string{
-	"GLOBAL UNIQUE IDENTIFIER", "CATEGORY", "TAXON CONCEPT ID",
-	"OBSERVATION COUNT", "LOCALITY ID", "LATITUDE", "LONGITUDE",
-	"OBSERVATION DATE", "APPROVED",
+// checklistColumns are read from every file: the main export and the
+// sampling event file both carry them. Columns are read by name rather than
+// position because this is an external vendor export whose column order and
+// count have changed across releases (the main file has 52 columns; we only
+// need these).
+var checklistColumns = []string{
+	"SAMPLING EVENT IDENTIFIER", "GROUP IDENTIFIER", "LOCALITY ID",
+	"OBSERVATION DATE", "TIME OBSERVATIONS STARTED", "ALL SPECIES REPORTED",
 }
 
-// Load streams the EBD export from r and upserts every approved,
-// species-rank row into observations. Stats reflects rows processed so far
-// even when Load returns an error.
+// observationColumns are read only from the main export.
+var observationColumns = []string{
+	"GLOBAL UNIQUE IDENTIFIER", "CATEGORY", "TAXON CONCEPT ID",
+	"OBSERVATION COUNT", "LATITUDE", "LONGITUDE", "APPROVED",
+}
+
+// Load streams an EBD file from r. A main export upserts every checklist it
+// mentions and every approved, species-rank row as an observation. A
+// sampling event file, recognised by having no observation columns, upserts
+// checklists only. Stats reflects rows processed so far even when Load
+// returns an error.
 func Load(ctx context.Context, queries *store.Queries, r io.Reader) (Stats, error) {
 	speciesByAvibaseID, err := loadSpeciesIndex(ctx, queries)
 	if err != nil {
@@ -86,19 +99,47 @@ func Load(ctx context.Context, queries *store.Queries, r io.Reader) (Stats, erro
 		return Stats{}, errors.New("reading header: file is empty")
 	}
 	header := strings.Split(scanner.Text(), "\t")
-	cols, err := columnIndex(header, requiredColumns)
+	hasObservations := slices.Contains(header, "GLOBAL UNIQUE IDENTIFIER")
+	want := checklistColumns
+	if hasObservations {
+		want = slices.Concat(checklistColumns, observationColumns)
+	}
+	cols, err := columnIndex(header, want)
 	if err != nil {
 		return Stats{}, err
 	}
 
 	var stats Stats
+	checklistIDs := make(map[string]int64)
 	for line := 2; scanner.Scan(); line++ {
 		record := strings.Split(scanner.Text(), "\t")
 		if len(record) != len(header) {
 			return stats, fmt.Errorf("row %d: got %d fields, want %d", line, len(record), len(header))
 		}
 
-		params, err := rowToParams(record, cols, speciesByAvibaseID, hotspotsByRef)
+		// Every row registers its checklist first, whatever happens to the
+		// observation: a checklist whose only rows are filtered out, or whose
+		// species is unmatched, still counts in the denominator of every
+		// frequency at its hotspot.
+		samplingEventID := record[cols["SAMPLING EVENT IDENTIFIER"]]
+		checklistID, seen := checklistIDs[samplingEventID]
+		if !seen {
+			checklist, err := checklistParams(record, cols, hotspotsByRef)
+			if err != nil {
+				return stats, fmt.Errorf("row %d: %w", line, err)
+			}
+			checklistID, err = queries.UpsertChecklist(ctx, checklist)
+			if err != nil {
+				return stats, fmt.Errorf("row %d (checklist %s): %w", line, samplingEventID, err)
+			}
+			checklistIDs[samplingEventID] = checklistID
+			stats.Checklists++
+		}
+		if !hasObservations {
+			continue
+		}
+
+		params, err := rowToParams(record, cols, checklistID, speciesByAvibaseID, hotspotsByRef)
 		if errors.Is(err, errSpeciesNotFound) {
 			stats.SkippedUnmatchedSpecies++
 			continue
@@ -162,11 +203,51 @@ func columnIndex(header []string, want []string) (map[string]int, error) {
 	return index, nil
 }
 
+// checklistParams turns one EBD row into checklist upsert params. Every row
+// of one checklist carries the same values, so the first one seen is enough.
+func checklistParams(record []string, cols map[string]int, hotspotsByRef map[string]int64) (store.UpsertChecklistParams, error) {
+	field := func(name string) string { return record[cols[name]] }
+
+	observedOn, err := time.Parse("2006-01-02", field("OBSERVATION DATE"))
+	if err != nil {
+		return store.UpsertChecklistParams{}, fmt.Errorf("parsing observation date: %w", err)
+	}
+	startedAt, err := parseStartTime(field("TIME OBSERVATIONS STARTED"))
+	if err != nil {
+		return store.UpsertChecklistParams{}, err
+	}
+	hotspotID, hasHotspot := hotspotsByRef[field("LOCALITY ID")]
+	group := field("GROUP IDENTIFIER")
+
+	return store.UpsertChecklistParams{
+		SamplingEventID:    field("SAMPLING EVENT IDENTIFIER"),
+		GroupID:            pgtype.Text{String: group, Valid: group != ""},
+		HotspotID:          pgtype.Int8{Int64: hotspotID, Valid: hasHotspot},
+		ObservedOn:         pgtype.Date{Time: observedOn, Valid: true},
+		StartedAt:          startedAt,
+		AllSpeciesReported: field("ALL SPECIES REPORTED") == "1",
+	}, nil
+}
+
+// parseStartTime reads TIME OBSERVATIONS STARTED, local time as HH:MM:SS.
+// Some checklists have none, which is NULL rather than midnight.
+func parseStartTime(raw string) (pgtype.Time, error) {
+	if raw == "" {
+		return pgtype.Time{}, nil
+	}
+	parsed, err := time.Parse("15:04:05", raw)
+	if err != nil {
+		return pgtype.Time{}, fmt.Errorf("parsing start time: %w", err)
+	}
+	sinceMidnight := time.Duration(parsed.Hour())*time.Hour + time.Duration(parsed.Minute())*time.Minute + time.Duration(parsed.Second())*time.Second
+	return pgtype.Time{Microseconds: sinceMidnight.Microseconds(), Valid: true}, nil
+}
+
 // rowToParams turns one EBD row into observation upsert params. It returns
 // (nil, nil) for a row Load should silently skip (not species-rank, or not
 // approved), and errSpeciesNotFound when the row's TAXON CONCEPT ID has no
 // matching species.
-func rowToParams(record []string, cols map[string]int, speciesByAvibaseID, hotspotsByRef map[string]int64) (*store.UpsertObservationParams, error) {
+func rowToParams(record []string, cols map[string]int, checklistID int64, speciesByAvibaseID, hotspotsByRef map[string]int64) (*store.UpsertObservationParams, error) {
 	field := func(name string) string { return record[cols[name]] }
 
 	if field("CATEGORY") != "species" || field("APPROVED") != "1" {
@@ -194,14 +275,15 @@ func rowToParams(record []string, cols map[string]int, speciesByAvibaseID, hotsp
 	hotspotID, hasHotspot := hotspotsByRef[field("LOCALITY ID")]
 
 	return &store.UpsertObservationParams{
-		SpeciesID:  speciesID,
-		HotspotID:  pgtype.Int8{Int64: hotspotID, Valid: hasHotspot},
-		Longitude:  longitude,
-		Latitude:   latitude,
-		ObservedOn: pgtype.Date{Time: observedOn, Valid: true},
-		Count:      parseCount(field("OBSERVATION COUNT")),
-		Source:     Source,
-		SourceRef:  field("GLOBAL UNIQUE IDENTIFIER"),
+		SpeciesID:   speciesID,
+		HotspotID:   pgtype.Int8{Int64: hotspotID, Valid: hasHotspot},
+		ChecklistID: pgtype.Int8{Int64: checklistID, Valid: true},
+		Longitude:   longitude,
+		Latitude:    latitude,
+		ObservedOn:  pgtype.Date{Time: observedOn, Valid: true},
+		Count:       parseCount(field("OBSERVATION COUNT")),
+		Source:      Source,
+		SourceRef:   field("GLOBAL UNIQUE IDENTIFIER"),
 	}, nil
 }
 

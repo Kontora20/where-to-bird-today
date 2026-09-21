@@ -104,6 +104,27 @@ Open a psql shell:
 docker exec -it wtbt-postgres psql -U birder -d wheretobird
 ```
 
+## Loading eBird data
+
+Request the Baltic countries from the [eBird Basic Dataset](https://ebird.org/data/download) with the
+sampling event data option, and unzip each export. Load the hotspots and species first
+(`cmd/ingest-ebird-hotspots`, `cmd/ingest-avilist`), then for each export load the main file and its
+`_sampling.txt` file, then rebuild the seasonality table:
+
+```bash
+go run ./cmd/ingest-ebd path/to/ebd_LT_..._relJun-2026.txt
+go run ./cmd/ingest-ebd path/to/ebd_LT_..._relJun-2026_sampling.txt
+go run ./cmd/compute-seasonality
+```
+
+Both files are needed for exact frequencies: the sampling file lists every checklist, including the
+ones with no observation rows, and each frequency is out of all complete checklists. Loading is
+idempotent (rows are upserted), so overlapping date ranges are harmless. Expect about 1,000 rows
+per second, one transaction per file.
+
+**Run `compute-seasonality` only after the checklists are loaded.** It rebuilds the table from
+`checklists`, so with none loaded it replaces the table with nothing.
+
 ## Travel time
 
 Searches by drive time (`max_minutes`) ask a local OSRM routing server how long it takes to drive to

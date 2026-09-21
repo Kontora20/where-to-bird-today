@@ -399,7 +399,9 @@
 							<div
 								class="week-bar"
 								style="height: {(match?.frequency ?? 0) * 100}%"
-								title="Week {week}: {match ? `${(match.frequency * 100).toFixed(0)}%` : 'no data'}"
+								title="Week {week}: {match
+									? `${(match.frequency * 100).toFixed(0)}% of ${match.checklists} ${match.checklists === 1 ? 'checklist' : 'checklists'}`
+									: 'no data'}"
 							></div>
 						{/each}
 					</div>
@@ -407,6 +409,10 @@
 
 				<ul class="links">
 					{#each [
+						{
+							url: openSpecies.latest_checklist?.url,
+							label: `Latest record at this hotspot (${openSpecies.latest_checklist?.observed_on})`
+						},
 						{ url: openSpecies.ebird_url, label: 'eBird' },
 						{ url: openSpecies.birds_of_the_world_url, label: 'Birds of the World' },
 						{ url: openSpecies.birdlife_datazone_url, label: 'BirdLife DataZone' }
