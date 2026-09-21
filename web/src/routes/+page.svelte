@@ -342,7 +342,7 @@
 					{#each hotspot.top_species as species (species.species_id)}
 						<li>
 							<button type="button" onclick={() => openSpeciesDetail(hotspot.hotspot_id, species.species_id)}>
-								{species.common_name} ({(species.frequency * 100).toFixed(0)}%)
+								{species.common_name} ({(species.frequency * 100).toFixed(0)}% of {species.checklists})
 							</button>
 						</li>
 					{/each}

@@ -120,7 +120,7 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 
 	fake := fakeStore{
 		rows: []store.RecommendHotspotsRow{
-			{HotspotID: 1, HotspotName: "Nemunas Delta", HotspotSource: "ebird", HotspotSourceRef: "L123456", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia"), Frequency: pgtypeFloat4(0.9)},
+			{HotspotID: 1, HotspotName: "Nemunas Delta", HotspotSource: "ebird", HotspotSourceRef: "L123456", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(10), ScientificName: pgtypeText("Ciconia ciconia"), Frequency: pgtypeFloat4(0.9), Checklists: pgtype.Int4{Int32: 12, Valid: true}},
 			{HotspotID: 1, HotspotName: "Nemunas Delta", HotspotSource: "ebird", HotspotSourceRef: "L123456", Latitude: pgtypeFloat8(55.3), Longitude: pgtypeFloat8(21.3), DistanceMeters: pgtypeFloat8(5000), Score: 1.5, SpeciesID: pgtypeInt8(11), ScientificName: pgtypeText("Anas platyrhynchos"), Frequency: pgtypeFloat4(0.6)},
 			{HotspotID: 2, HotspotName: "Kaunas Lagoon", HotspotSource: "manual", HotspotSourceRef: "internal-2", Latitude: pgtypeFloat8(54.9), Longitude: pgtypeFloat8(23.9), DistanceMeters: pgtypeFloat8(20000), Score: 0, SpeciesID: pgtype.Int8{}, ScientificName: pgtype.Text{}, Frequency: pgtype.Float4{}},
 		},
@@ -148,6 +148,9 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 	}
 	if len(first.TopSpecies) != 2 {
 		t.Fatalf("len(got[0].TopSpecies) = %d, want 2", len(first.TopSpecies))
+	}
+	if got, want := first.TopSpecies[0].Checklists, int32(12); got != want {
+		t.Errorf("TopSpecies[0].Checklists = %d, want %d", got, want)
 	}
 	if got, want := first.TopSpecies[0].CommonName, "Baltasis gandras"; got != want {
 		t.Errorf("TopSpecies[0].CommonName = %q, want %q (lt requested and available)", got, want)

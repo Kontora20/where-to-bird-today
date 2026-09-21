@@ -62,12 +62,15 @@ type Params struct {
 	SpeciesIDs []int64
 }
 
-// ExpectedSpecies is one species likely to be seen, ranked by frequency.
+// ExpectedSpecies is one species likely to be seen. Frequency is the share of
+// the hotspot's Checklists that recorded it, as eBird counts it; the species
+// are ranked by an adjusted frequency that trusts a small Checklists less.
 type ExpectedSpecies struct {
 	SpeciesID      int64   `json:"species_id"`
 	CommonName     string  `json:"common_name"`
 	ScientificName string  `json:"scientific_name"`
 	Frequency      float32 `json:"frequency"`
+	Checklists     int32   `json:"checklists"`
 }
 
 // Recommendation is one ranked hotspot.
@@ -265,6 +268,7 @@ func groupByHotspot(rows []store.RecommendHotspotsRow) []Recommendation {
 			SpeciesID:      row.SpeciesID.Int64,
 			ScientificName: row.ScientificName.String,
 			Frequency:      row.Frequency.Float32,
+			Checklists:     row.Checklists.Int32,
 		})
 	}
 

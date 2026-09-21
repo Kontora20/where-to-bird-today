@@ -122,6 +122,11 @@ ones with no observation rows, and each frequency is out of all complete checkli
 idempotent (rows are upserted), so overlapping date ranges are harmless. Expect about 1,000 rows
 per second, one transaction per file.
 
+`compute-seasonality` also stores an `adjusted_frequency` for each row: the frequency pulled toward the
+country's frequency for the same species and week, more strongly the fewer checklists it rests on. Hotspots
+are ranked by it, so one sighting in three checklists no longer outranks 25% over 200. Change
+`priorChecklists` in `internal/ingest/seasonality/seasonality.go` and run it again to tune the pull.
+
 **Run `compute-seasonality` only after the checklists are loaded.** It rebuilds the table from
 `checklists`, so with none loaded it replaces the table with nothing.
 

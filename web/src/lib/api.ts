@@ -7,6 +7,8 @@ export interface ExpectedSpecies {
 	common_name: string;
 	scientific_name: string;
 	frequency: number;
+	// How many complete checklists the frequency is out of.
+	checklists: number;
 }
 
 export interface Recommendation {

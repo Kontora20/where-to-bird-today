@@ -215,6 +215,11 @@ func TestUpsertHotspotIsIdempotent(t *testing.T) {
 // (0.5, not 3 of 5), C nowhere. It then deletes S3 and recomputes: a stale
 // sample_size of 4 surviving would mean the table was appended to, not
 // rebuilt.
+//
+// A second hotspot in the same country has one complete checklist with
+// species A, which sets the country's frequency the hotspots' adjusted
+// frequencies are pulled toward: with a prior of 5 checklists, A at the
+// first hotspot is (2 + 5*0.6) / (4 + 5) and at the second (1 + 5*0.6) / (1 + 5).
 func TestRecomputeSpeciesSeasonality(t *testing.T) {
 	t.Parallel()
 
@@ -245,6 +250,18 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 		}
 		return species.ID
 	}
+	otherHotspot, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name:      "Seasonality Test Other Hotspot",
+		Longitude: 25.5,
+		Latitude:  55.5,
+		Region:    "LT",
+		Source:    "test",
+		SourceRef: "test-seasonality-other-hotspot",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot (other): %v", err)
+	}
+
 	speciesA := seedSpecies("Testus speciesa", "avibase-TESTAAA1")
 	speciesB := seedSpecies("Testus speciesb", "avibase-TESTBBB1")
 	speciesC := seedSpecies("Testus speciesc", "avibase-TESTCCC1")
@@ -302,12 +319,34 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 	seedObservation(s6, speciesC, true, 5, "obs-s6-c")
 	seedObservation(s7, speciesA, false, 6, "obs-s7-a")
 
+	s8, err := queries.UpsertChecklist(ctx, UpsertChecklistParams{
+		SamplingEventID:    "S8",
+		HotspotID:          pgtype.Int8{Int64: otherHotspot.ID, Valid: true},
+		ObservedOn:         pgtype.Date{Time: time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC), Valid: true},
+		AllSpeciesReported: true,
+	})
+	if err != nil {
+		t.Fatalf("seeding checklist S8: %v", err)
+	}
+	if _, err := queries.UpsertObservation(ctx, UpsertObservationParams{
+		SpeciesID:   speciesA,
+		HotspotID:   pgtype.Int8{Int64: otherHotspot.ID, Valid: true},
+		ChecklistID: pgtype.Int8{Int64: s8, Valid: true},
+		Longitude:   25.5,
+		Latitude:    55.5,
+		ObservedOn:  pgtype.Date{Time: time.Date(2026, 3, 3, 0, 0, 0, 0, time.UTC), Valid: true},
+		Source:      "test",
+		SourceRef:   "obs-s8-a",
+	}); err != nil {
+		t.Fatalf("seeding observation obs-s8-a: %v", err)
+	}
+
 	recompute := func() {
 		t.Helper()
 		if err := queries.TruncateSpeciesSeasonality(ctx); err != nil {
 			t.Fatalf("TruncateSpeciesSeasonality: %v", err)
 		}
-		if _, err := queries.RecomputeSpeciesSeasonality(ctx); err != nil {
+		if _, err := queries.RecomputeSpeciesSeasonality(ctx, 5); err != nil {
 			t.Fatalf("RecomputeSpeciesSeasonality: %v", err)
 		}
 	}
@@ -315,8 +354,9 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 
 	_, weekOfYear := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC).ISOWeek()
 
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA, weekOfYear, 2.0/4.0, 4)
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB, weekOfYear, 2.0/4.0, 4)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA, weekOfYear, 2.0/4.0, 4, 5.0/9.0)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB, weekOfYear, 2.0/4.0, 4, 4.0/9.0)
+	assertSeasonality(ctx, t, pool, otherHotspot.ID, speciesA, weekOfYear, 1.0, 1, 4.0/6.0)
 
 	var rowsForC int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM species_seasonality WHERE species_id = $1", speciesC).Scan(&rowsForC); err != nil {
@@ -331,8 +371,8 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 	}
 	recompute()
 
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA, weekOfYear, 2.0/3.0, 3)
-	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB, weekOfYear, 2.0/3.0, 3)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesA, weekOfYear, 2.0/3.0, 3, 5.75/8.0)
+	assertSeasonality(ctx, t, pool, hotspot.ID, speciesB, weekOfYear, 2.0/3.0, 3, 4.5/8.0)
 
 	// The latest checklist that recorded species A at the hotspot is S2 (the
 	// personal-location S7 is later but not at this hotspot). A species never
@@ -349,15 +389,15 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 	}
 }
 
-func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32) {
+func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32, wantAdjusted float64) {
 	t.Helper()
 
-	var frequency float32
+	var frequency, adjusted float32
 	var sampleSize int32
 	err := pool.QueryRow(ctx,
-		"SELECT frequency, sample_size FROM species_seasonality WHERE hotspot_id = $1 AND species_id = $2 AND week_of_year = $3",
+		"SELECT frequency, adjusted_frequency, sample_size FROM species_seasonality WHERE hotspot_id = $1 AND species_id = $2 AND week_of_year = $3",
 		hotspotID, speciesID, weekOfYear,
-	).Scan(&frequency, &sampleSize)
+	).Scan(&frequency, &adjusted, &sampleSize)
 	if err != nil {
 		t.Fatalf("reading species_seasonality (hotspot=%d species=%d week=%d): %v", hotspotID, speciesID, weekOfYear, err)
 	}
@@ -366,6 +406,9 @@ func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, ho
 	// floatsClose's, which is calibrated for PostGIS coordinate round-trips.
 	if math.Abs(float64(frequency)-wantFrequency) > 1e-4 {
 		t.Errorf("frequency = %v, want %v", frequency, wantFrequency)
+	}
+	if math.Abs(float64(adjusted)-wantAdjusted) > 1e-4 {
+		t.Errorf("adjusted_frequency = %v, want %v", adjusted, wantAdjusted)
 	}
 	if sampleSize != wantSampleSize {
 		t.Errorf("sample_size = %d, want %d", sampleSize, wantSampleSize)
@@ -380,9 +423,12 @@ func floatsClose(got, want float64) bool {
 // a 25km search radius, one well outside it -- and checks that
 // RecommendHotspots (a) excludes the far hotspot, (b) still lists a nearby
 // hotspot with no seasonality data for the queried week (score 0, no
-// species), (c) ranks species within a hotspot by frequency, (d) respects
+// species), (c) ranks species within a hotspot by adjusted frequency, not the
+// raw one it returns, (d) respects
 // TopSpeciesLimit, and (e) an explicit species_ids filter narrows both the
-// species returned and the score computed from them.
+// species returned and the score computed from them. Species are ranked by
+// adjusted frequency: the rare species has the higher raw frequency here but
+// the lower adjusted one.
 func TestRecommendHotspots(t *testing.T) {
 	t.Parallel()
 
@@ -430,18 +476,18 @@ func TestRecommendHotspots(t *testing.T) {
 		t.Fatalf("UpsertSpecies (rare): %v", err)
 	}
 
-	seedSeasonality := func(hotspotID, speciesID int64, frequency float32) {
+	seedSeasonality := func(hotspotID, speciesID int64, frequency, adjustedFrequency float32) {
 		t.Helper()
 		_, err := pool.Exec(ctx,
-			"INSERT INTO species_seasonality (hotspot_id, species_id, week_of_year, frequency, sample_size) VALUES ($1, $2, $3, $4, 10)",
-			hotspotID, speciesID, week, frequency,
+			"INSERT INTO species_seasonality (hotspot_id, species_id, week_of_year, frequency, adjusted_frequency, sample_size) VALUES ($1, $2, $3, $4, $5, 10)",
+			hotspotID, speciesID, week, frequency, adjustedFrequency,
 		)
 		if err != nil {
 			t.Fatalf("seeding species_seasonality: %v", err)
 		}
 	}
-	seedSeasonality(near.ID, common.ID, 0.8)
-	seedSeasonality(near.ID, rare.ID, 0.3)
+	seedSeasonality(near.ID, common.ID, 0.8, 0.8)
+	seedSeasonality(near.ID, rare.ID, 0.9, 0.3)
 	// noData and the far hotspot deliberately get no seasonality rows: the
 	// far one is proven excluded by radius alone, so it doesn't need any.
 
@@ -487,7 +533,7 @@ func TestRecommendHotspots(t *testing.T) {
 		}
 	})
 
-	t.Run("ranks species within a hotspot by frequency", func(t *testing.T) {
+	t.Run("ranks species within a hotspot by adjusted frequency", func(t *testing.T) {
 		rows := recommend(RecommendHotspotsParams{})
 
 		var nearSpecies []RecommendHotspotsRow
@@ -499,11 +545,14 @@ func TestRecommendHotspots(t *testing.T) {
 		if len(nearSpecies) != 2 || nearSpecies[0].SpeciesID.Int64 != common.ID || nearSpecies[1].SpeciesID.Int64 != rare.ID {
 			t.Fatalf("near hotspot species order = %+v, want [common, rare]", nearSpecies)
 		}
+		if math.Abs(float64(nearSpecies[1].Frequency.Float32)-0.9) > 1e-4 || nearSpecies[1].Checklists.Int32 != 10 {
+			t.Errorf("rare species frequency = %v of %d checklists, want the recorded 0.9 of 10", nearSpecies[1].Frequency.Float32, nearSpecies[1].Checklists.Int32)
+		}
 		// Score sums two float32 frequencies, so -- like assertSeasonality
 		// above -- this needs a coarser tolerance than floatsClose's, which
 		// is calibrated for float64 PostGIS coordinate round-trips.
 		if math.Abs(float64(nearSpecies[0].Score)-1.1) > 1e-4 {
-			t.Errorf("near hotspot score = %v, want ~1.1 (0.8 + 0.3)", nearSpecies[0].Score)
+			t.Errorf("near hotspot score = %v, want ~1.1 (0.8 + 0.3, the adjusted frequencies)", nearSpecies[0].Score)
 		}
 	})
 
@@ -532,7 +581,7 @@ func TestRecommendHotspots(t *testing.T) {
 				t.Errorf("species_ids filter let through species %d, want only %d", r.SpeciesID.Int64, rare.ID)
 			}
 			if math.Abs(float64(r.Score)-0.3) > 1e-4 {
-				t.Errorf("filtered score = %v, want 0.3 (rare's frequency alone)", r.Score)
+				t.Errorf("filtered score = %v, want 0.3 (rare's adjusted frequency alone)", r.Score)
 			}
 		}
 	})

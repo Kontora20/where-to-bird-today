@@ -34,15 +34,15 @@ matching AS (
     -- first lets Postgres index-scan per hotspot instead of scanning the
     -- whole table by week_of_year. This CTE is referenced twice below, which
     -- stops Postgres inlining it, so this join order is what actually runs.
-    SELECT s.hotspot_id, s.species_id, s.frequency
+    SELECT s.hotspot_id, s.species_id, s.frequency, s.adjusted_frequency, s.sample_size
     FROM species_seasonality s
     JOIN nearby n ON n.id = s.hotspot_id
     WHERE s.week_of_year = $6
       AND ($2::bigint[] IS NULL OR s.species_id = ANY($2::bigint[]))
 ),
 ranked AS (
-    SELECT hotspot_id, species_id, frequency,
-           ROW_NUMBER() OVER (PARTITION BY hotspot_id ORDER BY frequency DESC) AS rank
+    SELECT hotspot_id, species_id, frequency, sample_size,
+           ROW_NUMBER() OVER (PARTITION BY hotspot_id ORDER BY adjusted_frequency DESC) AS rank
     FROM matching
 )
 SELECT
@@ -56,15 +56,16 @@ SELECT
     COALESCE(scores.total_frequency, 0)::real AS score,
     r.species_id,
     sp.scientific_name,
-    r.frequency
+    r.frequency,
+    r.sample_size AS checklists
 FROM nearby n
 LEFT JOIN (
-    SELECT hotspot_id, SUM(frequency) AS total_frequency FROM matching GROUP BY hotspot_id
+    SELECT hotspot_id, SUM(adjusted_frequency) AS total_frequency FROM matching GROUP BY hotspot_id
 ) scores ON scores.hotspot_id = n.id
 LEFT JOIN ranked r ON r.hotspot_id = n.id AND r.rank <= $1
 LEFT JOIN species sp ON sp.id = r.species_id
 WHERE $2::bigint[] IS NULL OR scores.total_frequency IS NOT NULL
-ORDER BY score DESC, n.id, r.frequency DESC NULLS LAST
+ORDER BY score DESC, n.id, r.rank
 `
 
 type RecommendHotspotsParams struct {
@@ -88,10 +89,14 @@ type RecommendHotspotsRow struct {
 	SpeciesID        pgtype.Int8   `json:"species_id"`
 	ScientificName   pgtype.Text   `json:"scientific_name"`
 	Frequency        pgtype.Float4 `json:"frequency"`
+	Checklists       pgtype.Int4   `json:"checklists"`
 }
 
 // Ranks hotspots within radius_meters of a point by expected species
-// richness for one ISO week, using the species_seasonality baseline. Returns
+// richness for one ISO week, using the species_seasonality baseline. Species
+// and hotspots are ordered by adjusted_frequency, which discounts frequencies
+// resting on few checklists; frequency and sample_size come back as recorded,
+// so the caller can show what the ranking rests on. Returns
 // one row per (hotspot, top-N species) pair, flattened -- Go groups them back
 // up by hotspot_id. A hotspot with no seasonality rows for that week still
 // appears (score 0, species_id NULL): ST_DWithin found it, so it stays honest
@@ -126,6 +131,7 @@ func (q *Queries) RecommendHotspots(ctx context.Context, arg RecommendHotspotsPa
 			&i.SpeciesID,
 			&i.ScientificName,
 			&i.Frequency,
+			&i.Checklists,
 		); err != nil {
 			return nil, err
 		}

@@ -94,10 +94,11 @@ type SpeciesName struct {
 }
 
 type SpeciesSeasonality struct {
-	HotspotID  int64              `json:"hotspot_id"`
-	SpeciesID  int64              `json:"species_id"`
-	WeekOfYear int16              `json:"week_of_year"`
-	Frequency  float32            `json:"frequency"`
-	SampleSize int32              `json:"sample_size"`
-	ComputedAt pgtype.Timestamptz `json:"computed_at"`
+	HotspotID         int64              `json:"hotspot_id"`
+	SpeciesID         int64              `json:"species_id"`
+	WeekOfYear        int16              `json:"week_of_year"`
+	Frequency         float32            `json:"frequency"`
+	SampleSize        int32              `json:"sample_size"`
+	ComputedAt        pgtype.Timestamptz `json:"computed_at"`
+	AdjustedFrequency float32            `json:"adjusted_frequency"`
 }
