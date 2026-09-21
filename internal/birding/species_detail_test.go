@@ -39,7 +39,7 @@ func TestSpeciesDetail(t *testing.T) {
 		},
 	}
 
-	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt")
+	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
 	if err != nil {
 		t.Fatalf("SpeciesDetail() error = %v", err)
 	}
@@ -87,7 +87,7 @@ func TestSpeciesDetailNoPhoto(t *testing.T) {
 		speciesRow: store.Species{ID: 99, ScientificName: "Rallus aquaticus"},
 	}
 
-	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 99, "lt")
+	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 99, "lt", time.Time{})
 	if err != nil {
 		t.Fatalf("SpeciesDetail() error = %v", err)
 	}
@@ -106,7 +106,7 @@ func TestSpeciesDetailPropagatesStoreError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("db down")
-	_, err := NewService(fakeStore{speciesErr: wantErr}, nil).SpeciesDetail(context.Background(), 1, 10, "lt")
+	_, err := NewService(fakeStore{speciesErr: wantErr}, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SpeciesDetail() error = %v, want wrapping %v", err, wantErr)
 	}
@@ -117,7 +117,7 @@ func TestSpeciesDetailPropagatesLatestChecklistError(t *testing.T) {
 
 	wantErr := errors.New("db down")
 	fake := fakeStore{speciesRow: store.Species{ID: 10, ScientificName: "Ciconia ciconia"}, latestErr: wantErr}
-	_, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt")
+	_, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("SpeciesDetail() error = %v, want wrapping %v", err, wantErr)
 	}

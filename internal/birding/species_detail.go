@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,8 +42,9 @@ type LatestChecklist struct {
 
 // SpeciesDetail is everything the species detail panel shows (ADR 0004):
 // name, outbound reference links, one photo, and this hotspot's
-// week-by-week seasonality for the species. Content besides Photo is never
-// missing -- a species with no photo yet still has a name and links.
+// week-by-week seasonality and hour-by-hour time of day for the species.
+// Content besides Photo is never missing -- a species with no photo yet
+// still has a name and links.
 //
 // No Avibase link: not a data problem (species.avibase_id's truncated form
 // does resolve on Avibase's site) but a value one -- its lang=LT page only
@@ -57,14 +59,16 @@ type SpeciesDetail struct {
 	EBirdURL            string           `json:"ebird_url,omitempty"`
 	Photo               *Photo           `json:"photo,omitempty"`
 	Seasonality         []WeekFrequency  `json:"seasonality"`
+	TimeOfDay           []HourFrequency  `json:"time_of_day"`
 	LatestChecklist     *LatestChecklist `json:"latest_checklist,omitempty"`
 }
 
 // SpeciesDetail returns the detail panel's contents for one species, scoped
 // to how it behaves at one hotspot -- species_seasonality is measured per
 // hotspot, so "seasonality" only means anything alongside a hotspot to
-// measure it at.
-func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string) (SpeciesDetail, error) {
+// measure it at. date sets the clock times the time of day is shown at; only
+// its calendar date is used.
+func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string, date time.Time) (SpeciesDetail, error) {
 	species, err := s.store.GetSpecies(ctx, speciesID)
 	if err != nil {
 		return SpeciesDetail{}, fmt.Errorf("loading species: %w", err)
@@ -110,6 +114,11 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		seasonality[i] = WeekFrequency{Week: row.WeekOfYear, Frequency: row.Frequency, Checklists: row.SampleSize}
 	}
 
+	timeOfDay, err := s.timeOfDay(ctx, hotspotID, speciesID, date)
+	if err != nil {
+		return SpeciesDetail{}, err
+	}
+
 	var latestChecklist *LatestChecklist
 	latest, err := s.store.GetLatestChecklistWithSpecies(ctx, store.GetLatestChecklistWithSpeciesParams{
 		SpeciesID: speciesID,
@@ -139,6 +148,7 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		EBirdURL:            ebirdURL,
 		Photo:               photo,
 		Seasonality:         seasonality,
+		TimeOfDay:           timeOfDay,
 		LatestChecklist:     latestChecklist,
 	}, nil
 }

@@ -125,6 +125,8 @@ type Store interface {
 	ListSpeciesMedia(ctx context.Context, speciesID int64) ([]store.SpeciesMedium, error)
 	GetSpeciesSeasonalityAtHotspot(ctx context.Context, arg store.GetSpeciesSeasonalityAtHotspotParams) ([]store.GetSpeciesSeasonalityAtHotspotRow, error)
 	GetLatestChecklistWithSpecies(ctx context.Context, arg store.GetLatestChecklistWithSpeciesParams) (store.GetLatestChecklistWithSpeciesRow, error)
+	GetHotspot(ctx context.Context, id int64) (store.GetHotspotRow, error)
+	GetSpeciesTimeOfDay(ctx context.Context, arg store.GetSpeciesTimeOfDayParams) ([]store.GetSpeciesTimeOfDayRow, error)
 }
 
 // DriveTimeFinder measures the drive time from one point to many.

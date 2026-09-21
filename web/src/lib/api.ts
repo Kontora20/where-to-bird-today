@@ -89,6 +89,22 @@ export interface WeekFrequency {
 	checklists: number;
 }
 
+export interface HourFrequency {
+	// 0 to 23, counted from sunrise: 0 is the first hour after it and 23 the
+	// hour before the next one, so the night is the hours in between.
+	hours_after_sunrise: number;
+	// The hour's clock times on the requested date, as HH:MM. An hour that
+	// passes midnight has an end earlier than its start.
+	start: string;
+	end: string;
+	frequency: number;
+	// How many complete checklists started in this hour at the hotspot.
+	checklists: number;
+	// Frequency pulled toward the region's, more strongly the fewer
+	// checklists it rests on. The best hours are picked by this.
+	adjusted_frequency: number;
+}
+
 export interface SpeciesDetail {
 	species_id: number;
 	common_name: string;
@@ -98,12 +114,18 @@ export interface SpeciesDetail {
 	ebird_url?: string;
 	photo?: Photo;
 	seasonality: WeekFrequency[];
+	time_of_day: HourFrequency[];
 	// Absent when the species was never recorded at the hotspot.
 	latest_checklist?: { url: string; observed_on: string };
 }
 
-export async function getSpeciesDetail(hotspotId: number, speciesId: number): Promise<SpeciesDetail> {
-	const response = await fetch(`/hotspots/${hotspotId}/species/${speciesId}`);
+// date (YYYY-MM-DD) sets the day the time of day is shown at; today when omitted.
+export async function getSpeciesDetail(hotspotId: number, speciesId: number, date?: string): Promise<SpeciesDetail> {
+	const params = new URLSearchParams();
+	if (date) {
+		params.set('date', date);
+	}
+	const response = await fetch(`/hotspots/${hotspotId}/species/${speciesId}?${params}`);
 	if (!response.ok) {
 		throw new Error(`species detail request failed: ${response.status}`);
 	}

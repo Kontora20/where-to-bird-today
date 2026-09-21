@@ -6,6 +6,7 @@
 		getRecommendations,
 		getSpeciesDetail,
 		searchSpecies,
+		type HourFrequency,
 		type Recommendation,
 		type SpeciesDetail,
 		type SpeciesMatch
@@ -37,6 +38,29 @@
 	let speciesError = $state('');
 
 	const yearWeeks = Array.from({ length: 52 }, (_, index) => index + 1);
+	const hoursAfterSunrise = Array.from({ length: 24 }, (_, index) => index);
+
+	// The hours within a tenth of the best one. Neighbouring hours join into one
+	// clock range.
+	function bestHours(hours: HourFrequency[], highest: number): HourFrequency[] {
+		return hours.filter((hour) => highest > 0 && hour.adjusted_frequency >= 0.9 * highest);
+	}
+
+	function clockRanges(hours: HourFrequency[]): string[] {
+		const ranges: string[] = [];
+		let first: HourFrequency | undefined;
+		let last: HourFrequency | undefined;
+		for (const hour of hours) {
+			if (first && last && hour.hours_after_sunrise === last.hours_after_sunrise + 1) {
+				last = hour;
+				continue;
+			}
+			if (first && last) ranges.push(`${first.start}–${last.end}`);
+			first = last = hour;
+		}
+		if (first && last) ranges.push(`${first.start}–${last.end}`);
+		return ranges;
+	}
 
 	let mapContainer: HTMLDivElement;
 	let leaflet: typeof Leaflet;
@@ -125,7 +149,7 @@
 		speciesLoading = true;
 		openSpecies = null;
 		try {
-			openSpecies = await getSpeciesDetail(hotspotId, speciesId);
+			openSpecies = await getSpeciesDetail(hotspotId, speciesId, date || undefined);
 		} catch (err) {
 			speciesError = err instanceof Error ? err.message : 'failed to load species detail';
 		} finally {
@@ -405,6 +429,29 @@
 							></div>
 						{/each}
 					</div>
+				{/if}
+
+				{#if openSpecies.time_of_day.length > 0}
+					{@const highest = Math.max(...openSpecies.time_of_day.map((hour) => hour.adjusted_frequency))}
+					{@const best = bestHours(openSpecies.time_of_day, highest)}
+					<h3>Time of day at this hotspot</h3>
+					<div class="time-of-day">
+						{#each hoursAfterSunrise as hourAfterSunrise (hourAfterSunrise)}
+							{@const match = openSpecies.time_of_day.find((hour) => hour.hours_after_sunrise === hourAfterSunrise)}
+							<div
+								class="hour-bar"
+								class:best={match && best.includes(match)}
+								style="height: {match && highest > 0 ? (match.adjusted_frequency / highest) * 100 : 0}%"
+								title={match
+									? `${match.start}–${match.end}: ${(match.adjusted_frequency * 100).toFixed(0)}% expected (${(match.frequency * 100).toFixed(0)}% of ${match.checklists} ${match.checklists === 1 ? 'checklist' : 'checklists'} here)`
+									: 'no data'}
+							></div>
+						{/each}
+					</div>
+					<p class="time-of-day-note">
+						{#if best.length > 0}Best: {clockRanges(best).join(', ')}.{/if}
+						The bars run from sunrise around the clock; their height is relative to the best hour.
+					</p>
 				{/if}
 
 				<ul class="links">
@@ -687,6 +734,31 @@
 		gap: 1px;
 		height: 80px;
 		border-bottom: 1px solid var(--color-border);
+	}
+
+	.time-of-day {
+		display: flex;
+		align-items: flex-end;
+		gap: 2px;
+		height: 80px;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.hour-bar {
+		flex: 1;
+		min-height: 2px;
+		background: var(--color-accent-bg);
+		border-radius: 2px 2px 0 0;
+	}
+
+	.hour-bar.best {
+		background: var(--color-accent);
+	}
+
+	.time-of-day-note {
+		font-size: 0.75rem;
+		color: var(--color-muted);
+		margin: 0.25rem 0 0;
 	}
 
 	.week-bar {

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Kontora20/where-to-bird-today/internal/birding"
 )
@@ -24,6 +25,7 @@ type fakeRecommendationService struct {
 	// gotParams is a pointer because the methods have value receivers: a
 	// plain field would be written to a copy.
 	gotParams *birding.Params
+	gotDate   *time.Time
 }
 
 func (f fakeRecommendationService) Recommend(_ context.Context, params birding.Params) ([]birding.Recommendation, error) {
@@ -43,7 +45,10 @@ func (f fakeRecommendationService) SearchSpecies(_ context.Context, _, _ string)
 	return f.searchFound, nil
 }
 
-func (f fakeRecommendationService) SpeciesDetail(_ context.Context, _, _ int64, _ string) (birding.SpeciesDetail, error) {
+func (f fakeRecommendationService) SpeciesDetail(_ context.Context, _, _ int64, _ string, date time.Time) (birding.SpeciesDetail, error) {
+	if f.gotDate != nil {
+		*f.gotDate = date
+	}
 	if f.speciesErr != nil {
 		return birding.SpeciesDetail{}, f.speciesErr
 	}

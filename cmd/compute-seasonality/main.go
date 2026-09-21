@@ -1,6 +1,7 @@
-// Command compute-seasonality rebuilds species_seasonality from the
-// observations currently in Postgres. Safe to re-run any time observations
-// changes -- it always recomputes the whole table, never incrementally.
+// Command compute-seasonality rebuilds the tables derived from the checklists
+// and observations currently in Postgres: species_seasonality, and the
+// time-of-day counts the species panel reads. Safe to re-run any time they
+// change -- it always recomputes everything, never incrementally.
 package main
 
 import (
@@ -12,6 +13,7 @@ import (
 	"github.com/Kontora20/where-to-bird-today/internal/config"
 	"github.com/Kontora20/where-to-bird-today/internal/ingest"
 	"github.com/Kontora20/where-to-bird-today/internal/ingest/seasonality"
+	"github.com/Kontora20/where-to-bird-today/internal/ingest/timeofday"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
 
@@ -44,5 +46,12 @@ func run() error {
 	}
 
 	slog.Info("species_seasonality recomputed", slog.Int("rows", count))
+
+	count, err = ingest.Run(ctx, pool, queries, timeofday.Source, timeofday.Recompute)
+	if err != nil {
+		return err
+	}
+
+	slog.Info("time-of-day counts recomputed", slog.Int("rows", count))
 	return nil
 }

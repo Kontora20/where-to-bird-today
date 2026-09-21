@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -80,6 +81,42 @@ func TestGetSpeciesDetail(t *testing.T) {
 				if got.CommonName != "White Stork" {
 					t.Errorf("body.common_name = %q, want %q", got.CommonName, "White Stork")
 				}
+			}
+		})
+	}
+}
+
+func TestGetSpeciesDetailDate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+		wantDate   string
+	}{
+		{name: "date is passed on", query: "?date=2026-06-21", wantStatus: http.StatusOK, wantDate: "2026-06-21"},
+		{name: "malformed date", query: "?date=21.06.2026", wantStatus: http.StatusBadRequest},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotDate time.Time
+			service := fakeRecommendationService{gotDate: &gotDate}
+			req := httptest.NewRequest(http.MethodGet, "/hotspots/1/species/10"+tc.query, nil)
+			req.SetPathValue("hotspotId", "1")
+			req.SetPathValue("speciesId", "10")
+			rec := httptest.NewRecorder()
+
+			handleGetSpeciesDetail(testLogger(), service).ServeHTTP(rec, req)
+
+			if got := rec.Code; got != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body: %q)", got, tc.wantStatus, rec.Body.String())
+			}
+			if tc.wantDate != "" && gotDate.Format("2006-01-02") != tc.wantDate {
+				t.Errorf("service got date %s, want %s", gotDate.Format("2006-01-02"), tc.wantDate)
 			}
 		})
 	}

@@ -31,6 +31,12 @@ type fakeStore struct {
 	latestRow *store.GetLatestChecklistWithSpeciesRow
 	latestErr error
 
+	// hotspotRow is the hotspot; nil means it does not exist.
+	hotspotRow      *store.GetHotspotRow
+	timeOfDayErr    error
+	timeOfDayRows   []store.GetSpeciesTimeOfDayRow
+	timeOfDayParams *store.GetSpeciesTimeOfDayParams
+
 	searchErr  error
 	searchRows []store.SearchSpeciesRow
 	// searchArgs is a pointer because fakeStore's methods have value
@@ -46,6 +52,23 @@ func (f fakeStore) GetLatestChecklistWithSpecies(_ context.Context, _ store.GetL
 		return store.GetLatestChecklistWithSpeciesRow{}, pgx.ErrNoRows
 	}
 	return *f.latestRow, nil
+}
+
+func (f fakeStore) GetHotspot(_ context.Context, _ int64) (store.GetHotspotRow, error) {
+	if f.hotspotRow == nil {
+		return store.GetHotspotRow{}, pgx.ErrNoRows
+	}
+	return *f.hotspotRow, nil
+}
+
+func (f fakeStore) GetSpeciesTimeOfDay(_ context.Context, arg store.GetSpeciesTimeOfDayParams) ([]store.GetSpeciesTimeOfDayRow, error) {
+	if f.timeOfDayParams != nil {
+		*f.timeOfDayParams = arg
+	}
+	if f.timeOfDayErr != nil {
+		return nil, f.timeOfDayErr
+	}
+	return f.timeOfDayRows, nil
 }
 
 func (f fakeStore) SearchSpecies(_ context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error) {

@@ -389,6 +389,157 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 	}
 }
 
+// TestTimeOfDay seeds checklists with known minutes after sunrise and checks
+// the counts and the adjusted frequency by hand. Hotspot A (Lithuania) has,
+// in hour 0: a checklist with the species, one without, and a shared
+// checklist submitted twice with the species (one checklist, not two): 3
+// checklists, 2 with the species. In hour 1 it has one checklist with the
+// species. Around them sit rows that must not count: an incomplete
+// checklist and one with no minutes. Hotspot B (Lithuania) has one checklist
+// without the species in hour 0 and one with it in hour 2. Hotspot C
+// (Latvia) has one with the species in hour 0. The region is all three
+// hotspots, whatever their country: in hour 0 it is 3 of 5 (0.6), in hours 1
+// and 2 it is 1 of 1, and over all hours it is 5 of 7. A region prior of 3
+// checklists pulls each hour's share toward the 5/7: hour 0 becomes
+// (3 + 3*5/7) / (5 + 3), hours 1 and 2 (1 + 3*5/7) / (1 + 3). A prior of 5
+// checklists then pulls A's hour 0 to (2 + 5*0.642857) / (3 + 5), its hour 1
+// to (1 + 5*0.785714) / (1 + 5), and its hour 2, where A has no checklists,
+// is the region's 0.785714 alone.
+func TestTimeOfDay(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := newTestPool(t)
+	queries := New(pool)
+
+	seedHotspot := func(name, region string) Hotspot {
+		t.Helper()
+		row, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+			Name: name, Longitude: 25.0, Latitude: 55.0, Region: region, Source: "test", SourceRef: "test-tod-" + name,
+		})
+		if err != nil {
+			t.Fatalf("UpsertHotspot (%s): %v", name, err)
+		}
+		return Hotspot{ID: row.ID}
+	}
+	hotspotA := seedHotspot("a", "LT")
+	hotspotB := seedHotspot("b", "LT")
+	hotspotC := seedHotspot("c", "LV")
+
+	species, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName: "Testus nocturnus",
+		AvibaseID:      pgtype.Text{String: "avibase-TESTTOD1", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies: %v", err)
+	}
+
+	day := pgtype.Date{Time: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	seedChecklist := func(samplingEventID, groupID string, hotspot Hotspot, complete bool, minutes any, withSpecies bool) {
+		t.Helper()
+		id, err := queries.UpsertChecklist(ctx, UpsertChecklistParams{
+			SamplingEventID:    samplingEventID,
+			GroupID:            pgtype.Text{String: groupID, Valid: groupID != ""},
+			HotspotID:          pgtype.Int8{Int64: hotspot.ID, Valid: true},
+			ObservedOn:         day,
+			AllSpeciesReported: complete,
+		})
+		if err != nil {
+			t.Fatalf("UpsertChecklist (%s): %v", samplingEventID, err)
+		}
+		if _, err := pool.Exec(ctx, "UPDATE checklists SET minutes_after_sunrise = $2 WHERE id = $1", id, minutes); err != nil {
+			t.Fatalf("setting minutes for %s: %v", samplingEventID, err)
+		}
+		if !withSpecies {
+			return
+		}
+		if _, err := queries.UpsertObservation(ctx, UpsertObservationParams{
+			SpeciesID:   species.ID,
+			HotspotID:   pgtype.Int8{Int64: hotspot.ID, Valid: true},
+			ChecklistID: pgtype.Int8{Int64: id, Valid: true},
+			Longitude:   25.0,
+			Latitude:    55.0,
+			ObservedOn:  day,
+			Source:      "test",
+			SourceRef:   "obs-" + samplingEventID,
+		}); err != nil {
+			t.Fatalf("UpsertObservation (%s): %v", samplingEventID, err)
+		}
+	}
+
+	seedChecklist("A1", "", hotspotA, true, 10, true)
+	seedChecklist("A2", "", hotspotA, true, 30, false)
+	seedChecklist("A3", "", hotspotA, true, 70, true)
+	seedChecklist("A4", "G1", hotspotA, true, 20, true)
+	seedChecklist("A5", "G1", hotspotA, true, 20, true)
+	seedChecklist("A6", "", hotspotA, false, 15, true)
+	seedChecklist("A7", "", hotspotA, true, nil, true)
+	seedChecklist("B1", "", hotspotB, true, 5, false)
+	seedChecklist("B2", "", hotspotB, true, 130, true)
+	seedChecklist("C1", "", hotspotC, true, 5, true)
+
+	if err := queries.TruncateTimeOfDay(ctx); err != nil {
+		t.Fatalf("TruncateTimeOfDay: %v", err)
+	}
+	totals, err := queries.RecomputeTimeOfDayTotals(ctx)
+	if err != nil {
+		t.Fatalf("RecomputeTimeOfDayTotals: %v", err)
+	}
+	withSpecies, err := queries.RecomputeSpeciesTimeOfDay(ctx)
+	if err != nil {
+		t.Fatalf("RecomputeSpeciesTimeOfDay: %v", err)
+	}
+	// Totals: A hours 0 and 1, B hours 0 and 2, C hour 0. Species: A hours 0
+	// and 1, B hour 2, C hour 0.
+	if totals != 5 || withSpecies != 4 {
+		t.Errorf("rows written = %d totals and %d with the species, want 5 and 4", totals, withSpecies)
+	}
+
+	read := func(hotspot Hotspot, minRegionChecklists int64) []GetSpeciesTimeOfDayRow {
+		t.Helper()
+		rows, err := queries.GetSpeciesTimeOfDay(ctx, GetSpeciesTimeOfDayParams{
+			HotspotID:             pgtype.Int8{Int64: hotspot.ID, Valid: true},
+			SpeciesID:             pgtype.Int8{Int64: species.ID, Valid: true},
+			PriorChecklists:       pgtype.Float4{Float32: 5, Valid: true},
+			RegionPriorChecklists: pgtype.Float4{Float32: 3, Valid: true},
+			MinRegionChecklists:   pgtype.Int8{Int64: minRegionChecklists, Valid: true},
+		})
+		if err != nil {
+			t.Fatalf("GetSpeciesTimeOfDay: %v", err)
+		}
+		return rows
+	}
+	check := func(got GetSpeciesTimeOfDayRow, hour int16, checklists, withSpecies int32, adjusted float64) {
+		t.Helper()
+		if got.HourBin != hour || got.Checklists != checklists || got.WithSpecies != withSpecies || math.Abs(float64(got.AdjustedFrequency)-adjusted) > 1e-4 {
+			t.Errorf("hour %d = %d of %d, adjusted %v; want hour %d = %d of %d, adjusted %v",
+				got.HourBin, got.WithSpecies, got.Checklists, got.AdjustedFrequency, hour, withSpecies, checklists, adjusted)
+		}
+	}
+
+	t.Run("adjusts a hotspot toward its country", func(t *testing.T) {
+		rows := read(hotspotA, 1)
+		if len(rows) != 3 {
+			t.Fatalf("got %d hours, want 3 (0, 1 and 2)", len(rows))
+		}
+		check(rows[0], 0, 3, 2, (2+5*(3+3*5.0/7)/8)/8)
+		check(rows[1], 1, 1, 1, (1+5*(1+3*5.0/7)/4)/6)
+		check(rows[2], 2, 0, 0, (1+3*5.0/7)/4)
+	})
+
+	t.Run("an hour the hotspot has no species in counts as none", func(t *testing.T) {
+		rows := read(hotspotB, 1)
+		check(rows[0], 0, 1, 0, (5*(3+3*5.0/7)/8)/6)
+	})
+
+	t.Run("leaves out hours the region has too few checklists in", func(t *testing.T) {
+		rows := read(hotspotA, 2)
+		if len(rows) != 1 || rows[0].HourBin != 0 {
+			t.Errorf("got %+v, want only hour 0, the one hour with 2 or more checklists in the region", rows)
+		}
+	})
+}
+
 func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32, wantAdjusted float64) {
 	t.Helper()
 

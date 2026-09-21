@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -53,8 +54,21 @@ const maxDriveMinutes = 240
 
 type recommendationService interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
-	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string) (birding.SpeciesDetail, error)
+	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string, date time.Time) (birding.SpeciesDetail, error)
 	SearchSpecies(ctx context.Context, query, lang string) ([]birding.SpeciesMatch, error)
+}
+
+// parseDate reads ?date=, which is today when absent.
+func parseDate(query url.Values) (time.Time, error) {
+	raw := query.Get("date")
+	if raw == "" {
+		return time.Now(), nil
+	}
+	date, err := time.Parse(dateParamLayout, raw)
+	if err != nil {
+		return time.Time{}, errors.New("date must be in YYYY-MM-DD format")
+	}
+	return date, nil
 }
 
 // parseSpeciesIDs reads repeated ?species= values. No values returns nil,
@@ -107,13 +121,10 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 			}
 		}
 
-		date := time.Now()
-		if raw := query.Get("date"); raw != "" {
-			date, err = time.Parse(dateParamLayout, raw)
-			if err != nil {
-				http.Error(w, "date must be in YYYY-MM-DD format", http.StatusBadRequest)
-				return
-			}
+		date, err := parseDate(query)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 		_, week := date.ISOWeek()
 

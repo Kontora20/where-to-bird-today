@@ -11,13 +11,14 @@ import (
 )
 
 type Checklist struct {
-	ID                 int64       `json:"id"`
-	SamplingEventID    string      `json:"sampling_event_id"`
-	GroupID            pgtype.Text `json:"group_id"`
-	HotspotID          pgtype.Int8 `json:"hotspot_id"`
-	ObservedOn         pgtype.Date `json:"observed_on"`
-	StartedAt          pgtype.Time `json:"started_at"`
-	AllSpeciesReported bool        `json:"all_species_reported"`
+	ID                  int64       `json:"id"`
+	SamplingEventID     string      `json:"sampling_event_id"`
+	GroupID             pgtype.Text `json:"group_id"`
+	HotspotID           pgtype.Int8 `json:"hotspot_id"`
+	ObservedOn          pgtype.Date `json:"observed_on"`
+	StartedAt           pgtype.Time `json:"started_at"`
+	AllSpeciesReported  bool        `json:"all_species_reported"`
+	MinutesAfterSunrise pgtype.Int2 `json:"minutes_after_sunrise"`
 }
 
 type Hotspot struct {
@@ -101,4 +102,17 @@ type SpeciesSeasonality struct {
 	SampleSize        int32              `json:"sample_size"`
 	ComputedAt        pgtype.Timestamptz `json:"computed_at"`
 	AdjustedFrequency float32            `json:"adjusted_frequency"`
+}
+
+type SpeciesTimeOfDay struct {
+	HotspotID  int64 `json:"hotspot_id"`
+	SpeciesID  int64 `json:"species_id"`
+	HourBin    int16 `json:"hour_bin"`
+	Checklists int32 `json:"checklists"`
+}
+
+type TimeOfDayTotal struct {
+	HotspotID  int64 `json:"hotspot_id"`
+	HourBin    int16 `json:"hour_bin"`
+	Checklists int32 `json:"checklists"`
 }

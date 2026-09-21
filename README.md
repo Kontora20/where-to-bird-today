@@ -109,7 +109,7 @@ docker exec -it wtbt-postgres psql -U birder -d wheretobird
 Request the Baltic countries from the [eBird Basic Dataset](https://ebird.org/data/download) with the
 sampling event data option, and unzip each export. Load the hotspots and species first
 (`cmd/ingest-ebird-hotspots`, `cmd/ingest-avilist`), then for each export load the main file and its
-`_sampling.txt` file, then rebuild the seasonality table:
+`_sampling.txt` file, then rebuild the tables derived from them:
 
 ```bash
 go run ./cmd/ingest-ebd path/to/ebd_LT_..._relJun-2026.txt
@@ -127,8 +127,12 @@ country's frequency for the same species and week, more strongly the fewer check
 are ranked by it, so one sighting in three checklists no longer outranks 25% over 200. Change
 `priorChecklists` in `internal/ingest/seasonality/seasonality.go` and run it again to tune the pull.
 
-**Run `compute-seasonality` only after the checklists are loaded.** It rebuilds the table from
-`checklists`, so with none loaded it replaces the table with nothing.
+It also works out how long after sunrise each checklist started and counts checklists per hotspot and hour
+after sunrise (0 to 23, around the clock, so night birds are included). The species panel reads those counts for its
+time-of-day strip.
+
+**Run `compute-seasonality` only after the checklists are loaded.** It rebuilds its tables from
+`checklists`, so with none loaded it replaces them with nothing.
 
 ## Travel time
 
