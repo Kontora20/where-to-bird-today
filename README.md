@@ -127,6 +127,9 @@ country's frequency for the same species and week, more strongly the fewer check
 are ranked by it, so one sighting in three checklists no longer outranks 25% over 200. Change
 `priorChecklists` in `internal/ingest/seasonality/seasonality.go` and run it again to tune the pull.
 
+It also stores `country_seasonality`, each species' frequency across a country per week, which the species panel
+pools with a hotspot's weeks to find the species' best weeks there. A year has 52 weeks: ISO week 53 is counted in
+week 52.
 It also works out how long after sunrise each checklist started and counts checklists per hotspot and hour
 after sunrise (0 to 23, around the clock, so night birds are included). The species panel reads those counts for its
 time-of-day strip.

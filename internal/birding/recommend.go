@@ -123,7 +123,7 @@ type Store interface {
 	SearchSpecies(ctx context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error)
 	GetSpecies(ctx context.Context, id int64) (store.Species, error)
 	ListSpeciesMedia(ctx context.Context, speciesID int64) ([]store.SpeciesMedium, error)
-	GetSpeciesSeasonalityAtHotspot(ctx context.Context, arg store.GetSpeciesSeasonalityAtHotspotParams) ([]store.GetSpeciesSeasonalityAtHotspotRow, error)
+	GetHotspotSpeciesWeeks(ctx context.Context, arg store.GetHotspotSpeciesWeeksParams) ([]store.GetHotspotSpeciesWeeksRow, error)
 	GetLatestChecklistWithSpecies(ctx context.Context, arg store.GetLatestChecklistWithSpeciesParams) (store.GetLatestChecklistWithSpeciesRow, error)
 	GetHotspot(ctx context.Context, id int64) (store.GetHotspotRow, error)
 	GetSpeciesTimeOfDay(ctx context.Context, arg store.GetSpeciesTimeOfDayParams) ([]store.GetSpeciesTimeOfDayRow, error)

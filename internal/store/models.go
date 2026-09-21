@@ -21,6 +21,13 @@ type Checklist struct {
 	MinutesAfterSunrise pgtype.Int2 `json:"minutes_after_sunrise"`
 }
 
+type CountrySeasonality struct {
+	Country    string  `json:"country"`
+	SpeciesID  int64   `json:"species_id"`
+	WeekOfYear int16   `json:"week_of_year"`
+	Frequency  float32 `json:"frequency"`
+}
+
 type Hotspot struct {
 	ID        int64              `json:"id"`
 	Name      string             `json:"name"`

@@ -1,6 +1,6 @@
 // Package seasonality rebuilds species_seasonality, the precomputed
 // per-hotspot, per-species, per-week baseline that "what to expect" reads
-// from. Unlike the loaders under internal/ingest, it has no external source:
+// from, and country_seasonality, the same per country. Unlike the loaders under internal/ingest, it has no external source:
 // it derives the whole table from observations already in Postgres.
 package seasonality
 
@@ -21,16 +21,21 @@ const Source = "species-seasonality"
 // small samples less.
 const priorChecklists = 5
 
-// Recompute clears species_seasonality and rebuilds it from observations. It
-// returns the number of rows written.
+// Recompute clears species_seasonality and country_seasonality and rebuilds
+// them from checklists and observations, the country table from the hotspot
+// one. It returns the number of rows written to both.
 func Recompute(ctx context.Context, queries *store.Queries) (int, error) {
-	if err := queries.TruncateSpeciesSeasonality(ctx); err != nil {
-		return 0, fmt.Errorf("clearing species_seasonality: %w", err)
+	if err := queries.TruncateSeasonality(ctx); err != nil {
+		return 0, fmt.Errorf("clearing seasonality: %w", err)
 	}
 
-	rows, err := queries.RecomputeSpeciesSeasonality(ctx, priorChecklists)
+	hotspotRows, err := queries.RecomputeSpeciesSeasonality(ctx, priorChecklists)
 	if err != nil {
 		return 0, fmt.Errorf("recomputing species_seasonality: %w", err)
 	}
-	return int(rows), nil
+	countryRows, err := queries.RecomputeCountrySeasonality(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("recomputing country_seasonality: %w", err)
+	}
+	return int(hotspotRows + countryRows), nil
 }

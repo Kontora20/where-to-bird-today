@@ -23,16 +23,6 @@ type Photo struct {
 	AttributionURL string `json:"attribution_url,omitempty"`
 }
 
-// WeekFrequency is the share of complete checklists at one hotspot in one ISO
-// week that recorded a species, and how many complete checklists that share
-// is out of. A week missing from the list was never recorded, not recorded at
-// zero frequency.
-type WeekFrequency struct {
-	Week       int16   `json:"week"`
-	Frequency  float32 `json:"frequency"`
-	Checklists int32   `json:"checklists"`
-}
-
 // LatestChecklist is the most recent eBird checklist at the hotspot that
 // recorded the species: a link to the record behind the numbers.
 type LatestChecklist struct {
@@ -42,7 +32,8 @@ type LatestChecklist struct {
 
 // SpeciesDetail is everything the species detail panel shows (ADR 0004):
 // name, outbound reference links, one photo, and this hotspot's
-// week-by-week seasonality and hour-by-hour time of day for the species.
+// week-by-week seasonality, its best weeks, and hour-by-hour time of day for
+// the species.
 // Content besides Photo is never missing -- a species with no photo yet
 // still has a name and links.
 //
@@ -59,6 +50,7 @@ type SpeciesDetail struct {
 	EBirdURL            string           `json:"ebird_url,omitempty"`
 	Photo               *Photo           `json:"photo,omitempty"`
 	Seasonality         []WeekFrequency  `json:"seasonality"`
+	BestWeeks           []WeekRange      `json:"best_weeks"`
 	TimeOfDay           []HourFrequency  `json:"time_of_day"`
 	LatestChecklist     *LatestChecklist `json:"latest_checklist,omitempty"`
 }
@@ -102,16 +94,9 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		}
 	}
 
-	seasonalityRows, err := s.store.GetSpeciesSeasonalityAtHotspot(ctx, store.GetSpeciesSeasonalityAtHotspotParams{
-		HotspotID: hotspotID,
-		SpeciesID: speciesID,
-	})
+	seasonality, bestWeeks, err := s.seasonality(ctx, hotspotID, speciesID, date)
 	if err != nil {
-		return SpeciesDetail{}, fmt.Errorf("loading species seasonality: %w", err)
-	}
-	seasonality := make([]WeekFrequency, len(seasonalityRows))
-	for i, row := range seasonalityRows {
-		seasonality[i] = WeekFrequency{Week: row.WeekOfYear, Frequency: row.Frequency, Checklists: row.SampleSize}
+		return SpeciesDetail{}, err
 	}
 
 	timeOfDay, err := s.timeOfDay(ctx, hotspotID, speciesID, date)
@@ -148,6 +133,7 @@ func (s *Service) SpeciesDetail(ctx context.Context, hotspotID, speciesID int64,
 		EBirdURL:            ebirdURL,
 		Photo:               photo,
 		Seasonality:         seasonality,
+		BestWeeks:           bestWeeks,
 		TimeOfDay:           timeOfDay,
 		LatestChecklist:     latestChecklist,
 	}, nil

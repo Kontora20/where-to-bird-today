@@ -3,6 +3,7 @@ package birding
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -29,17 +30,17 @@ func TestSpeciesDetail(t *testing.T) {
 			{SpeciesID: 10, ImageUrl: "https://example.org/stork-best.jpg", License: "CC BY 4.0", Attribution: "Someone", Rank: 0},
 			{SpeciesID: 10, ImageUrl: "https://example.org/stork-second.jpg", License: "CC BY 4.0", Attribution: "Someone Else", Rank: 1},
 		},
-		seasonalityRows: []store.GetSpeciesSeasonalityAtHotspotRow{
-			{WeekOfYear: 18, Frequency: 0.4, SampleSize: 10},
-			{WeekOfYear: 19, Frequency: 0.6, SampleSize: 5},
-		},
+		seasonalityRows: yearOfWeeks(map[int16]store.GetHotspotSpeciesWeeksRow{
+			18: {Checklists: 10, WithSpecies: 4},
+			19: {Checklists: 5, WithSpecies: 3},
+		}),
 		latestRow: &store.GetLatestChecklistWithSpeciesRow{
 			SamplingEventID: "S123456",
 			ObservedOn:      pgtype.Date{Time: time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC), Valid: true},
 		},
 	}
 
-	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Time{})
+	got, err := NewService(fake, nil).SpeciesDetail(context.Background(), 1, 10, "lt", time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("SpeciesDetail() error = %v", err)
 	}
@@ -64,11 +65,18 @@ func TestSpeciesDetail(t *testing.T) {
 		t.Errorf("Photo.ImageURL = %q, want the best-ranked photo, not the second one", got.Photo.ImageURL)
 	}
 
-	if len(got.Seasonality) != 2 || got.Seasonality[0].Week != 18 || got.Seasonality[1].Week != 19 {
-		t.Errorf("Seasonality = %+v, want weeks 18 and 19 in order", got.Seasonality)
+	if len(got.Seasonality) != weeksPerYear {
+		t.Fatalf("len(Seasonality) = %d, want every week of the year", len(got.Seasonality))
 	}
-	if got.Seasonality[0].Checklists != 10 || got.Seasonality[1].Checklists != 5 {
-		t.Errorf("Seasonality = %+v, want the checklist counts 10 and 5", got.Seasonality)
+	if week18, week19 := got.Seasonality[17], got.Seasonality[18]; week18.Week != 18 || week18.Checklists != 10 || week18.Frequency != 0.4 || week19.Week != 19 || week19.Checklists != 5 || week19.Frequency != 0.6 {
+		t.Errorf("weeks 18 and 19 = %+v and %+v, want 4 of 10 and 3 of 5 checklists", week18, week19)
+	}
+	// Weeks 18 and 19 each pool 15 checklists, 7 with the species, and week 20
+	// pools 5 with 3 (3 of 5 at week 19): all within a tenth of the highest,
+	// one run from 27 April to 17 May 2026.
+	wantBest := []WeekRange{{FromWeek: 18, ToWeek: 20, Start: "2026-04-27", End: "2026-05-17"}}
+	if !slices.Equal(got.BestWeeks, wantBest) {
+		t.Errorf("BestWeeks = %+v, want %+v", got.BestWeeks, wantBest)
 	}
 
 	want := &LatestChecklist{URL: "https://ebird.org/checklist/S123456", ObservedOn: "2026-05-03"}

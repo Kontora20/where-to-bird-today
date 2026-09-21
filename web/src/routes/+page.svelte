@@ -37,8 +37,11 @@
 	let speciesLoading = $state(false);
 	let speciesError = $state('');
 
-	const yearWeeks = Array.from({ length: 52 }, (_, index) => index + 1);
 	const hoursAfterSunrise = Array.from({ length: 24 }, (_, index) => index);
+
+	function formatDay(isoDate: string): string {
+		return new Date(`${isoDate}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+	}
 
 	// The hours within a tenth of the best one. Neighbouring hours join into one
 	// clock range.
@@ -416,19 +419,26 @@
 				{/if}
 
 				{#if openSpecies.seasonality.length > 0}
+					{@const highest = Math.max(...openSpecies.seasonality.map((week) => week.smoothed_frequency))}
 					<h3>Seasonality at this hotspot</h3>
 					<div class="seasonality">
-						{#each yearWeeks as week (week)}
-							{@const match = openSpecies.seasonality.find((w) => w.week === week)}
+						{#each openSpecies.seasonality as week (week.week)}
 							<div
 								class="week-bar"
-								style="height: {(match?.frequency ?? 0) * 100}%"
-								title="Week {week}: {match
-									? `${(match.frequency * 100).toFixed(0)}% of ${match.checklists} ${match.checklists === 1 ? 'checklist' : 'checklists'}`
-									: 'no data'}"
+								class:best={week.best}
+								style="height: {highest > 0 ? (week.smoothed_frequency / highest) * 100 : 0}%"
+								title="Week {week.week}: {(week.smoothed_frequency * 100).toFixed(0)}% expected ({week.checklists === 0
+									? 'no checklists here'
+									: `${(week.frequency * 100).toFixed(0)}% of ${week.checklists} ${week.checklists === 1 ? 'checklist' : 'checklists'} here`})"
 							></div>
 						{/each}
 					</div>
+					<p class="chart-note">
+						{#if openSpecies.best_weeks.length > 0}Best: {openSpecies.best_weeks
+								.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`)
+								.join(', ')}.{/if}
+						Each week is pooled with the weeks either side; bar height is relative to the best week.
+					</p>
 				{/if}
 
 				{#if openSpecies.time_of_day.length > 0}
@@ -448,7 +458,7 @@
 							></div>
 						{/each}
 					</div>
-					<p class="time-of-day-note">
+					<p class="chart-note">
 						{#if best.length > 0}Best: {clockRanges(best).join(', ')}.{/if}
 						The bars run from sunrise around the clock; their height is relative to the best hour.
 					</p>
@@ -755,7 +765,7 @@
 		background: var(--color-accent);
 	}
 
-	.time-of-day-note {
+	.chart-note {
 		font-size: 0.75rem;
 		color: var(--color-muted);
 		margin: 0.25rem 0 0;
@@ -764,8 +774,12 @@
 	.week-bar {
 		flex: 1;
 		min-height: 2px;
-		background: var(--color-accent);
+		background: var(--color-accent-bg);
 		border-radius: 2px 2px 0 0;
+	}
+
+	.week-bar.best {
+		background: var(--color-accent);
 	}
 
 	.links {

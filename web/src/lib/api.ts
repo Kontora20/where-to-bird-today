@@ -82,11 +82,29 @@ export interface Photo {
 	attribution_url?: string;
 }
 
+// One of the 52 weeks of the year at a hotspot. Week 53 of an ISO year is
+// counted in week 52.
 export interface WeekFrequency {
 	week: number;
+	// The share of the week's checklists that recorded the species; 0 when
+	// there were none.
 	frequency: number;
 	// How many complete checklists the frequency is out of.
 	checklists: number;
+	// The week pooled with the weeks either side and pulled toward the
+	// country's frequency, more strongly the fewer checklists there are. The
+	// best weeks are picked by this.
+	smoothed_frequency: number;
+	best: boolean;
+}
+
+// A run of neighbouring best weeks. start and end are YYYY-MM-DD; a run that
+// goes past the end of the year ends in the next one.
+export interface WeekRange {
+	from_week: number;
+	to_week: number;
+	start: string;
+	end: string;
 }
 
 export interface HourFrequency {
@@ -113,7 +131,9 @@ export interface SpeciesDetail {
 	birdlife_datazone_url?: string;
 	ebird_url?: string;
 	photo?: Photo;
+	// Empty when the hotspot has no checklists.
 	seasonality: WeekFrequency[];
+	best_weeks: WeekRange[];
 	time_of_day: HourFrequency[];
 	// Absent when the species was never recorded at the hotspot.
 	latest_checklist?: { url: string; observed_on: string };

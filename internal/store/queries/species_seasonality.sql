@@ -1,14 +1,33 @@
--- name: GetSpeciesSeasonalityAtHotspot :many
--- One species' week-by-week frequency at one hotspot -- what the species
--- detail panel charts (ADR 0004). Missing weeks mean "never recorded", not
--- zero; the caller decides how to render that gap.
-SELECT week_of_year, frequency, sample_size
-FROM species_seasonality
-WHERE hotspot_id = sqlc.arg(hotspot_id) AND species_id = sqlc.arg(species_id)
-ORDER BY week_of_year;
+-- name: GetHotspotSpeciesWeeks :many
+-- One species' year at one hotspot, a row for each of the 52 weeks: the
+-- hotspot's complete checklists that week, how many of them recorded the
+-- species, and the species' frequency across the hotspot's whole country that
+-- week. A week with no checklists at the hotspot has zeros. A hotspot's
+-- checklists in a week are read off its own rows, since every species row of
+-- a week carries the same sample_size; the checklists with the species are
+-- frequency * sample_size, rounded back to a whole number.
+WITH totals AS (
+    SELECT week_of_year, MAX(sample_size) AS checklists
+    FROM species_seasonality
+    WHERE hotspot_id = sqlc.arg(hotspot_id)
+    GROUP BY week_of_year
+)
+SELECT
+    w.week_of_year::smallint AS week_of_year,
+    COALESCE(t.checklists, 0)::integer AS checklists,
+    COALESCE(ROUND(s.frequency * s.sample_size), 0)::integer AS with_species,
+    COALESCE(c.frequency, 0)::real AS country_frequency
+FROM generate_series(1, 52) AS w(week_of_year)
+LEFT JOIN totals t ON t.week_of_year = w.week_of_year
+LEFT JOIN species_seasonality s
+    ON s.hotspot_id = sqlc.arg(hotspot_id) AND s.species_id = sqlc.arg(species_id) AND s.week_of_year = w.week_of_year
+LEFT JOIN country_seasonality c
+    ON c.country = (SELECT region FROM hotspots WHERE id = sqlc.arg(hotspot_id))
+    AND c.species_id = sqlc.arg(species_id) AND c.week_of_year = w.week_of_year
+ORDER BY w.week_of_year;
 
--- name: TruncateSpeciesSeasonality :exec
-TRUNCATE species_seasonality;
+-- name: TruncateSeasonality :exec
+TRUNCATE species_seasonality, country_seasonality;
 
 -- name: RecomputeSpeciesSeasonality :execrows
 -- Rebuilds the whole table from checklists and observations: per hotspot x
@@ -20,6 +39,10 @@ TRUNCATE species_seasonality;
 -- complete checklists. Joining to hotspots excludes personal and incidental
 -- locations -- a per-hotspot stat needs a hotspot.
 --
+-- A year has 52 weeks here: the ISO week 53 that some years have is counted in
+-- week 52, so every year is the same circle of weeks. The 52 must agree with
+-- the weeksPerYear of the birding package.
+--
 -- adjusted_frequency is (with_species + prior_checklists * country_frequency)
 -- / (checklists + prior_checklists): the country's frequency for the same
 -- species and week counts as prior_checklists extra checklists at the hotspot.
@@ -27,7 +50,7 @@ TRUNCATE species_seasonality;
 -- barely moves. A species with no sighting at the hotspot that week has no
 -- row, so it gets no adjusted frequency either.
 WITH complete_checklists AS (
-    SELECT c.id, c.hotspot_id, h.region, EXTRACT(week FROM c.observed_on)::smallint AS week_of_year,
+    SELECT c.id, c.hotspot_id, h.region, LEAST(EXTRACT(week FROM c.observed_on)::smallint, 52) AS week_of_year,
            COALESCE(c.group_id, c.sampling_event_id) AS checklist_key
     FROM checklists c
     JOIN hotspots h ON h.id = c.hotspot_id
@@ -64,3 +87,29 @@ FROM species_totals s
 JOIN week_totals w USING (hotspot_id, week_of_year)
 JOIN country_species_totals cs ON cs.region = s.region AND cs.week_of_year = s.week_of_year AND cs.species_id = s.species_id
 JOIN country_week_totals cw ON cw.region = s.region AND cw.week_of_year = s.week_of_year;
+
+-- name: RecomputeCountrySeasonality :execrows
+-- Rebuilds the country-wide weekly frequencies from species_seasonality, so it
+-- runs after RecomputeSpeciesSeasonality: per country x species x week, the
+-- checklists that recorded the species divided by all complete checklists at
+-- the country's hotspots that week. A hotspot's checklists in a week are its
+-- sample_size, and those with the species are frequency * sample_size, rounded
+-- back to a whole number.
+WITH hotspot_weeks AS (
+    SELECT hotspot_id, week_of_year, MAX(sample_size) AS checklists
+    FROM species_seasonality
+    GROUP BY hotspot_id, week_of_year
+),
+country_weeks AS (
+    SELECT h.region AS country, w.week_of_year, SUM(w.checklists) AS checklists
+    FROM hotspot_weeks w
+    JOIN hotspots h ON h.id = w.hotspot_id
+    GROUP BY h.region, w.week_of_year
+)
+INSERT INTO country_seasonality (country, species_id, week_of_year, frequency)
+SELECT cw.country, s.species_id, s.week_of_year,
+       (SUM(ROUND(s.frequency * s.sample_size)) / cw.checklists)::real
+FROM species_seasonality s
+JOIN hotspots h ON h.id = s.hotspot_id
+JOIN country_weeks cw ON cw.country = h.region AND cw.week_of_year = s.week_of_year
+GROUP BY cw.country, s.species_id, s.week_of_year, cw.checklists;

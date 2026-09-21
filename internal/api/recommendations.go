@@ -126,7 +126,6 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		_, week := date.ISOWeek()
 
 		speciesIDs, err := parseSpeciesIDs(query["species"])
 		if err != nil {
@@ -139,7 +138,7 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommendatio
 			Longitude:  longitude,
 			RadiusKM:   radiusKM,
 			MaxMinutes: maxMinutes,
-			Week:       int16(week),
+			Week:       birding.WeekOfYear(date),
 			Lang:       resolveLanguage(r),
 			SpeciesIDs: speciesIDs,
 		})

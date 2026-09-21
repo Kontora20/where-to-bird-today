@@ -343,8 +343,8 @@ func TestRecomputeSpeciesSeasonality(t *testing.T) {
 
 	recompute := func() {
 		t.Helper()
-		if err := queries.TruncateSpeciesSeasonality(ctx); err != nil {
-			t.Fatalf("TruncateSpeciesSeasonality: %v", err)
+		if err := queries.TruncateSeasonality(ctx); err != nil {
+			t.Fatalf("TruncateSeasonality: %v", err)
 		}
 		if _, err := queries.RecomputeSpeciesSeasonality(ctx, 5); err != nil {
 			t.Fatalf("RecomputeSpeciesSeasonality: %v", err)
@@ -538,6 +538,169 @@ func TestTimeOfDay(t *testing.T) {
 			t.Errorf("got %+v, want only hour 0, the one hour with 2 or more checklists in the region", rows)
 		}
 	})
+}
+
+// TestCountryAndHotspotWeeks seeds hotspot rows for one week and checks the
+// country table and the year of one species at one hotspot by hand. In week 10
+// hotspot A (Lithuania) has 4 checklists, 2 with species X; hotspot B
+// (Lithuania) has 1 with both X and Y; hotspot C (Latvia) has 2 with X. In week
+// 11 A has 3 checklists, all with Y and none with X. Lithuania in week 10 is
+// therefore 5 checklists, X on 3 of them (0.6) and Y on 1 (0.2); in week 11 it
+// is 3 checklists, Y on all of them and X on none, so X has no row that week.
+// Latvia's X in week 10 is 2 of 2.
+func TestCountryAndHotspotWeeks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := newTestPool(t)
+	queries := New(pool)
+
+	seedHotspot := func(name, region string) int64 {
+		t.Helper()
+		row, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+			Name: name, Longitude: 25.0, Latitude: 55.0, Region: region, Source: "test", SourceRef: "test-weeks-" + name,
+		})
+		if err != nil {
+			t.Fatalf("UpsertHotspot (%s): %v", name, err)
+		}
+		return row.ID
+	}
+	hotspotA := seedHotspot("a", "LT")
+	hotspotB := seedHotspot("b", "LT")
+	hotspotC := seedHotspot("c", "LV")
+	emptyHotspot := seedHotspot("empty", "LT")
+
+	seedSpecies := func(name, avibaseID string) int64 {
+		t.Helper()
+		row, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{ScientificName: name, AvibaseID: pgtype.Text{String: avibaseID, Valid: true}})
+		if err != nil {
+			t.Fatalf("UpsertSpecies (%s): %v", name, err)
+		}
+		return row.ID
+	}
+	speciesX := seedSpecies("Testus xenos", "avibase-TESTWKX1")
+	speciesY := seedSpecies("Testus ypsilon", "avibase-TESTWKY1")
+
+	seed := func(hotspotID, speciesID int64, week int, frequency float32, sampleSize int) {
+		t.Helper()
+		if _, err := pool.Exec(ctx,
+			"INSERT INTO species_seasonality (hotspot_id, species_id, week_of_year, frequency, adjusted_frequency, sample_size) VALUES ($1, $2, $3, $4, $4, $5)",
+			hotspotID, speciesID, week, frequency, sampleSize,
+		); err != nil {
+			t.Fatalf("seeding species_seasonality: %v", err)
+		}
+	}
+	seed(hotspotA, speciesX, 10, 0.5, 4)
+	seed(hotspotB, speciesX, 10, 1.0, 1)
+	seed(hotspotB, speciesY, 10, 1.0, 1)
+	seed(hotspotC, speciesX, 10, 1.0, 2)
+	seed(hotspotA, speciesY, 11, 1.0, 3)
+
+	rows, err := queries.RecomputeCountrySeasonality(ctx)
+	if err != nil {
+		t.Fatalf("RecomputeCountrySeasonality: %v", err)
+	}
+	if rows != 4 {
+		t.Errorf("RecomputeCountrySeasonality wrote %d rows, want 4 (LT week 10 X and Y, LT week 11 Y, LV week 10 X)", rows)
+	}
+
+	weeks := func(hotspotID, speciesID int64) []GetHotspotSpeciesWeeksRow {
+		t.Helper()
+		got, err := queries.GetHotspotSpeciesWeeks(ctx, GetHotspotSpeciesWeeksParams{HotspotID: hotspotID, SpeciesID: speciesID})
+		if err != nil {
+			t.Fatalf("GetHotspotSpeciesWeeks: %v", err)
+		}
+		if len(got) != 52 {
+			t.Fatalf("got %d weeks, want 52", len(got))
+		}
+		return got
+	}
+	check := func(got GetHotspotSpeciesWeeksRow, week int16, checklists, withSpecies int32, countryFrequency float64) {
+		t.Helper()
+		if got.WeekOfYear != week || got.Checklists != checklists || got.WithSpecies != withSpecies || math.Abs(float64(got.CountryFrequency)-countryFrequency) > 1e-6 {
+			t.Errorf("week %d = %d of %d checklists, country %v; want week %d = %d of %d, country %v",
+				got.WeekOfYear, got.WithSpecies, got.Checklists, got.CountryFrequency, week, withSpecies, checklists, countryFrequency)
+		}
+	}
+
+	t.Run("a hotspot's year of a species", func(t *testing.T) {
+		got := weeks(hotspotA, speciesX)
+		check(got[0], 1, 0, 0, 0)
+		check(got[9], 10, 4, 2, 0.6)
+		// Week 11 has 3 checklists at A but none with X, and X has no country
+		// row that week.
+		check(got[10], 11, 3, 0, 0)
+		check(got[11], 12, 0, 0, 0)
+	})
+
+	t.Run("a hotspot takes its own country's frequency", func(t *testing.T) {
+		got := weeks(hotspotC, speciesX)
+		check(got[9], 10, 2, 2, 1.0)
+	})
+
+	t.Run("a hotspot with no data is all zeros", func(t *testing.T) {
+		got := weeks(emptyHotspot, speciesX)
+		check(got[9], 10, 0, 0, 0.6)
+	})
+}
+
+// TestSeasonalityCountsWeek53InWeek52 seeds a complete checklist in ISO week 52
+// of 2026 and one in ISO week 53, which is 30 December, the second with the
+// species. The year has 52 weeks, so both are week 52: 1 of 2 checklists.
+func TestSeasonalityCountsWeek53InWeek52(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := newTestPool(t)
+	queries := New(pool)
+
+	hotspot, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name: "Week 53 hotspot", Longitude: 25.0, Latitude: 55.0, Region: "LT", Source: "test", SourceRef: "test-week-53",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot: %v", err)
+	}
+	species, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName: "Testus quinquaginta", AvibaseID: pgtype.Text{String: "avibase-TESTW531", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies: %v", err)
+	}
+
+	seedChecklist := func(samplingEventID string, observedOn time.Time, withSpecies bool) {
+		t.Helper()
+		date := pgtype.Date{Time: observedOn, Valid: true}
+		id, err := queries.UpsertChecklist(ctx, UpsertChecklistParams{
+			SamplingEventID: samplingEventID, HotspotID: pgtype.Int8{Int64: hotspot.ID, Valid: true}, ObservedOn: date, AllSpeciesReported: true,
+		})
+		if err != nil {
+			t.Fatalf("UpsertChecklist (%s): %v", samplingEventID, err)
+		}
+		if !withSpecies {
+			return
+		}
+		if _, err := queries.UpsertObservation(ctx, UpsertObservationParams{
+			SpeciesID: species.ID, HotspotID: pgtype.Int8{Int64: hotspot.ID, Valid: true}, ChecklistID: pgtype.Int8{Int64: id, Valid: true},
+			Longitude: 25.0, Latitude: 55.0, ObservedOn: date, Source: "test", SourceRef: "obs-" + samplingEventID,
+		}); err != nil {
+			t.Fatalf("UpsertObservation (%s): %v", samplingEventID, err)
+		}
+	}
+	seedChecklist("W52", time.Date(2026, 12, 24, 0, 0, 0, 0, time.UTC), false)
+	seedChecklist("W53", time.Date(2026, 12, 30, 0, 0, 0, 0, time.UTC), true)
+
+	if _, err := queries.RecomputeSpeciesSeasonality(ctx, 5); err != nil {
+		t.Fatalf("RecomputeSpeciesSeasonality: %v", err)
+	}
+
+	assertSeasonality(ctx, t, pool, hotspot.ID, species.ID, 52, 0.5, 2, 0.5)
+	var rowsInWeek53 int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM species_seasonality WHERE week_of_year = 53").Scan(&rowsInWeek53); err != nil {
+		t.Fatalf("counting week 53 rows: %v", err)
+	}
+	if rowsInWeek53 != 0 {
+		t.Errorf("%d rows in week 53, want none", rowsInWeek53)
+	}
 }
 
 func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32, wantAdjusted float64) {

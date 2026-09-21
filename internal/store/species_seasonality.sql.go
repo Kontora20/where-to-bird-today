@@ -9,37 +9,62 @@ import (
 	"context"
 )
 
-const getSpeciesSeasonalityAtHotspot = `-- name: GetSpeciesSeasonalityAtHotspot :many
-SELECT week_of_year, frequency, sample_size
-FROM species_seasonality
-WHERE hotspot_id = $1 AND species_id = $2
-ORDER BY week_of_year
+const getHotspotSpeciesWeeks = `-- name: GetHotspotSpeciesWeeks :many
+WITH totals AS (
+    SELECT week_of_year, MAX(sample_size) AS checklists
+    FROM species_seasonality
+    WHERE hotspot_id = $1
+    GROUP BY week_of_year
+)
+SELECT
+    w.week_of_year::smallint AS week_of_year,
+    COALESCE(t.checklists, 0)::integer AS checklists,
+    COALESCE(ROUND(s.frequency * s.sample_size), 0)::integer AS with_species,
+    COALESCE(c.frequency, 0)::real AS country_frequency
+FROM generate_series(1, 52) AS w(week_of_year)
+LEFT JOIN totals t ON t.week_of_year = w.week_of_year
+LEFT JOIN species_seasonality s
+    ON s.hotspot_id = $1 AND s.species_id = $2 AND s.week_of_year = w.week_of_year
+LEFT JOIN country_seasonality c
+    ON c.country = (SELECT region FROM hotspots WHERE id = $1)
+    AND c.species_id = $2 AND c.week_of_year = w.week_of_year
+ORDER BY w.week_of_year
 `
 
-type GetSpeciesSeasonalityAtHotspotParams struct {
+type GetHotspotSpeciesWeeksParams struct {
 	HotspotID int64 `json:"hotspot_id"`
 	SpeciesID int64 `json:"species_id"`
 }
 
-type GetSpeciesSeasonalityAtHotspotRow struct {
-	WeekOfYear int16   `json:"week_of_year"`
-	Frequency  float32 `json:"frequency"`
-	SampleSize int32   `json:"sample_size"`
+type GetHotspotSpeciesWeeksRow struct {
+	WeekOfYear       int16   `json:"week_of_year"`
+	Checklists       int32   `json:"checklists"`
+	WithSpecies      int32   `json:"with_species"`
+	CountryFrequency float32 `json:"country_frequency"`
 }
 
-// One species' week-by-week frequency at one hotspot -- what the species
-// detail panel charts (ADR 0004). Missing weeks mean "never recorded", not
-// zero; the caller decides how to render that gap.
-func (q *Queries) GetSpeciesSeasonalityAtHotspot(ctx context.Context, arg GetSpeciesSeasonalityAtHotspotParams) ([]GetSpeciesSeasonalityAtHotspotRow, error) {
-	rows, err := q.db.Query(ctx, getSpeciesSeasonalityAtHotspot, arg.HotspotID, arg.SpeciesID)
+// One species' year at one hotspot, a row for each of the 52 weeks: the
+// hotspot's complete checklists that week, how many of them recorded the
+// species, and the species' frequency across the hotspot's whole country that
+// week. A week with no checklists at the hotspot has zeros. A hotspot's
+// checklists in a week are read off its own rows, since every species row of
+// a week carries the same sample_size; the checklists with the species are
+// frequency * sample_size, rounded back to a whole number.
+func (q *Queries) GetHotspotSpeciesWeeks(ctx context.Context, arg GetHotspotSpeciesWeeksParams) ([]GetHotspotSpeciesWeeksRow, error) {
+	rows, err := q.db.Query(ctx, getHotspotSpeciesWeeks, arg.HotspotID, arg.SpeciesID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetSpeciesSeasonalityAtHotspotRow
+	var items []GetHotspotSpeciesWeeksRow
 	for rows.Next() {
-		var i GetSpeciesSeasonalityAtHotspotRow
-		if err := rows.Scan(&i.WeekOfYear, &i.Frequency, &i.SampleSize); err != nil {
+		var i GetHotspotSpeciesWeeksRow
+		if err := rows.Scan(
+			&i.WeekOfYear,
+			&i.Checklists,
+			&i.WithSpecies,
+			&i.CountryFrequency,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -50,9 +75,44 @@ func (q *Queries) GetSpeciesSeasonalityAtHotspot(ctx context.Context, arg GetSpe
 	return items, nil
 }
 
+const recomputeCountrySeasonality = `-- name: RecomputeCountrySeasonality :execrows
+WITH hotspot_weeks AS (
+    SELECT hotspot_id, week_of_year, MAX(sample_size) AS checklists
+    FROM species_seasonality
+    GROUP BY hotspot_id, week_of_year
+),
+country_weeks AS (
+    SELECT h.region AS country, w.week_of_year, SUM(w.checklists) AS checklists
+    FROM hotspot_weeks w
+    JOIN hotspots h ON h.id = w.hotspot_id
+    GROUP BY h.region, w.week_of_year
+)
+INSERT INTO country_seasonality (country, species_id, week_of_year, frequency)
+SELECT cw.country, s.species_id, s.week_of_year,
+       (SUM(ROUND(s.frequency * s.sample_size)) / cw.checklists)::real
+FROM species_seasonality s
+JOIN hotspots h ON h.id = s.hotspot_id
+JOIN country_weeks cw ON cw.country = h.region AND cw.week_of_year = s.week_of_year
+GROUP BY cw.country, s.species_id, s.week_of_year, cw.checklists
+`
+
+// Rebuilds the country-wide weekly frequencies from species_seasonality, so it
+// runs after RecomputeSpeciesSeasonality: per country x species x week, the
+// checklists that recorded the species divided by all complete checklists at
+// the country's hotspots that week. A hotspot's checklists in a week are its
+// sample_size, and those with the species are frequency * sample_size, rounded
+// back to a whole number.
+func (q *Queries) RecomputeCountrySeasonality(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, recomputeCountrySeasonality)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recomputeSpeciesSeasonality = `-- name: RecomputeSpeciesSeasonality :execrows
 WITH complete_checklists AS (
-    SELECT c.id, c.hotspot_id, h.region, EXTRACT(week FROM c.observed_on)::smallint AS week_of_year,
+    SELECT c.id, c.hotspot_id, h.region, LEAST(EXTRACT(week FROM c.observed_on)::smallint, 52) AS week_of_year,
            COALESCE(c.group_id, c.sampling_event_id) AS checklist_key
     FROM checklists c
     JOIN hotspots h ON h.id = c.hotspot_id
@@ -100,6 +160,10 @@ JOIN country_week_totals cw ON cw.region = s.region AND cw.week_of_year = s.week
 // complete checklists. Joining to hotspots excludes personal and incidental
 // locations -- a per-hotspot stat needs a hotspot.
 //
+// A year has 52 weeks here: the ISO week 53 that some years have is counted in
+// week 52, so every year is the same circle of weeks. The 52 must agree with
+// the weeksPerYear of the birding package.
+//
 // adjusted_frequency is (with_species + prior_checklists * country_frequency)
 // / (checklists + prior_checklists): the country's frequency for the same
 // species and week counts as prior_checklists extra checklists at the hotspot.
@@ -114,11 +178,11 @@ func (q *Queries) RecomputeSpeciesSeasonality(ctx context.Context, priorChecklis
 	return result.RowsAffected(), nil
 }
 
-const truncateSpeciesSeasonality = `-- name: TruncateSpeciesSeasonality :exec
-TRUNCATE species_seasonality
+const truncateSeasonality = `-- name: TruncateSeasonality :exec
+TRUNCATE species_seasonality, country_seasonality
 `
 
-func (q *Queries) TruncateSpeciesSeasonality(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, truncateSpeciesSeasonality)
+func (q *Queries) TruncateSeasonality(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, truncateSeasonality)
 	return err
 }

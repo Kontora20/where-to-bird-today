@@ -24,7 +24,7 @@ type fakeStore struct {
 	mediaErr        error
 	mediaRows       []store.SpeciesMedium
 	seasonalityErr  error
-	seasonalityRows []store.GetSpeciesSeasonalityAtHotspotRow
+	seasonalityRows []store.GetHotspotSpeciesWeeksRow
 
 	// latestRow is the latest checklist for the species; nil means the
 	// species was never recorded at the hotspot.
@@ -123,7 +123,7 @@ func (f fakeStore) ListSpeciesMedia(_ context.Context, _ int64) ([]store.Species
 	return f.mediaRows, nil
 }
 
-func (f fakeStore) GetSpeciesSeasonalityAtHotspot(_ context.Context, _ store.GetSpeciesSeasonalityAtHotspotParams) ([]store.GetSpeciesSeasonalityAtHotspotRow, error) {
+func (f fakeStore) GetHotspotSpeciesWeeks(_ context.Context, _ store.GetHotspotSpeciesWeeksParams) ([]store.GetHotspotSpeciesWeeksRow, error) {
 	if f.seasonalityErr != nil {
 		return nil, f.seasonalityErr
 	}
