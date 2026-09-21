@@ -128,6 +128,53 @@ func (q *Queries) GetHotspot(ctx context.Context, id int64) (GetHotspotRow, erro
 	return i, err
 }
 
+const listHotspotsWithin = `-- name: ListHotspotsWithin :many
+SELECT
+    h.id,
+    ST_Y(h.location::geometry) AS latitude,
+    ST_X(h.location::geometry) AS longitude
+FROM hotspots h
+WHERE ST_DWithin(
+    h.location,
+    ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+    $3
+)
+`
+
+type ListHotspotsWithinParams struct {
+	Longitude    float64 `json:"longitude"`
+	Latitude     float64 `json:"latitude"`
+	RadiusMeters float64 `json:"radius_meters"`
+}
+
+type ListHotspotsWithinRow struct {
+	ID        int64         `json:"id"`
+	Latitude  pgtype.Float8 `json:"latitude"`
+	Longitude pgtype.Float8 `json:"longitude"`
+}
+
+// The hotspots within radius_meters of a point, straight-line, with their
+// coordinates so the caller can narrow them by drive time.
+func (q *Queries) ListHotspotsWithin(ctx context.Context, arg ListHotspotsWithinParams) ([]ListHotspotsWithinRow, error) {
+	rows, err := q.db.Query(ctx, listHotspotsWithin, arg.Longitude, arg.Latitude, arg.RadiusMeters)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHotspotsWithinRow
+	for rows.Next() {
+		var i ListHotspotsWithinRow
+		if err := rows.Scan(&i.ID, &i.Latitude, &i.Longitude); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertHotspot = `-- name: UpsertHotspot :one
 INSERT INTO hotspots (name, location, region, source, source_ref)
 VALUES (

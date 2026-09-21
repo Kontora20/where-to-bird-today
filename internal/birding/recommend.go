@@ -126,6 +126,8 @@ type Store interface {
 	GetHotspotSpeciesWeeks(ctx context.Context, arg store.GetHotspotSpeciesWeeksParams) ([]store.GetHotspotSpeciesWeeksRow, error)
 	GetLatestChecklistWithSpecies(ctx context.Context, arg store.GetLatestChecklistWithSpeciesParams) (store.GetLatestChecklistWithSpeciesRow, error)
 	GetHotspot(ctx context.Context, id int64) (store.GetHotspotRow, error)
+	ListHotspotsWithin(ctx context.Context, arg store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error)
+	GetAreaWeeks(ctx context.Context, arg store.GetAreaWeeksParams) ([]store.GetAreaWeeksRow, error)
 	GetSpeciesTimeOfDay(ctx context.Context, arg store.GetSpeciesTimeOfDayParams) ([]store.GetSpeciesTimeOfDayRow, error)
 }
 
@@ -152,12 +154,9 @@ func NewService(store Store, driveTimes DriveTimeFinder) *Service {
 // p.MaxMinutes of driving when that is set, ranked by expected species
 // richness for p.Week, each with its top expected species.
 func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, error) {
-	radiusKM := p.RadiusKM
-	if p.MaxMinutes > 0 {
-		if s.driveTimes == nil {
-			return nil, ErrTravelTimeUnavailable
-		}
-		radiusKM = p.MaxMinutes * maxSpeedKMPerMinute
+	radiusKM, err := s.searchRadiusKM(p.RadiusKM, p.MaxMinutes)
+	if err != nil {
+		return nil, err
 	}
 
 	rows, err := s.store.RecommendHotspots(ctx, store.RecommendHotspotsParams{
@@ -199,6 +198,40 @@ func (s *Service) Recommend(ctx context.Context, p Params) ([]Recommendation, er
 	return recommendations, nil
 }
 
+// searchRadiusKM is how far from the point to look for hotspots. A drive time
+// limit replaces the radius, at the fastest speed any road allows, and needs a
+// routing server.
+func (s *Service) searchRadiusKM(radiusKM, maxMinutes float64) (float64, error) {
+	if maxMinutes <= 0 {
+		return radiusKM, nil
+	}
+	if s.driveTimes == nil {
+		return 0, ErrTravelTimeUnavailable
+	}
+	return maxMinutes * maxSpeedKMPerMinute, nil
+}
+
+// reachable returns the positions in destinations that are within maxMinutes of
+// driving from origin, in order, and the drive time to each of them.
+func (s *Service) reachable(ctx context.Context, origin routing.Point, destinations []routing.Point, maxMinutes float64) ([]int, []time.Duration, error) {
+	all, err := s.driveTimes.DriveTimes(ctx, origin, destinations)
+	if err != nil {
+		return nil, nil, fmt.Errorf("finding drive times: %w", err)
+	}
+
+	limit := time.Duration(maxMinutes * float64(time.Minute))
+	var positions []int
+	var times []time.Duration
+	for i, driveTime := range all {
+		if driveTime == routing.Unreachable || driveTime > limit {
+			continue
+		}
+		positions = append(positions, i)
+		times = append(times, driveTime)
+	}
+	return positions, times, nil
+}
+
 // withinDriveTime keeps the recommendations reachable from origin within
 // maxMinutes of driving, in their existing order, and records each drive
 // time. It returns an empty non-nil slice when none qualify.
@@ -208,17 +241,14 @@ func (s *Service) withinDriveTime(ctx context.Context, recommendations []Recomme
 		destinations[i] = routing.Point{Latitude: recommendation.Latitude, Longitude: recommendation.Longitude}
 	}
 
-	times, err := s.driveTimes.DriveTimes(ctx, origin, destinations)
+	positions, times, err := s.reachable(ctx, origin, destinations, maxMinutes)
 	if err != nil {
-		return nil, fmt.Errorf("finding drive times: %w", err)
+		return nil, err
 	}
 
-	limit := time.Duration(maxMinutes * float64(time.Minute))
-	reachable := make([]Recommendation, 0, len(recommendations))
-	for i, recommendation := range recommendations {
-		if times[i] == routing.Unreachable || times[i] > limit {
-			continue
-		}
+	reachable := make([]Recommendation, 0, len(positions))
+	for i, position := range positions {
+		recommendation := recommendations[position]
 		recommendation.DriveMinutes = max(1, int(math.Ceil(times[i].Minutes())))
 		reachable = append(reachable, recommendation)
 	}

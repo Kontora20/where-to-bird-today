@@ -9,6 +9,72 @@ import (
 	"context"
 )
 
+const getAreaWeeks = `-- name: GetAreaWeeks :many
+WITH totals AS (
+    SELECT hotspot_id, week_of_year, MAX(sample_size) AS checklists
+    FROM species_seasonality
+    WHERE hotspot_id = ANY($1::bigint[])
+    GROUP BY hotspot_id, week_of_year
+),
+week_totals AS (
+    SELECT week_of_year, SUM(checklists) AS checklists
+    FROM totals
+    GROUP BY week_of_year
+),
+week_species AS (
+    SELECT week_of_year, SUM(ROUND(frequency * sample_size)) AS with_species
+    FROM species_seasonality
+    WHERE hotspot_id = ANY($1::bigint[]) AND species_id = ANY($2::bigint[])
+    GROUP BY week_of_year
+)
+SELECT
+    w.week_of_year::smallint AS week_of_year,
+    COALESCE(t.checklists, 0)::integer AS checklists,
+    COALESCE(s.with_species, 0)::integer AS with_species
+FROM generate_series(1, 52) AS w(week_of_year)
+LEFT JOIN week_totals t ON t.week_of_year = w.week_of_year
+LEFT JOIN week_species s ON s.week_of_year = w.week_of_year
+ORDER BY w.week_of_year
+`
+
+type GetAreaWeeksParams struct {
+	HotspotIds []int64 `json:"hotspot_ids"`
+	SpeciesIds []int64 `json:"species_ids"`
+}
+
+type GetAreaWeeksRow struct {
+	WeekOfYear  int16 `json:"week_of_year"`
+	Checklists  int32 `json:"checklists"`
+	WithSpecies int32 `json:"with_species"`
+}
+
+// The year over a set of hotspots for a set of species, a row for each of the
+// 52 weeks: the hotspots' complete checklists that week added up, and the
+// checklists that recorded each of the species added up, so a checklist with
+// two of the species counts twice. A hotspot's checklists in a week are read
+// off its own rows, since every species row of a week carries the same
+// sample_size; the checklists with a species are frequency * sample_size,
+// rounded back to a whole number.
+func (q *Queries) GetAreaWeeks(ctx context.Context, arg GetAreaWeeksParams) ([]GetAreaWeeksRow, error) {
+	rows, err := q.db.Query(ctx, getAreaWeeks, arg.HotspotIds, arg.SpeciesIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAreaWeeksRow
+	for rows.Next() {
+		var i GetAreaWeeksRow
+		if err := rows.Scan(&i.WeekOfYear, &i.Checklists, &i.WithSpecies); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getHotspotSpeciesWeeks = `-- name: GetHotspotSpeciesWeeks :many
 WITH totals AS (
     SELECT week_of_year, MAX(sample_size) AS checklists

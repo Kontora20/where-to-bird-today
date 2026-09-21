@@ -37,6 +37,13 @@ type fakeStore struct {
 	timeOfDayRows   []store.GetSpeciesTimeOfDayRow
 	timeOfDayParams *store.GetSpeciesTimeOfDayParams
 
+	// hotspotsWithin and areaWeeksRows are what the area queries return;
+	// areaWeeksArgs records the hotspots and species the weeks were asked for.
+	hotspotsWithin []store.ListHotspotsWithinRow
+	areaWeeksRows  []store.GetAreaWeeksRow
+	areaWeeksErr   error
+	areaWeeksArgs  *store.GetAreaWeeksParams
+
 	searchErr  error
 	searchRows []store.SearchSpeciesRow
 	// searchArgs is a pointer because fakeStore's methods have value
@@ -69,6 +76,20 @@ func (f fakeStore) GetSpeciesTimeOfDay(_ context.Context, arg store.GetSpeciesTi
 		return nil, f.timeOfDayErr
 	}
 	return f.timeOfDayRows, nil
+}
+
+func (f fakeStore) ListHotspotsWithin(_ context.Context, _ store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error) {
+	return f.hotspotsWithin, nil
+}
+
+func (f fakeStore) GetAreaWeeks(_ context.Context, arg store.GetAreaWeeksParams) ([]store.GetAreaWeeksRow, error) {
+	if f.areaWeeksArgs != nil {
+		*f.areaWeeksArgs = arg
+	}
+	if f.areaWeeksErr != nil {
+		return nil, f.areaWeeksErr
+	}
+	return f.areaWeeksRows, nil
 }
 
 func (f fakeStore) SearchSpecies(_ context.Context, arg store.SearchSpeciesParams) ([]store.SearchSpeciesRow, error) {

@@ -29,14 +29,19 @@ func WeekOfYear(date time.Time) int16 {
 	return int16(min(week, weeksPerYear))
 }
 
-// WeekFrequency is one week at one hotspot. Frequency is the share of the
-// week's Checklists that recorded the species, as eBird counts it, and 0 when
-// there were none. SmoothedFrequency pools the week with the weeks either
-// side and pulls the result toward the country's frequency, more strongly the
-// fewer checklists there are. It is what the best weeks are picked by, and
-// where the hotspot has no checklists at all it is the country's alone.
+// WeekFrequency is one week at one hotspot, or over the hotspots of an area.
+// Start is the Monday of the week, as YYYY-MM-DD, in the ISO year of the
+// requested date. Frequency is the share of the week's Checklists that
+// recorded the species, as eBird counts it, and 0 when there were none; for
+// several species it is the sum of their shares, the number of them a
+// checklist is expected to have. SmoothedFrequency pools the week with the
+// weeks either side and, at a hotspot, pulls the result toward the country's
+// frequency, more strongly the fewer checklists there are. It is what the best
+// weeks are picked by, and where a hotspot has no checklists at all it is the
+// country's alone.
 type WeekFrequency struct {
 	Week              int16   `json:"week"`
+	Start             string  `json:"start"`
 	Frequency         float32 `json:"frequency"`
 	Checklists        int32   `json:"checklists"`
 	SmoothedFrequency float32 `json:"smoothed_frequency"`
@@ -66,32 +71,64 @@ func (s *Service) seasonality(ctx context.Context, hotspotID, speciesID int64, d
 	return weeks, ranges, nil
 }
 
-// bestWeeks pools each week with its two neighbours, the year being a circle,
-// and adjusts the pooled share toward the average country frequency of those
-// weeks. The best weeks are those within bestWeekShare of the highest.
+// weekCounts is one week's counts, from one hotspot or from an area.
+// withSpecies is the checklists that recorded the species, or for several
+// species those numbers added up. countryFrequency is the country's frequency
+// for the species, 0 where there is none.
+type weekCounts struct {
+	week             int16
+	checklists       int32
+	withSpecies      int32
+	countryFrequency float32
+}
+
+// bestWeeks is poolWeeks for the weeks of one species at one hotspot, adjusted
+// toward the country's frequency.
 func bestWeeks(rows []store.GetHotspotSpeciesWeeksRow, year int) ([]WeekFrequency, []WeekRange) {
-	if !slices.ContainsFunc(rows, func(row store.GetHotspotSpeciesWeeksRow) bool { return row.Checklists > 0 }) {
+	counts := make([]weekCounts, len(rows))
+	for i, row := range rows {
+		counts[i] = weekCounts{week: row.WeekOfYear, checklists: row.Checklists, withSpecies: row.WithSpecies, countryFrequency: row.CountryFrequency}
+	}
+	return poolWeeks(counts, year, weekPriorChecklists)
+}
+
+// poolWeeks pools each week with its two neighbours, the year being a circle,
+// and adjusts the pooled share toward the average country frequency of those
+// weeks, which counts as priorChecklists extra checklists. An area has so many
+// checklists that it passes 0. The best weeks are those within bestWeekShare of
+// the highest. Both results are empty lists when there are no checklists.
+func poolWeeks(counts []weekCounts, year int, priorChecklists float32) ([]WeekFrequency, []WeekRange) {
+	if !slices.ContainsFunc(counts, func(week weekCounts) bool { return week.checklists > 0 }) {
 		return []WeekFrequency{}, []WeekRange{}
 	}
 
-	weeks := make([]WeekFrequency, len(rows))
+	weeks := make([]WeekFrequency, len(counts))
 	var highest float32
-	for i, row := range rows {
+	for i, week := range counts {
 		var checklists, withSpecies int32
 		var countryFrequency float32
 		for _, offset := range []int{-1, 0, 1} {
-			neighbour := rows[(i+offset+len(rows))%len(rows)]
-			checklists += neighbour.Checklists
-			withSpecies += neighbour.WithSpecies
-			countryFrequency += neighbour.CountryFrequency / 3
+			neighbour := counts[(i+offset+len(counts))%len(counts)]
+			checklists += neighbour.checklists
+			withSpecies += neighbour.withSpecies
+			countryFrequency += neighbour.countryFrequency / 3
 		}
-		smoothed := (float32(withSpecies) + weekPriorChecklists*countryFrequency) / (float32(checklists) + weekPriorChecklists)
+		var smoothed float32
+		if denominator := float32(checklists) + priorChecklists; denominator > 0 {
+			smoothed = (float32(withSpecies) + priorChecklists*countryFrequency) / denominator
+		}
 
 		var frequency float32
-		if row.Checklists > 0 {
-			frequency = float32(row.WithSpecies) / float32(row.Checklists)
+		if week.checklists > 0 {
+			frequency = float32(week.withSpecies) / float32(week.checklists)
 		}
-		weeks[i] = WeekFrequency{Week: row.WeekOfYear, Frequency: frequency, Checklists: row.Checklists, SmoothedFrequency: smoothed}
+		weeks[i] = WeekFrequency{
+			Week:              week.week,
+			Start:             isoWeekStart(year, int(week.week)).Format("2006-01-02"),
+			Frequency:         frequency,
+			Checklists:        week.checklists,
+			SmoothedFrequency: smoothed,
+		}
 		highest = max(highest, smoothed)
 	}
 

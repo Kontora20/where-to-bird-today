@@ -703,6 +703,113 @@ func TestSeasonalityCountsWeek53InWeek52(t *testing.T) {
 	}
 }
 
+// TestAreaWeeks seeds hotspots around a point and checks which are within the
+// range and the weeks pooled over them by hand. Near hotspot 1 has, in week 10,
+// 4 checklists with species X on 2 and species Y on 1, and in week 11 2
+// checklists, both with X. Near hotspot 2 has 1 checklist with X in week 10 and
+// 2 with Y on 1 in week 12. The far hotspot, outside the range, has 100 in week
+// 10, all with X, and must not count. Over the two near hotspots, for X: week 10
+// is 3 of 5 checklists, week 11 is 2 of 2, week 12 is 0 of 2. For X and Y
+// together week 10 is 4 (3 and 1) of 5, and week 12 is 1 of 2.
+func TestAreaWeeks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pool := newTestPool(t)
+	queries := New(pool)
+
+	seedHotspot := func(name string, latitude, longitude float64) int64 {
+		t.Helper()
+		row, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+			Name: name, Latitude: latitude, Longitude: longitude, Region: "LT", Source: "test", SourceRef: "test-area-" + name,
+		})
+		if err != nil {
+			t.Fatalf("UpsertHotspot (%s): %v", name, err)
+		}
+		return row.ID
+	}
+	near1 := seedHotspot("near1", 55.05, 25.05)
+	near2 := seedHotspot("near2", 54.95, 24.95)
+	far := seedHotspot("far", 57.0, 27.0)
+
+	seedSpecies := func(name, avibaseID string) int64 {
+		t.Helper()
+		row, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{ScientificName: name, AvibaseID: pgtype.Text{String: avibaseID, Valid: true}})
+		if err != nil {
+			t.Fatalf("UpsertSpecies (%s): %v", name, err)
+		}
+		return row.ID
+	}
+	speciesX := seedSpecies("Testus areax", "avibase-TESTARX1")
+	speciesY := seedSpecies("Testus areay", "avibase-TESTARY1")
+
+	seed := func(hotspotID, speciesID int64, week int, frequency float32, sampleSize int) {
+		t.Helper()
+		if _, err := pool.Exec(ctx,
+			"INSERT INTO species_seasonality (hotspot_id, species_id, week_of_year, frequency, adjusted_frequency, sample_size) VALUES ($1, $2, $3, $4, $4, $5)",
+			hotspotID, speciesID, week, frequency, sampleSize,
+		); err != nil {
+			t.Fatalf("seeding species_seasonality: %v", err)
+		}
+	}
+	seed(near1, speciesX, 10, 0.5, 4)
+	seed(near1, speciesY, 10, 0.25, 4)
+	seed(near1, speciesX, 11, 1.0, 2)
+	seed(near2, speciesX, 10, 1.0, 1)
+	seed(near2, speciesY, 12, 0.5, 2)
+	seed(far, speciesX, 10, 1.0, 100)
+
+	t.Run("finds the hotspots within the range", func(t *testing.T) {
+		rows, err := queries.ListHotspotsWithin(ctx, ListHotspotsWithinParams{Latitude: 55.0, Longitude: 25.0, RadiusMeters: 25_000})
+		if err != nil {
+			t.Fatalf("ListHotspotsWithin: %v", err)
+		}
+		var ids []int64
+		for _, row := range rows {
+			ids = append(ids, row.ID)
+		}
+		slices.Sort(ids)
+		if want := []int64{near1, near2}; !slices.Equal(ids, want) {
+			t.Fatalf("hotspots within = %v, want %v (the far one is outside 25 km)", ids, want)
+		}
+		if got := rows[0]; got.Latitude.Float64 < 54.9 || got.Latitude.Float64 > 55.1 || got.Longitude.Float64 < 24.9 || got.Longitude.Float64 > 25.1 {
+			t.Errorf("coordinates = %v, %v, want near 55, 25", got.Latitude.Float64, got.Longitude.Float64)
+		}
+	})
+
+	weeks := func(speciesIDs ...int64) []GetAreaWeeksRow {
+		t.Helper()
+		got, err := queries.GetAreaWeeks(ctx, GetAreaWeeksParams{HotspotIds: []int64{near1, near2}, SpeciesIds: speciesIDs})
+		if err != nil {
+			t.Fatalf("GetAreaWeeks: %v", err)
+		}
+		if len(got) != 52 {
+			t.Fatalf("got %d weeks, want 52", len(got))
+		}
+		return got
+	}
+	check := func(got GetAreaWeeksRow, week int16, checklists, withSpecies int32) {
+		t.Helper()
+		if got.WeekOfYear != week || got.Checklists != checklists || got.WithSpecies != withSpecies {
+			t.Errorf("week %d = %d of %d checklists; want week %d = %d of %d", got.WeekOfYear, got.WithSpecies, got.Checklists, week, withSpecies, checklists)
+		}
+	}
+
+	t.Run("pools the hotspots for one species", func(t *testing.T) {
+		got := weeks(speciesX)
+		check(got[0], 1, 0, 0)
+		check(got[9], 10, 5, 3)
+		check(got[10], 11, 2, 2)
+		check(got[11], 12, 2, 0)
+	})
+
+	t.Run("adds up several species", func(t *testing.T) {
+		got := weeks(speciesX, speciesY)
+		check(got[9], 10, 5, 4)
+		check(got[11], 12, 2, 1)
+	})
+}
+
 func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32, wantAdjusted float64) {
 	t.Helper()
 

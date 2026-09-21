@@ -26,6 +26,10 @@ type fakeRecommendationService struct {
 	// plain field would be written to a copy.
 	gotParams *birding.Params
 	gotDate   *time.Time
+
+	weeks         birding.AreaWeeks
+	weeksErr      error
+	gotAreaParams *birding.AreaParams
 }
 
 func (f fakeRecommendationService) Recommend(_ context.Context, params birding.Params) ([]birding.Recommendation, error) {
@@ -36,6 +40,16 @@ func (f fakeRecommendationService) Recommend(_ context.Context, params birding.P
 		return nil, f.err
 	}
 	return f.results, nil
+}
+
+func (f fakeRecommendationService) AreaWeeks(_ context.Context, params birding.AreaParams) (birding.AreaWeeks, error) {
+	if f.gotAreaParams != nil {
+		*f.gotAreaParams = params
+	}
+	if f.weeksErr != nil {
+		return birding.AreaWeeks{}, f.weeksErr
+	}
+	return f.weeks, nil
 }
 
 func (f fakeRecommendationService) SearchSpecies(_ context.Context, _, _ string) ([]birding.SpeciesMatch, error) {

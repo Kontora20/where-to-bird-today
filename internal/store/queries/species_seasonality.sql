@@ -26,6 +26,40 @@ LEFT JOIN country_seasonality c
     AND c.species_id = sqlc.arg(species_id) AND c.week_of_year = w.week_of_year
 ORDER BY w.week_of_year;
 
+-- name: GetAreaWeeks :many
+-- The year over a set of hotspots for a set of species, a row for each of the
+-- 52 weeks: the hotspots' complete checklists that week added up, and the
+-- checklists that recorded each of the species added up, so a checklist with
+-- two of the species counts twice. A hotspot's checklists in a week are read
+-- off its own rows, since every species row of a week carries the same
+-- sample_size; the checklists with a species are frequency * sample_size,
+-- rounded back to a whole number.
+WITH totals AS (
+    SELECT hotspot_id, week_of_year, MAX(sample_size) AS checklists
+    FROM species_seasonality
+    WHERE hotspot_id = ANY(sqlc.arg(hotspot_ids)::bigint[])
+    GROUP BY hotspot_id, week_of_year
+),
+week_totals AS (
+    SELECT week_of_year, SUM(checklists) AS checklists
+    FROM totals
+    GROUP BY week_of_year
+),
+week_species AS (
+    SELECT week_of_year, SUM(ROUND(frequency * sample_size)) AS with_species
+    FROM species_seasonality
+    WHERE hotspot_id = ANY(sqlc.arg(hotspot_ids)::bigint[]) AND species_id = ANY(sqlc.arg(species_ids)::bigint[])
+    GROUP BY week_of_year
+)
+SELECT
+    w.week_of_year::smallint AS week_of_year,
+    COALESCE(t.checklists, 0)::integer AS checklists,
+    COALESCE(s.with_species, 0)::integer AS with_species
+FROM generate_series(1, 52) AS w(week_of_year)
+LEFT JOIN week_totals t ON t.week_of_year = w.week_of_year
+LEFT JOIN week_species s ON s.week_of_year = w.week_of_year
+ORDER BY w.week_of_year;
+
 -- name: TruncateSeasonality :exec
 TRUNCATE species_seasonality, country_seasonality;
 

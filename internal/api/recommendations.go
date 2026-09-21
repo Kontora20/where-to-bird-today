@@ -54,6 +54,7 @@ const maxDriveMinutes = 240
 
 type recommendationService interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
+	AreaWeeks(ctx context.Context, params birding.AreaParams) (birding.AreaWeeks, error)
 	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string, date time.Time) (birding.SpeciesDetail, error)
 	SearchSpecies(ctx context.Context, query, lang string) ([]birding.SpeciesMatch, error)
 }
@@ -88,73 +89,126 @@ func parseSpeciesIDs(values []string) ([]int64, error) {
 	return ids, nil
 }
 
+// search is what every request about an area asks: where, how far, which day
+// and which species.
+type search struct {
+	latitude   float64
+	longitude  float64
+	radiusKM   float64
+	maxMinutes float64
+	date       time.Time
+	speciesIDs []int64
+}
+
+// parseSearch reads the query of a request about an area. The error's text is
+// meant for the client.
+func parseSearch(query url.Values) (search, error) {
+	var parsed search
+	var err error
+
+	parsed.latitude, err = strconv.ParseFloat(query.Get("lat"), 64)
+	if err != nil || parsed.latitude < -90 || parsed.latitude > 90 {
+		return search{}, errors.New("lat must be a number between -90 and 90")
+	}
+	parsed.longitude, err = strconv.ParseFloat(query.Get("lon"), 64)
+	if err != nil || parsed.longitude < -180 || parsed.longitude > 180 {
+		return search{}, errors.New("lon must be a number between -180 and 180")
+	}
+
+	// A drive time limit replaces the radius when both are given.
+	if raw := query.Get("max_minutes"); raw != "" {
+		parsed.maxMinutes, err = strconv.ParseFloat(raw, 64)
+		// Written as a positive test so NaN, which fails every comparison, is
+		// rejected too.
+		if err != nil || !(parsed.maxMinutes > 0 && parsed.maxMinutes <= maxDriveMinutes) {
+			return search{}, fmt.Errorf("max_minutes must be a number above 0 and at most %d", maxDriveMinutes)
+		}
+	} else {
+		parsed.radiusKM, err = strconv.ParseFloat(query.Get("radius_km"), 64)
+		if err != nil || parsed.radiusKM <= 0 {
+			return search{}, errors.New("radius_km must be a positive number, or max_minutes must be given")
+		}
+	}
+
+	parsed.date, err = parseDate(query)
+	if err != nil {
+		return search{}, err
+	}
+	parsed.speciesIDs, err = parseSpeciesIDs(query["species"])
+	if err != nil {
+		return search{}, err
+	}
+	return parsed, nil
+}
+
+// writeSearchError answers a failed search of an area. action names what was
+// being done, for the log.
+func writeSearchError(w http.ResponseWriter, logger *slog.Logger, err error, action string) {
+	switch {
+	case errors.Is(err, birding.ErrTravelTimeUnavailable):
+		http.Error(w, "travel time is not available; search by radius_km instead", http.StatusServiceUnavailable)
+	case errors.Is(err, birding.ErrNoRoadNearOrigin):
+		http.Error(w, "no road near that location", http.StatusUnprocessableEntity)
+	default:
+		logger.Error(action+" failed", slog.Any("error", err))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
 func handleGetRecommendations(logger *slog.Logger, recommendations recommendationService) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query()
-
-		latitude, err := strconv.ParseFloat(query.Get("lat"), 64)
-		if err != nil || latitude < -90 || latitude > 90 {
-			http.Error(w, "lat must be a number between -90 and 90", http.StatusBadRequest)
-			return
-		}
-		longitude, err := strconv.ParseFloat(query.Get("lon"), 64)
-		if err != nil || longitude < -180 || longitude > 180 {
-			http.Error(w, "lon must be a number between -180 and 180", http.StatusBadRequest)
-			return
-		}
-
-		// A drive time limit replaces the radius when both are given.
-		var radiusKM, maxMinutes float64
-		if raw := query.Get("max_minutes"); raw != "" {
-			maxMinutes, err = strconv.ParseFloat(raw, 64)
-			// Written as a positive test so NaN, which fails every
-			// comparison, is rejected too.
-			if err != nil || !(maxMinutes > 0 && maxMinutes <= maxDriveMinutes) {
-				http.Error(w, fmt.Sprintf("max_minutes must be a number above 0 and at most %d", maxDriveMinutes), http.StatusBadRequest)
-				return
-			}
-		} else {
-			radiusKM, err = strconv.ParseFloat(query.Get("radius_km"), 64)
-			if err != nil || radiusKM <= 0 {
-				http.Error(w, "radius_km must be a positive number, or max_minutes must be given", http.StatusBadRequest)
-				return
-			}
-		}
-
-		date, err := parseDate(query)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		speciesIDs, err := parseSpeciesIDs(query["species"])
+		parsed, err := parseSearch(r.URL.Query())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		results, err := recommendations.Recommend(r.Context(), birding.Params{
-			Latitude:   latitude,
-			Longitude:  longitude,
-			RadiusKM:   radiusKM,
-			MaxMinutes: maxMinutes,
-			Week:       birding.WeekOfYear(date),
+			Latitude:   parsed.latitude,
+			Longitude:  parsed.longitude,
+			RadiusKM:   parsed.radiusKM,
+			MaxMinutes: parsed.maxMinutes,
+			Week:       birding.WeekOfYear(parsed.date),
 			Lang:       resolveLanguage(r),
-			SpeciesIDs: speciesIDs,
+			SpeciesIDs: parsed.speciesIDs,
 		})
-		switch {
-		case errors.Is(err, birding.ErrTravelTimeUnavailable):
-			http.Error(w, "travel time is not available; search by radius_km instead", http.StatusServiceUnavailable)
-			return
-		case errors.Is(err, birding.ErrNoRoadNearOrigin):
-			http.Error(w, "no road near that location", http.StatusUnprocessableEntity)
-			return
-		case err != nil:
-			logger.Error("ranking recommendations failed", slog.Any("error", err))
-			http.Error(w, "internal server error", http.StatusInternalServerError)
+		if err != nil {
+			writeSearchError(w, logger, err, "ranking recommendations")
 			return
 		}
 
 		writeJSON(w, logger, http.StatusOK, results)
+	})
+}
+
+// handleGetAreaWeeks serves the best weeks of the requested species over the
+// hotspots of an area: the same query as the recommendations, but at least one
+// species is required.
+func handleGetAreaWeeks(logger *slog.Logger, recommendations recommendationService) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parsed, err := parseSearch(r.URL.Query())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(parsed.speciesIDs) == 0 {
+			http.Error(w, "species is required", http.StatusBadRequest)
+			return
+		}
+
+		weeks, err := recommendations.AreaWeeks(r.Context(), birding.AreaParams{
+			Latitude:   parsed.latitude,
+			Longitude:  parsed.longitude,
+			RadiusKM:   parsed.radiusKM,
+			MaxMinutes: parsed.maxMinutes,
+			SpeciesIDs: parsed.speciesIDs,
+			Date:       parsed.date,
+		})
+		if err != nil {
+			writeSearchError(w, logger, err, "finding best weeks")
+			return
+		}
+
+		writeJSON(w, logger, http.StatusOK, weeks)
 	})
 }

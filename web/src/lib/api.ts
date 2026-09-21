@@ -39,7 +39,8 @@ export async function searchSpecies(query: string): Promise<SpeciesMatch[]> {
 	return response.json();
 }
 
-export async function getRecommendations(query: {
+// An area and a day, and optionally the species, as every search of an area asks.
+export interface SearchQuery {
 	lat: number;
 	lon: number;
 	// Exactly one of these limits the search; maxMinutes wins if both are given.
@@ -47,7 +48,11 @@ export async function getRecommendations(query: {
 	radiusKm?: number;
 	date?: string;
 	speciesIds?: number[];
-}): Promise<Recommendation[]> {
+}
+
+// The server's plain-text reason ("no road near that location") is meant to
+// be shown.
+async function getSearch<T>(path: string, query: SearchQuery): Promise<T> {
 	const params = new URLSearchParams({
 		lat: String(query.lat),
 		lon: String(query.lon)
@@ -64,13 +69,30 @@ export async function getRecommendations(query: {
 		params.append('species', String(speciesId));
 	}
 
-	const response = await fetch(`/recommendations?${params}`);
+	const response = await fetch(`${path}?${params}`);
 	if (!response.ok) {
-		// The server's plain-text reason ("no road near that location") is
-		// meant to be shown.
-		throw new Error((await response.text()).trim() || `recommendations request failed: ${response.status}`);
+		throw new Error((await response.text()).trim() || `${path} request failed: ${response.status}`);
 	}
 	return response.json();
+}
+
+export function getRecommendations(query: SearchQuery): Promise<Recommendation[]> {
+	return getSearch('/recommendations', query);
+}
+
+// The year over the hotspots of an area for the species in the query, which
+// must name at least one. For several species each week's frequency is the
+// sum of theirs: the number of them a checklist is expected to have.
+export interface AreaWeeks {
+	// The week of the query's date.
+	week: number;
+	// Empty when the area has no checklists.
+	weeks: WeekFrequency[];
+	best_weeks: WeekRange[];
+}
+
+export function getAreaWeeks(query: SearchQuery): Promise<AreaWeeks> {
+	return getSearch('/recommendations/weeks', query);
 }
 
 export interface Photo {
@@ -86,6 +108,8 @@ export interface Photo {
 // counted in week 52.
 export interface WeekFrequency {
 	week: number;
+	// The Monday of the week, YYYY-MM-DD, in the ISO year of the query's date.
+	start: string;
 	// The share of the week's checklists that recorded the species; 0 when
 	// there were none.
 	frequency: number;

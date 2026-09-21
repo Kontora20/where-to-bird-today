@@ -59,3 +59,17 @@ SELECT
     updated_at
 FROM hotspots
 WHERE id = sqlc.arg(id);
+
+-- name: ListHotspotsWithin :many
+-- The hotspots within radius_meters of a point, straight-line, with their
+-- coordinates so the caller can narrow them by drive time.
+SELECT
+    h.id,
+    ST_Y(h.location::geometry) AS latitude,
+    ST_X(h.location::geometry) AS longitude
+FROM hotspots h
+WHERE ST_DWithin(
+    h.location,
+    ST_SetSRID(ST_MakePoint(sqlc.arg(longitude), sqlc.arg(latitude)), 4326)::geography,
+    sqlc.arg(radius_meters)
+);

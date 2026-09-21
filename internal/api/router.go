@@ -34,6 +34,7 @@ func NewRouter(logger *slog.Logger, db pinger, ingestionRuns ingestionRunStore, 
 	mux.Handle("POST /hotspots", handleCreateHotspot(logger, hotspots))
 	mux.Handle("GET /hotspots/{id}", handleGetHotspot(logger, hotspots))
 	mux.Handle("GET /recommendations", handleGetRecommendations(logger, recommendations))
+	mux.Handle("GET /recommendations/weeks", handleGetAreaWeeks(logger, recommendations))
 	mux.Handle("GET /species", handleSearchSpecies(logger, recommendations))
 	mux.Handle("GET /hotspots/{hotspotId}/species/{speciesId}", handleGetSpeciesDetail(logger, recommendations))
 	// Catch-all for the SPA, GET-only. A bare "/" (no method) matches every

@@ -3,9 +3,11 @@
 	import 'leaflet/dist/leaflet.css';
 	import type * as Leaflet from 'leaflet';
 	import {
+		getAreaWeeks,
 		getRecommendations,
 		getSpeciesDetail,
 		searchSpecies,
+		type AreaWeeks,
 		type HourFrequency,
 		type Recommendation,
 		type SpeciesDetail,
@@ -27,6 +29,10 @@
 	let suggestionTimer: ReturnType<typeof setTimeout> | undefined;
 
 	let recommendations = $state<Recommendation[]>([]);
+	// The best weeks of the target species over the area searched, and how many
+	// species that was; null when the search had no target species.
+	let areaWeeks = $state<AreaWeeks | null>(null);
+	let areaSpeciesCount = $state(0);
 	let searched = $state(false);
 	let loading = $state(false);
 	let locating = $state(false);
@@ -233,28 +239,44 @@
 		targetSpecies = targetSpecies.filter((target) => target.species_id !== speciesId);
 	}
 
-	async function search(event: SubmitEvent) {
+	function search(event: SubmitEvent) {
 		event.preventDefault();
+		return runSearch();
+	}
+
+	// Searches the week a bar of the best weeks chart stands for.
+	function searchWeek(start: string) {
+		date = start;
+		return runSearch();
+	}
+
+	async function runSearch() {
 		error = '';
 		if (!maxMinutes && !radiusKm) {
 			error = 'Enter a drive time or a radius';
 			return;
 		}
 		loading = true;
+		const query = {
+			lat: Number(lat),
+			lon: Number(lon),
+			maxMinutes: maxMinutes ? Number(maxMinutes) : undefined,
+			radiusKm: radiusKm ? Number(radiusKm) : undefined,
+			date: date || undefined,
+			speciesIds: targetSpecies.map((target) => target.species_id)
+		};
 		try {
-			recommendations = await getRecommendations({
-				lat: Number(lat),
-				lon: Number(lon),
-				maxMinutes: maxMinutes ? Number(maxMinutes) : undefined,
-				radiusKm: radiusKm ? Number(radiusKm) : undefined,
-				date: date || undefined,
-				speciesIds: targetSpecies.map((target) => target.species_id)
-			});
+			[recommendations, areaWeeks] = await Promise.all([
+				getRecommendations(query),
+				query.speciesIds.length > 0 ? getAreaWeeks(query) : null
+			]);
+			areaSpeciesCount = query.speciesIds.length;
 			searched = true;
 			updateMarkers();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'search failed';
 			recommendations = [];
+			areaWeeks = null;
 			searched = false;
 			updateMarkers();
 		} finally {
@@ -339,6 +361,40 @@
 
 	<p class="hint">Click the map to set your location.</p>
 	<div bind:this={mapContainer} class="map"></div>
+
+	{#if areaWeeks && areaWeeks.weeks.length > 0}
+		{@const highest = Math.max(...areaWeeks.weeks.map((week) => week.smoothed_frequency))}
+		<section class="area-weeks">
+			<h2>Best weeks for {areaSpeciesCount === 1 ? 'this species' : 'these species'} in this area</h2>
+			<div class="seasonality">
+				{#each areaWeeks.weeks as week (week.week)}
+					{@const expected =
+						areaSpeciesCount === 1
+							? `${(week.smoothed_frequency * 100).toFixed(0)}% of checklists`
+							: `${week.smoothed_frequency.toFixed(2)} of these species per checklist`}
+					<button
+						type="button"
+						class="week-bar"
+						class:best={week.best}
+						class:current={week.week === areaWeeks.week}
+						style="height: {highest > 0 ? (week.smoothed_frequency / highest) * 100 : 0}%"
+						title="Week {week.week}, from {formatDay(week.start)}: {expected} ({week.checklists} {week.checklists === 1
+							? 'checklist'
+							: 'checklists'} that week)"
+						aria-label="Search week {week.week}, from {formatDay(week.start)}"
+						onclick={() => searchWeek(week.start)}
+					></button>
+				{/each}
+			</div>
+			<p class="chart-note">
+				{#if areaWeeks.best_weeks.length > 0}Best: {areaWeeks.best_weeks
+						.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`)
+						.join(', ')}.{/if}
+				Each week is pooled with the weeks either side across the hotspots in range. The outlined week is the one searched;
+				click a week to search it.
+			</p>
+		</section>
+	{/if}
 
 	{#if searched && recommendations.length === 0}
 		<p class="hint">
@@ -780,6 +836,22 @@
 
 	.week-bar.best {
 		background: var(--color-accent);
+	}
+
+	button.week-bar {
+		border: 0;
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.week-bar.current {
+		outline: 2px solid var(--color-fg);
+		outline-offset: 1px;
+	}
+
+	.area-weeks h2 {
+		font-size: 1.1rem;
+		margin: 1rem 0 0.5rem;
 	}
 
 	.links {
