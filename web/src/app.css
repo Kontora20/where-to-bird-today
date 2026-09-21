@@ -1,12 +1,25 @@
 :root {
-	color-scheme: light dark;
-	--color-bg: #ffffff;
-	--color-fg: #1a1a1a;
-	--color-border: #d8dee4;
-	--color-accent: #3388ff;
-	--color-accent-bg: #eef6ff;
-	--color-muted: #6b7280;
+	color-scheme: light;
+	--color-ground: #f5f2ea;
+	--color-panel: #ffffff;
+	--color-text: #16181a;
+	--color-muted: #5c5f5a;
+	--color-line: #ddd8ca;
+	--color-line-soft: #ece8dc;
+	--color-control-border: #c9c4b5;
+	--color-control-track: #efeadd;
+	--color-accent: #f2a127;
+	--color-on-accent: #16181a;
+	--color-accent-strong: #d9760a;
+	--color-accent-text: #9a5200;
+	--color-chip: #fbe8c6;
+	--color-selected: #fdf3df;
+	--color-bar: #e3dccb;
+	--color-inverse: #16181a;
+	--color-on-inverse: #ffffff;
+	--color-home: #2c66de;
 	--color-error: #c0392b;
+	--color-backdrop: rgba(0, 0, 0, 0.4);
 	font-family:
 		system-ui,
 		-apple-system,
@@ -14,15 +27,26 @@
 		sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--color-bg: #14171a;
-		--color-fg: #e8eaed;
-		--color-border: #33393f;
-		--color-accent-bg: #16324f;
-		--color-muted: #9aa4af;
-		--color-error: #ff6b5e;
-	}
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--color-ground: #121416;
+	--color-panel: #1b1e21;
+	--color-text: #f1eee6;
+	--color-muted: #a9aca4;
+	--color-line: #2e3236;
+	--color-line-soft: #272b2f;
+	--color-control-border: #43484d;
+	--color-control-track: #2a2e33;
+	--color-accent-strong: #f2a127;
+	--color-accent-text: #f5b04a;
+	--color-chip: #3a2c12;
+	--color-selected: #2a2113;
+	--color-bar: #3b4046;
+	--color-inverse: #f1eee6;
+	--color-on-inverse: #16181a;
+	--color-home: #5b8def;
+	--color-error: #ff6b5e;
+	--color-backdrop: rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -31,6 +55,52 @@
 
 body {
 	margin: 0;
-	background: var(--color-bg);
-	color: var(--color-fg);
+	background: var(--color-ground);
+	color: var(--color-text);
+}
+
+.search-location {
+	stroke: var(--color-home);
+	fill: var(--color-home);
+}
+
+/* Leaflet builds these elements itself and its stylesheet is light only. The
+   `:root` prefix makes these rules win over it whatever the load order. */
+:root[data-theme='dark'] .leaflet-tile-pane {
+	filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+}
+
+:root .leaflet-container {
+	background: var(--color-line-soft);
+}
+
+:root .leaflet-bar a {
+	background-color: var(--color-panel);
+	border-bottom-color: var(--color-line);
+	color: var(--color-text);
+}
+
+:root .leaflet-bar a:hover,
+:root .leaflet-bar a:focus {
+	background-color: var(--color-line-soft);
+}
+
+:root .leaflet-bar a.leaflet-disabled {
+	background-color: var(--color-line-soft);
+	color: var(--color-muted);
+}
+
+:root .leaflet-control-attribution {
+	background: color-mix(in srgb, var(--color-panel) 80%, transparent);
+	color: var(--color-muted);
+}
+
+:root .leaflet-control-attribution a {
+	color: var(--color-accent-text);
+}
+
+:root .leaflet-popup-content-wrapper,
+:root .leaflet-popup-tip {
+	background: var(--color-panel);
+	color: var(--color-text);
 }

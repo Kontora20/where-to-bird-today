@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
 	import type * as Leaflet from 'leaflet';
+	import ThemeSwitch from '$lib/ThemeSwitch.svelte';
 	import {
 		getAreaWeeks,
 		getRecommendations,
@@ -120,7 +121,7 @@
 			searchLocationMarker.setLatLng([latitude, longitude]);
 		} else {
 			searchLocationMarker = leaflet
-				.circleMarker([latitude, longitude], { radius: 8, color: 'red', fillOpacity: 0.8 })
+				.circleMarker([latitude, longitude], { radius: 8, className: 'search-location', fillOpacity: 0.8 })
 				.addTo(map);
 		}
 	}
@@ -286,7 +287,10 @@
 </script>
 
 <div class="page">
-	<h1>Where to Bird Today</h1>
+	<header class="header">
+		<h1>Where to Bird Today</h1>
+		<ThemeSwitch />
+	</header>
 
 	<form class="search-form" onsubmit={search}>
 		<label>
@@ -547,9 +551,17 @@
 		padding: 1.5rem 1rem 4rem;
 	}
 
+	.header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+
 	h1 {
 		font-size: 1.5rem;
-		margin: 0 0 1rem;
+		margin: 0;
 	}
 
 	.search-form {
@@ -570,19 +582,19 @@
 
 	.search-form input {
 		padding: 0.4rem 0.6rem;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-control-border);
 		border-radius: 6px;
-		background: var(--color-bg);
-		color: var(--color-fg);
+		background: var(--color-panel);
+		color: var(--color-text);
 		font-size: 1rem;
 	}
 
 	.search-form button {
 		padding: 0.5rem 1rem;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-control-border);
 		border-radius: 6px;
-		background: var(--color-bg);
-		color: var(--color-fg);
+		background: var(--color-panel);
+		color: var(--color-text);
 		font-size: 1rem;
 		cursor: pointer;
 	}
@@ -590,7 +602,7 @@
 	.search-form button.primary {
 		border-color: var(--color-accent);
 		background: var(--color-accent);
-		color: #fff;
+		color: var(--color-on-accent);
 	}
 
 	.search-form button:disabled {
@@ -614,9 +626,9 @@
 		margin: 0.2rem 0 0;
 		padding: 0.25rem 0;
 		list-style: none;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-line);
 		border-radius: 6px;
-		background: var(--color-bg);
+		background: var(--color-panel);
 	}
 
 	.suggestions button {
@@ -630,7 +642,7 @@
 
 	.suggestions button:hover,
 	.suggestions button:focus-visible {
-		background: var(--color-accent-bg);
+		background: var(--color-chip);
 	}
 
 	.targets {
@@ -648,14 +660,14 @@
 		gap: 0.3rem;
 		padding: 0.15rem 0.3rem 0.15rem 0.7rem;
 		border-radius: 999px;
-		background: var(--color-accent-bg);
+		background: var(--color-chip);
 		font-size: 0.85rem;
 	}
 
 	.targets button {
 		border: none;
 		background: none;
-		color: var(--color-fg);
+		color: var(--color-text);
 		cursor: pointer;
 	}
 
@@ -672,7 +684,7 @@
 	.map {
 		height: 400px;
 		width: 100%;
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-line);
 		border-radius: 8px;
 		margin-bottom: 1.5rem;
 	}
@@ -687,14 +699,15 @@
 	}
 
 	.results > li {
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-line);
 		border-radius: 8px;
 		padding: 0.75rem 1rem;
+		background: var(--color-panel);
 	}
 
 	.results > li.selected {
-		background: var(--color-accent-bg);
-		outline: 2px solid var(--color-accent);
+		background: var(--color-selected);
+		outline: 2px solid var(--color-accent-strong);
 	}
 
 	.results > li > button {
@@ -715,7 +728,7 @@
 
 	.species li {
 		border-radius: 999px;
-		background: var(--color-accent-bg);
+		background: var(--color-chip);
 		font-size: 0.8rem;
 	}
 
@@ -730,7 +743,7 @@
 		display: inline-block;
 		margin-top: 0.4rem;
 		font-size: 0.8rem;
-		color: var(--color-accent);
+		color: var(--color-accent-text);
 	}
 
 	.species-panel-backdrop {
@@ -738,7 +751,7 @@
 		inset: 0;
 		display: flex;
 		justify-content: flex-end;
-		background: rgba(0, 0, 0, 0.4);
+		background: var(--color-backdrop);
 		/* Above Leaflet's own panes, which go up to z-index 700. */
 		z-index: 1000;
 	}
@@ -749,8 +762,8 @@
 		height: 100%;
 		overflow-y: auto;
 		padding: 1.5rem;
-		background: var(--color-bg);
-		border-left: 1px solid var(--color-border);
+		background: var(--color-panel);
+		border-left: 1px solid var(--color-line);
 	}
 
 	.species-panel .close {
@@ -761,7 +774,7 @@
 		background: none;
 		font-size: 1.1rem;
 		cursor: pointer;
-		color: var(--color-fg);
+		color: var(--color-text);
 	}
 
 	.species-panel h2 {
@@ -799,7 +812,7 @@
 		align-items: flex-end;
 		gap: 1px;
 		height: 80px;
-		border-bottom: 1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-line);
 	}
 
 	.time-of-day {
@@ -807,18 +820,18 @@
 		align-items: flex-end;
 		gap: 2px;
 		height: 80px;
-		border-bottom: 1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-line);
 	}
 
 	.hour-bar {
 		flex: 1;
 		min-height: 2px;
-		background: var(--color-accent-bg);
+		background: var(--color-bar);
 		border-radius: 2px 2px 0 0;
 	}
 
 	.hour-bar.best {
-		background: var(--color-accent);
+		background: var(--color-accent-strong);
 	}
 
 	.chart-note {
@@ -830,12 +843,12 @@
 	.week-bar {
 		flex: 1;
 		min-height: 2px;
-		background: var(--color-accent-bg);
+		background: var(--color-bar);
 		border-radius: 2px 2px 0 0;
 	}
 
 	.week-bar.best {
-		background: var(--color-accent);
+		background: var(--color-accent-strong);
 	}
 
 	button.week-bar {
@@ -845,7 +858,7 @@
 	}
 
 	.week-bar.current {
-		outline: 2px solid var(--color-fg);
+		outline: 2px solid var(--color-text);
 		outline-offset: 1px;
 	}
 
@@ -864,6 +877,6 @@
 	}
 
 	.links a {
-		color: var(--color-accent);
+		color: var(--color-accent-text);
 	}
 </style>
