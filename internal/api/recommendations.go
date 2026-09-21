@@ -63,6 +63,10 @@ type weekFinder interface {
 }
 
 // speciesDetailer assembles the species detail panel.
+type seasonFinder interface {
+	InSeason(ctx context.Context, params birding.AreaParams, lang string) (birding.Season, error)
+}
+
 type speciesDetailer interface {
 	SpeciesDetail(ctx context.Context, hotspotID, speciesID int64, lang string, date time.Time) (birding.SpeciesDetail, error)
 }
@@ -78,6 +82,7 @@ type speciesSearcher interface {
 type recommendationService interface {
 	recommender
 	weekFinder
+	seasonFinder
 	speciesDetailer
 	speciesSearcher
 }
@@ -230,6 +235,33 @@ func handleGetAreaWeeks(logger *slog.Logger, weeks weekFinder) http.Handler {
 		})
 		if err != nil {
 			writeSearchError(w, logger, err, "finding best weeks")
+			return
+		}
+
+		writeJSON(w, logger, http.StatusOK, found)
+	})
+}
+
+// handleGetInSeason serves the species most worth looking for in an area in the
+// week of the date, and the area's checklists through the year. It takes the
+// same query as the recommendations; species, if given, are ignored.
+func handleGetInSeason(logger *slog.Logger, seasons seasonFinder) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parsed, err := parseSearch(r.URL.Query())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		found, err := seasons.InSeason(r.Context(), birding.AreaParams{
+			Latitude:   parsed.latitude,
+			Longitude:  parsed.longitude,
+			RadiusKM:   parsed.radiusKM,
+			MaxMinutes: parsed.maxMinutes,
+			Date:       parsed.date,
+		}, resolveLanguage(r))
+		if err != nil {
+			writeSearchError(w, logger, err, "finding species in season")
 			return
 		}
 

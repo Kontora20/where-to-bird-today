@@ -1,18 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import AreaWeeks from '$lib/AreaWeeks.svelte';
 	import Header from '$lib/Header.svelte';
 	import HotspotCard from '$lib/HotspotCard.svelte';
 	import HotspotList from '$lib/HotspotList.svelte';
 	import HotspotMap from '$lib/HotspotMap.svelte';
+	import InSeason from '$lib/InSeason.svelte';
+	import Scrubber from '$lib/Scrubber.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
+	import { addDays, formatDay, todayIso, type ScrubberWeek } from '$lib/format';
 	import {
 		getAreaWeeks,
 		getRecommendations,
+		getSeason,
 		getSpeciesDetail,
 		type AreaWeeks as AreaWeeksData,
 		type Recommendation,
+		type SeasonalSpecies,
+		type Season,
 		type SpeciesDetail,
 		type SpeciesMatch
 	} from '$lib/api';
@@ -31,16 +36,24 @@
 
 	let home = $state({ lat: 54.6872, lon: 25.2797, label: 'Vilnius' });
 	let range = $state('min:60');
-	// 'sv' formats a date as YYYY-MM-DD.
-	let date = $state(new Date().toLocaleDateString('sv'));
+	let date = $state(todayIso());
 
 	let targetSpecies = $state<SpeciesMatch[]>(loadYourBirds(maxTargetSpecies));
 
 	let recommendations = $state<Recommendation[]>([]);
-	// The best weeks of the target species over the area searched, and how many
-	// species that was; null when the search had no target species.
+	// The best weeks of the target species over the area searched; null when
+	// the search had no target species.
 	let areaWeeks = $state<AreaWeeksData | null>(null);
-	let areaSpeciesCount = $state(0);
+	
+	// What the area holds in the week of the date: null until it has been asked.
+	let season = $state<Season | null>(null);
+	// What the phone's bottom sheet shows: its three tabs.
+	const tabs = [
+		{ id: 'hotspots', label: 'Hotspots' },
+		{ id: 'season', label: 'In season' },
+		{ id: 'year', label: 'The year' }
+	] as const;
+	let tab = $state<(typeof tabs)[number]['id']>('hotspots');
 	let searched = $state(false);
 	let loading = $state(false);
 	let locating = $state(false);
@@ -51,34 +64,60 @@
 	let openSpecies = $state<SpeciesDetail | null>(null);
 	let speciesLoading = $state(false);
 	let speciesError = $state('');
+	// The hotspot the open species is shown at.
+	let speciesHotspotName = $state('');
 
-	onMount(runSearch);
+	onMount(refresh);
 
-	let pendingSearch: ReturnType<typeof setTimeout> | undefined;
-	// The search in progress. Starting another aborts it, which also stops the
-	// server's work for it, and its answer is never used.
+	let pendingRefresh: ReturnType<typeof setTimeout> | undefined;
+	// The search and the season in progress. Starting another of the same kind
+	// aborts it, which also stops the server's work for it, and its answer is
+	// never used.
 	let searchInProgress: AbortController | undefined;
+	let seasonInProgress: AbortController | undefined;
 
-	function runSearchSoon() {
-		clearTimeout(pendingSearch);
-		pendingSearch = setTimeout(runSearch, searchDelayMs);
+	// Asks again about the area and the date: the search, and the season, which
+	// does not depend on Your birds.
+	function refresh() {
+		clearTimeout(pendingRefresh);
+		void runSeason();
+		return runSearch();
 	}
 
-	async function runSearch() {
-		clearTimeout(pendingSearch);
-		searchInProgress?.abort();
-		const { signal } = (searchInProgress = new AbortController());
-		error = '';
-		loading = true;
+	function refreshSoon() {
+		clearTimeout(pendingRefresh);
+		pendingRefresh = setTimeout(refresh, searchDelayMs);
+	}
+
+	function areaQuery() {
 		const [unit, amount] = range.split(':');
-		const query = {
+		return {
 			lat: home.lat,
 			lon: home.lon,
 			maxMinutes: unit === 'min' ? Number(amount) : undefined,
 			radiusKm: unit === 'km' ? Number(amount) : undefined,
-			date: date || undefined,
-			speciesIds: targetSpecies.map((target) => target.species_id)
+			date: date || undefined
 		};
+	}
+
+	// A failed season is left out silently: the search shows the same error.
+	async function runSeason() {
+		seasonInProgress?.abort();
+		const { signal } = (seasonInProgress = new AbortController());
+		try {
+			const found = await getSeason(areaQuery(), signal);
+			if (!signal.aborted) season = found;
+		} catch {
+			if (!signal.aborted) season = null;
+		}
+	}
+
+	async function runSearch() {
+		searchInProgress?.abort();
+		const { signal } = (searchInProgress = new AbortController());
+		error = '';
+		loading = true;
+		const query = { ...areaQuery(), speciesIds: targetSpecies.map((target) => target.species_id) };
 		try {
 			const [found, weeks] = await Promise.all([
 				getRecommendations(query, signal),
@@ -87,7 +126,7 @@
 			if (signal.aborted) return;
 			recommendations = found;
 			areaWeeks = weeks;
-			areaSpeciesCount = query.speciesIds.length;
+			
 			searched = true;
 			if (!found.some((hotspot) => hotspot.hotspot_id === selectedHotspotId)) selectedHotspotId = null;
 		} catch (err) {
@@ -104,7 +143,7 @@
 
 	function moveHome(lat: number, lon: number, label: string) {
 		home = { lat, lon, label };
-		return runSearch();
+		return refresh();
 	}
 
 	function selectHotspot(hotspotId: number) {
@@ -112,12 +151,29 @@
 		document.getElementById(`hotspot-${hotspotId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
-	async function openSpeciesDetail(hotspotId: number, speciesId: number) {
+	// The hotspot to show a species at when none was chosen: the selected one,
+	// else the highest ranked that expects it, else the highest ranked.
+	function hotspotFor(speciesId: number): Recommendation | undefined {
+		return (
+			selectedHotspot ??
+			recommendations.find((hotspot) => hotspot.top_species.some((top) => top.species_id === speciesId)) ??
+			recommendations[0]
+		);
+	}
+
+	function openSpeciesAnywhere(speciesId: number) {
+		const hotspot = hotspotFor(speciesId);
+		if (hotspot) return openSpeciesDetail(hotspot, speciesId);
+		error = 'There is no hotspot in range to show that bird at.';
+	}
+
+	async function openSpeciesDetail(hotspot: Recommendation, speciesId: number) {
+		speciesHotspotName = hotspot.hotspot_name;
 		speciesError = '';
 		speciesLoading = true;
 		openSpecies = null;
 		try {
-			openSpecies = await getSpeciesDetail(hotspotId, speciesId, date || undefined);
+			openSpecies = await getSpeciesDetail(hotspot.hotspot_id, speciesId, date || undefined);
 		} catch (err) {
 			speciesError = err instanceof Error ? err.message : 'failed to load species detail';
 		} finally {
@@ -161,16 +217,61 @@
 		return runSearch();
 	}
 
+	function toggleSeasonalSpecies(species: SeasonalSpecies) {
+		if (targetSpecies.some((target) => target.species_id === species.species_id)) {
+			return removeTargetSpecies(species.species_id);
+		}
+		return addTargetSpecies(species);
+	}
+
 	function removeTargetSpecies(speciesId: number) {
 		targetSpecies = targetSpecies.filter((target) => target.species_id !== speciesId);
 		saveYourBirds(targetSpecies);
 		return runSearch();
 	}
 
-	// Searches the week a bar of the best weeks chart stands for.
+	// The bars of the year scrubber: how likely Your birds are in each week when
+	// there are some, otherwise the checklists recorded in the area.
+	const scrubberWeeks = $derived.by((): ScrubberWeek[] => {
+		if (areaWeeks && areaWeeks.weeks.length > 0) {
+			return areaWeeks.weeks.map((week) => ({
+				week: week.week,
+				start: week.start,
+				value: week.smoothed_frequency,
+				emphasized: week.best,
+				title: `Week ${week.week}: ${(week.smoothed_frequency * 100).toFixed(0)}% of checklists`
+			}));
+		}
+		return (season?.checklists ?? []).map((week) => ({
+			week: week.week,
+			start: week.start,
+			value: week.checklists,
+			emphasized: true,
+			title: `Week ${week.week}: ${week.checklists} ${week.checklists === 1 ? 'checklist' : 'checklists'}`
+		}));
+	});
+	const selectedWeek = $derived(scrubberWeeks.findLastIndex((week) => week.start <= date));
+	const scrubberNote = $derived(
+		areaWeeks && areaWeeks.weeks.length > 0
+			? areaWeeks.best_weeks.length > 0
+				? `Best weeks for your birds: ${areaWeeks.best_weeks.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`).join(', ')}.`
+				: 'Bars show how likely your birds are in each week.'
+			: 'Bars show the checklists recorded in the area each week.'
+	);
+
 	function searchWeek(start: string) {
 		date = start;
-		return runSearch();
+		return refresh();
+	}
+
+	function shiftWeek(weeks: number) {
+		date = addDays(date, 7 * weeks);
+		refreshSoon();
+	}
+
+	function goToToday() {
+		date = todayIso();
+		return refresh();
 	}
 </script>
 
@@ -189,7 +290,7 @@
 				<div class="controls">
 					<label class="pill">
 						<span class="visually-hidden">How far to travel</span>
-						<select bind:value={range} onchange={runSearchSoon}>
+						<select bind:value={range} onchange={refreshSoon}>
 							{#each ranges as option (option.value)}
 								<option value={option.value}>{option.label}</option>
 							{/each}
@@ -197,7 +298,7 @@
 					</label>
 					<label class="pill">
 						<span class="visually-hidden">Date</span>
-						<input type="date" bind:value={date} onchange={runSearchSoon} />
+						<input type="date" bind:value={date} onchange={refreshSoon} />
 					</label>
 				</div>
 				<button type="button" class="link" onclick={useMyLocation} disabled={locating}>
@@ -218,13 +319,16 @@
 					<ul class="chips">
 						{#each targetSpecies as target (target.species_id)}
 							<li>
-								{target.common_name}
-								<button
-									type="button"
-									onclick={() => removeTargetSpecies(target.species_id)}
-									aria-label="Remove {target.common_name}">✕</button
-								>
-							</li>
+									<button type="button" class="name" onclick={() => openSpeciesAnywhere(target.species_id)}>
+										{target.common_name}
+									</button>
+									<button
+										type="button"
+										class="remove"
+										onclick={() => removeTargetSpecies(target.species_id)}
+										aria-label="Remove {target.common_name}">✕</button
+									>
+								</li>
 						{/each}
 					</ul>
 				{:else}
@@ -232,7 +336,15 @@
 				{/if}
 			</section>
 
-			<section class="hotspots">
+			<div class="tabs" role="tablist" aria-label="Sections">
+				{#each tabs as item (item.id)}
+					<button type="button" role="tab" aria-selected={tab === item.id} onclick={() => (tab = item.id)}>
+						{item.label}
+					</button>
+				{/each}
+			</div>
+
+			<section class="hotspots" class:phone-hidden={tab !== 'hotspots'}>
 				<div class="row">
 					<h3>Hotspots in range</h3>
 					<span class="hint">{loading ? 'Searching…' : searched ? `${recommendations.length} found` : ''}</span>
@@ -252,11 +364,37 @@
 				/>
 			</section>
 
-			{#if areaWeeks && areaWeeks.weeks.length > 0}
-				<section class="weeks">
-					<AreaWeeks {areaWeeks} speciesCount={areaSpeciesCount} onpickweek={searchWeek} />
-				</section>
-			{/if}
+			<section class="season" class:phone-hidden={tab !== 'season'}>
+				<div class="row">
+					<h3>{date === todayIso() ? 'In season now' : 'In season that week'}</h3>
+					<span class="hint">Peaking around you</span>
+				</div>
+				{#if season && season.species.length > 0}
+					<InSeason
+						species={season.species}
+						week={season.week}
+						birds={targetSpecies}
+						full={targetSpecies.length >= maxTargetSpecies}
+						ontoggle={toggleSeasonalSpecies}
+						onopen={openSpeciesAnywhere}
+					/>
+				{:else if season}
+					<p class="hint padded">Nothing stands out around you that week.</p>
+				{/if}
+			</section>
+
+			<section class="year-tab" class:phone-hidden={tab !== 'year'}>
+				{#if scrubberWeeks.length > 0}
+					<Scrubber
+						weeks={scrubberWeeks}
+						selected={selectedWeek}
+						note={scrubberNote}
+						onpick={searchWeek}
+						onshift={shiftWeek}
+						ontoday={goToToday}
+					/>
+				{/if}
+			</section>
 		</aside>
 
 		<div class="map-area">
@@ -271,12 +409,24 @@
 				Bubble: checklists in this week of the year<br />
 				Click the map to move your start point
 			</p>
+			{#if scrubberWeeks.length > 0}
+				<div class="scrubber-overlay">
+					<Scrubber
+						weeks={scrubberWeeks}
+						selected={selectedWeek}
+						note={scrubberNote}
+						onpick={searchWeek}
+						onshift={shiftWeek}
+						ontoday={goToToday}
+					/>
+				</div>
+			{/if}
 			{#if selectedHotspot}
 				<HotspotCard
 					hotspot={selectedHotspot}
 					birds={targetSpecies}
 					onclose={() => (selectedHotspotId = null)}
-					onpickspecies={(speciesId) => openSpeciesDetail(selectedHotspot.hotspot_id, speciesId)}
+					onpickspecies={(speciesId) => openSpeciesDetail(selectedHotspot, speciesId)}
 					onsearchhere={() =>
 						moveHome(selectedHotspot.latitude, selectedHotspot.longitude, selectedHotspot.hotspot_name)}
 				/>
@@ -286,7 +436,13 @@
 </div>
 
 {#if speciesLoading || speciesError || openSpecies}
-	<SpeciesPanel loading={speciesLoading} error={speciesError} species={openSpecies} onclose={closeSpeciesDetail} />
+	<SpeciesPanel
+		loading={speciesLoading}
+		error={speciesError}
+		species={openSpecies}
+		hotspotName={speciesHotspotName}
+		onclose={closeSpeciesDetail}
+	/>
 {/if}
 
 <style>
@@ -441,6 +597,15 @@
 		font-weight: 600;
 	}
 
+	.chips .name {
+		width: auto;
+		height: auto;
+		padding: 0;
+		font-size: inherit;
+		font-weight: inherit;
+		cursor: pointer;
+	}
+
 	.chips button {
 		width: 22px;
 		height: 22px;
@@ -457,12 +622,29 @@
 		padding-top: 14px;
 	}
 
-	.hotspots .row {
+	.hotspots .row,
+	.season .row {
 		padding: 0 20px 6px;
 	}
 
-	.weeks {
-		padding: 16px 20px 0;
+	.season {
+		padding-top: 14px;
+	}
+
+	.tabs,
+	.year-tab {
+		display: none;
+	}
+
+	.scrubber-overlay {
+		position: absolute;
+		bottom: 16px;
+		left: 16px;
+		width: min(600px, calc(100% - 96px));
+		padding: 14px 16px 12px;
+		border-radius: 12px;
+		background: var(--color-panel);
+		box-shadow: var(--shadow-raised);
 	}
 
 	.legend {
@@ -480,6 +662,42 @@
 	}
 
 	@media (max-width: 639px) {
+		.tabs {
+			display: flex;
+			padding: 0 8px;
+			border-bottom: 1px solid var(--color-line);
+		}
+
+		.tabs button {
+			flex: 1;
+			height: 48px;
+			border: 0;
+			border-bottom: 3px solid transparent;
+			background: none;
+			color: var(--color-muted);
+			font: inherit;
+			font-size: 0.95rem;
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.tabs button[aria-selected='true'] {
+			border-bottom-color: var(--color-accent-strong);
+			color: var(--color-text);
+		}
+
+		.year-tab {
+			display: block;
+			padding: 16px;
+		}
+
+		.phone-hidden {
+			display: none;
+		}
+
+		.scrubber-overlay {
+			display: none;
+		}
 		.sidebar {
 			position: fixed;
 			right: 0;

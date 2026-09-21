@@ -842,6 +842,24 @@ func TestAreaWeeks(t *testing.T) {
 		check(t, got[9], 10, 5, 4)
 		check(t, got[11], 12, 2, 1)
 	})
+
+	t.Run("gives every species its own weeks", func(t *testing.T) {
+		rows, err := queries.GetAreaSpeciesWeeks(ctx, []int64{near1, near2})
+		if err != nil {
+			t.Fatalf("GetAreaSpeciesWeeks: %v", err)
+		}
+		var got []string
+		for _, row := range rows {
+			got = append(got, fmt.Sprintf("%s/%d/%d", row.ScientificName, row.WeekOfYear, row.WithSpecies))
+		}
+		slices.Sort(got)
+		// Week 10 adds both hotspots for species X (0.5 of 4 and 1.0 of 1); the
+		// far hotspot is not one of those asked about.
+		want := []string{"Testus areax/10/3", "Testus areax/11/2", "Testus areay/10/1", "Testus areay/12/1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("GetAreaSpeciesWeeks() = %v, want %v", got, want)
+		}
+	})
 }
 
 func assertSeasonality(ctx context.Context, t *testing.T, pool *pgxpool.Pool, hotspotID, speciesID int64, weekOfYear int, wantFrequency float64, wantSampleSize int32, wantAdjusted float64) {

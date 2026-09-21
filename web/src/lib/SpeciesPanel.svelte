@@ -6,10 +6,12 @@
 		loading: boolean;
 		error: string;
 		species: SpeciesDetail | null;
+		// The hotspot the seasonality and time of day are for.
+		hotspotName: string;
 		onclose: () => void;
 	}
 
-	let { loading, error, species, onclose }: Props = $props();
+	let { loading, error, species, hotspotName, onclose }: Props = $props();
 
 	const hoursAfterSunrise = Array.from({ length: 24 }, (_, index) => index);
 
@@ -57,6 +59,7 @@
 		{:else if species}
 			<h2>{species.common_name}</h2>
 			<p class="scientific-name">{species.scientific_name}</p>
+			<p class="where">Figures for {hotspotName}</p>
 
 			{#if species.photo}
 				<figure>
@@ -187,6 +190,12 @@
 		margin: 0 0 1rem;
 		font-style: italic;
 		color: var(--color-muted);
+	}
+
+	.where {
+		margin: -0.5rem 0 1rem;
+		color: var(--color-muted);
+		font-size: 0.85rem;
 	}
 
 	figure {

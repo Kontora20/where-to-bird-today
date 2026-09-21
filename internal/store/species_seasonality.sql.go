@@ -9,6 +9,55 @@ import (
 	"context"
 )
 
+const getAreaSpeciesWeeks = `-- name: GetAreaSpeciesWeeks :many
+SELECT
+    s.species_id,
+    sp.scientific_name,
+    s.week_of_year::smallint AS week_of_year,
+    SUM(ROUND(s.frequency * s.sample_size))::integer AS with_species
+FROM species_seasonality s
+JOIN species sp ON sp.id = s.species_id
+WHERE s.hotspot_id = ANY($1::bigint[])
+GROUP BY s.species_id, sp.scientific_name, s.week_of_year
+`
+
+type GetAreaSpeciesWeeksRow struct {
+	SpeciesID      int64  `json:"species_id"`
+	ScientificName string `json:"scientific_name"`
+	WeekOfYear     int16  `json:"week_of_year"`
+	WithSpecies    int32  `json:"with_species"`
+}
+
+// Every species over a set of hotspots: a row for each species and week in
+// which it was recorded, with the checklists that recorded it added up over the
+// hotspots. A week with no row has none. A hotspot's checklists that recorded
+// the species are frequency * sample_size, rounded back to a whole number.
+// GetAreaWeeks gives the checklists of each week to divide by.
+func (q *Queries) GetAreaSpeciesWeeks(ctx context.Context, hotspotIds []int64) ([]GetAreaSpeciesWeeksRow, error) {
+	rows, err := q.db.Query(ctx, getAreaSpeciesWeeks, hotspotIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAreaSpeciesWeeksRow
+	for rows.Next() {
+		var i GetAreaSpeciesWeeksRow
+		if err := rows.Scan(
+			&i.SpeciesID,
+			&i.ScientificName,
+			&i.WeekOfYear,
+			&i.WithSpecies,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAreaWeeks = `-- name: GetAreaWeeks :many
 WITH totals AS (
     SELECT hotspot_id, week_of_year, MAX(sample_size) AS checklists

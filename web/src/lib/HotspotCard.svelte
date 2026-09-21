@@ -92,7 +92,8 @@
 		flex-direction: column;
 		gap: 10px;
 		width: 340px;
-		max-height: calc(100% - 32px);
+		/* Leaves the bottom of the map to the year scrubber. */
+		max-height: calc(100% - 32px - 190px);
 		padding: 16px;
 		overflow-y: auto;
 		border-radius: 12px;

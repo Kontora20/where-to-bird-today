@@ -122,14 +122,28 @@ func (f fakeTimeOfDayStore) GetSpeciesTimeOfDay(_ context.Context, arg store.Get
 	return f.timeOfDayRows, nil
 }
 
-// fakeAreaStore is an areaStore. hotspotsWithin and areaWeeksRows are what its
-// queries return; areaWeeksArgs records the hotspots and species the weeks were
-// asked for.
+// fakeAreaStore is an areaStore. hotspotsWithin, areaWeeksRows and
+// speciesWeeksRows are what its queries return; areaWeeksArgs records the
+// hotspots and species the weeks were asked for.
 type fakeAreaStore struct {
-	hotspotsWithin []store.ListHotspotsWithinRow
-	areaWeeksRows  []store.GetAreaWeeksRow
-	areaWeeksErr   error
-	areaWeeksArgs  *store.GetAreaWeeksParams
+	hotspotsWithin   []store.ListHotspotsWithinRow
+	areaWeeksRows    []store.GetAreaWeeksRow
+	areaWeeksErr     error
+	areaWeeksArgs    *store.GetAreaWeeksParams
+	speciesWeeksRows []store.GetAreaSpeciesWeeksRow
+	speciesWeeksErr  error
+	nameCandidates   map[int64]map[string]string
+}
+
+func (f fakeAreaStore) GetAreaSpeciesWeeks(_ context.Context, _ []int64) ([]store.GetAreaSpeciesWeeksRow, error) {
+	if f.speciesWeeksErr != nil {
+		return nil, f.speciesWeeksErr
+	}
+	return f.speciesWeeksRows, nil
+}
+
+func (f fakeAreaStore) GetCommonNames(_ context.Context, arg store.GetCommonNamesParams) ([]store.GetCommonNamesRow, error) {
+	return commonNameRows(f.nameCandidates, arg), nil
 }
 
 func (f fakeAreaStore) ListHotspotsWithin(_ context.Context, _ store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error) {

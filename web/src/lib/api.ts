@@ -37,6 +37,37 @@ export interface Recommendation {
 	verification_url?: string;
 }
 
+// One of the 52 weeks of the year over an area: the complete checklists there.
+export interface WeekTotal {
+	week: number;
+	// The Monday of the week, YYYY-MM-DD.
+	start: string;
+	checklists: number;
+}
+
+// A species that is much more likely now than it usually is in the area.
+export interface SeasonalSpecies {
+	species_id: number;
+	common_name: string;
+	scientific_name: string;
+	// The share of the area's checklists this week that recorded it.
+	frequency: number;
+	peak_week: number;
+	// The Monday of its best week, YYYY-MM-DD.
+	peak_start: string;
+	// From the requested week to its best: 0 is now, above 0 still to come.
+	weeks_to_peak: number;
+	// The same share for each of the 52 weeks.
+	year: number[];
+}
+
+export interface Season {
+	week: number;
+	// Empty when the area has no checklists.
+	checklists: WeekTotal[];
+	species: SeasonalSpecies[];
+}
+
 export interface SpeciesMatch {
 	species_id: number;
 	common_name: string;
@@ -105,6 +136,10 @@ export interface AreaWeeks {
 
 export function getAreaWeeks(query: SearchQuery, signal?: AbortSignal): Promise<AreaWeeks> {
 	return getSearch('/recommendations/weeks', query, signal);
+}
+
+export function getSeason(query: SearchQuery, signal?: AbortSignal): Promise<Season> {
+	return getSearch('/in-season', query, signal);
 }
 
 export interface Photo {

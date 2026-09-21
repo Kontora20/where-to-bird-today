@@ -60,6 +60,22 @@ LEFT JOIN week_totals t ON t.week_of_year = w.week_of_year
 LEFT JOIN week_species s ON s.week_of_year = w.week_of_year
 ORDER BY w.week_of_year;
 
+-- name: GetAreaSpeciesWeeks :many
+-- Every species over a set of hotspots: a row for each species and week in
+-- which it was recorded, with the checklists that recorded it added up over the
+-- hotspots. A week with no row has none. A hotspot's checklists that recorded
+-- the species are frequency * sample_size, rounded back to a whole number.
+-- GetAreaWeeks gives the checklists of each week to divide by.
+SELECT
+    s.species_id,
+    sp.scientific_name,
+    s.week_of_year::smallint AS week_of_year,
+    SUM(ROUND(s.frequency * s.sample_size))::integer AS with_species
+FROM species_seasonality s
+JOIN species sp ON sp.id = s.species_id
+WHERE s.hotspot_id = ANY(sqlc.arg(hotspot_ids)::bigint[])
+GROUP BY s.species_id, sp.scientific_name, s.week_of_year;
+
 -- name: TruncateSeasonality :exec
 TRUNCATE species_seasonality, country_seasonality;
 

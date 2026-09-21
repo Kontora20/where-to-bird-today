@@ -45,6 +45,27 @@ func (f fakeWeekFinder) AreaWeeks(_ context.Context, params birding.AreaParams) 
 	return f.weeks, nil
 }
 
+// fakeSeasonFinder is a seasonFinder.
+type fakeSeasonFinder struct {
+	season        birding.Season
+	seasonErr     error
+	gotAreaParams *birding.AreaParams
+	gotLang       *string
+}
+
+func (f fakeSeasonFinder) InSeason(_ context.Context, params birding.AreaParams, lang string) (birding.Season, error) {
+	if f.gotAreaParams != nil {
+		*f.gotAreaParams = params
+	}
+	if f.gotLang != nil {
+		*f.gotLang = lang
+	}
+	if f.seasonErr != nil {
+		return birding.Season{}, f.seasonErr
+	}
+	return f.season, nil
+}
+
 // fakeSpeciesDetailer is a speciesDetailer.
 type fakeSpeciesDetailer struct {
 	speciesErr   error
@@ -80,6 +101,7 @@ func (f fakeSpeciesSearcher) SearchSpecies(_ context.Context, _, _ string) ([]bi
 type fakeRecommendationService struct {
 	fakeRecommender
 	fakeWeekFinder
+	fakeSeasonFinder
 	fakeSpeciesDetailer
 	fakeSpeciesSearcher
 }

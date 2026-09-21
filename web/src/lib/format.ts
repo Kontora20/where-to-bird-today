@@ -1,4 +1,4 @@
-import type { LastSeen, Recommendation, SpeciesMatch } from '$lib/api';
+import type { LastSeen, Recommendation, SeasonalSpecies, SpeciesMatch } from '$lib/api';
 
 // A bird seen within this many days counts as seen this week.
 const recentDays = 7;
@@ -87,4 +87,53 @@ export function lastSeenStatus(
 		text: `${name} ${recent ? 'seen' : 'last seen'} ${seenText(latest.observed_on, today)}`,
 		recent
 	};
+}
+
+// Today as YYYY-MM-DD in the reader's calendar. 'sv' formats a date that way.
+export function todayIso(): string {
+	return new Date().toLocaleDateString('sv');
+}
+
+// The date a number of days after an ISO date, as YYYY-MM-DD.
+export function addDays(isoDate: string, days: number): string {
+	const [year, month, day] = isoDate.split('-').map(Number);
+	return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+// When a species is at its best, worded for the In season list.
+export function peakText(species: SeasonalSpecies): string {
+	const weeks = species.weeks_to_peak;
+	if (Math.abs(weeks) <= 1) return 'Peaking now';
+	const day = formatDay(species.peak_start);
+	return weeks > 0 ? `Peaks ${day}, in ${weeks} weeks` : `Peaked ${day}, ${-weeks} weeks ago`;
+}
+
+export interface SparkBar {
+	// Pixels.
+	height: number;
+	kind: 'now' | 'high' | 'low';
+}
+
+// The bars of a species' year in fortnights: the higher week of each pair, so
+// a short peak is not averaged away. The bar of the fortnight of the week is
+// marked, and so are those within 70% of the highest.
+export function sparkBars(year: number[], week: number, maxHeight = 28): SparkBar[] {
+	const bins = Array.from({ length: Math.floor(year.length / 2) }, (_, i) => Math.max(year[2 * i], year[2 * i + 1]));
+	const highest = Math.max(...bins);
+	const now = Math.floor((week - 1) / 2);
+	return bins.map((value, i) => ({
+		height: highest > 0 ? Math.max(3, Math.round((value / highest) * maxHeight)) : 3,
+		kind: i === now ? 'now' : value >= 0.7 * highest ? 'high' : 'low'
+	}));
+}
+
+// One bar of the year scrubber.
+export interface ScrubberWeek {
+	week: number;
+	// The Monday of the week, YYYY-MM-DD.
+	start: string;
+	value: number;
+	// Drawn in the accent colour rather than the plain bar colour.
+	emphasized: boolean;
+	title: string;
 }
