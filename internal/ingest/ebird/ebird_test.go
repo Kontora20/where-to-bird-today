@@ -113,6 +113,64 @@ func TestHotspotsByRegion(t *testing.T) {
 	}
 }
 
+func TestRecentByRegion(t *testing.T) {
+	t.Parallel()
+
+	var gotPath, gotBack, gotHotspot string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBack = r.URL.Query().Get("back")
+		gotHotspot = r.URL.Query().Get("hotspot")
+
+		entries := []recentEntry{
+			{SpeciesCode: "comcra", LocID: "L1", SubID: "S1", ObsDt: "2026-09-24 07:30"},
+			{SpeciesCode: "whisto1", LocID: "L2", SubID: "S2", ObsDt: "2026-09-25"},
+		}
+		_ = json.NewEncoder(w).Encode(entries)
+	}))
+	defer server.Close()
+
+	client, err := NewClient("test-key", server.Client())
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	client.baseURL = server.URL
+
+	got, err := client.RecentByRegion(context.Background(), "LT")
+	if err != nil {
+		t.Fatalf("RecentByRegion: %v", err)
+	}
+
+	if gotPath != "/data/obs/LT/recent" || gotBack != "7" || gotHotspot != "true" {
+		t.Errorf("requested %s back=%s hotspot=%s, want /data/obs/LT/recent back=7 hotspot=true", gotPath, gotBack, gotHotspot)
+	}
+	if len(got) != 2 || got[0].ObservedOn.Format("2006-01-02") != "2026-09-24" || got[1].ObservedOn.Format("2006-01-02") != "2026-09-25" {
+		t.Fatalf("RecentByRegion() = %+v, want two records dated 2026-09-24 and 2026-09-25", got)
+	}
+	if got[0].SpeciesCode != "comcra" || got[0].LocID != "L1" || got[0].SubID != "S1" {
+		t.Errorf("first record = %+v, want comcra at L1 from S1", got[0])
+	}
+}
+
+func TestRecentByRegionRejectsAnUnreadableDate(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]recentEntry{{SpeciesCode: "comcra", LocID: "L1", SubID: "S1", ObsDt: "yesterday"}})
+	}))
+	defer server.Close()
+
+	client, err := NewClient("test-key", server.Client())
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	client.baseURL = server.URL
+
+	if _, err := client.RecentByRegion(context.Background(), "LT"); err == nil {
+		t.Fatal("RecentByRegion() = nil error for an unreadable date, want one")
+	}
+}
+
 func TestTaxonomyUnexpectedStatus(t *testing.T) {
 	t.Parallel()
 

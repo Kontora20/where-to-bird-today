@@ -209,6 +209,71 @@ func TestUpsertHotspotIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestUpsertLastSeenOnlyMovesForward(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := New(newTestPool(t))
+
+	hotspot, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
+		Name: "Alka Polder", Longitude: 21.37, Latitude: 55.43, Region: "LT", Source: "ebird", SourceRef: "L1",
+	})
+	if err != nil {
+		t.Fatalf("UpsertHotspot: %v", err)
+	}
+	species, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+		ScientificName: "Grus grus",
+		AvibaseID:      pgtype.Text{String: "avibase-crane", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSpecies: %v", err)
+	}
+
+	day := func(date string) pgtype.Date {
+		parsed, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			t.Fatalf("parsing %q: %v", date, err)
+		}
+		return pgtype.Date{Time: parsed, Valid: true}
+	}
+	upsert := func(date, checklist string) int64 {
+		t.Helper()
+		rows, err := queries.UpsertLastSeen(ctx, UpsertLastSeenParams{
+			HotspotID: hotspot.ID, SpeciesID: species.ID, ObservedOn: day(date), SamplingEventID: checklist,
+		})
+		if err != nil {
+			t.Fatalf("UpsertLastSeen(%s): %v", date, err)
+		}
+		return rows
+	}
+
+	steps := []struct {
+		name         string
+		date         string
+		checklist    string
+		wantRows     int64
+		wantStoredOn string
+		wantChecklst string
+	}{
+		{name: "first record is inserted", date: "2026-09-20", checklist: "S1", wantRows: 1, wantStoredOn: "2026-09-20", wantChecklst: "S1"},
+		{name: "a newer record moves it forward", date: "2026-09-24", checklist: "S2", wantRows: 1, wantStoredOn: "2026-09-24", wantChecklst: "S2"},
+		{name: "an older record is ignored", date: "2026-09-22", checklist: "S3", wantRows: 0, wantStoredOn: "2026-09-24", wantChecklst: "S2"},
+		{name: "the same record again is ignored", date: "2026-09-24", checklist: "S2", wantRows: 0, wantStoredOn: "2026-09-24", wantChecklst: "S2"},
+	}
+	for _, step := range steps {
+		if got := upsert(step.date, step.checklist); got != step.wantRows {
+			t.Errorf("%s: rows written = %d, want %d", step.name, got, step.wantRows)
+		}
+		stored, err := queries.GetLastSeen(ctx, GetLastSeenParams{HotspotIds: []int64{hotspot.ID}, SpeciesIds: []int64{species.ID}})
+		if err != nil || len(stored) != 1 {
+			t.Fatalf("%s: GetLastSeen = %v, %v, want one row", step.name, stored, err)
+		}
+		if got := stored[0].ObservedOn.Time.Format("2006-01-02"); got != step.wantStoredOn || stored[0].SamplingEventID != step.wantChecklst {
+			t.Errorf("%s: stored %s/%s, want %s/%s", step.name, got, stored[0].SamplingEventID, step.wantStoredOn, step.wantChecklst)
+		}
+	}
+}
+
 // TestRecomputeSpeciesSeasonality seeds one ISO week at one hotspot and
 // checks the recomputed frequency and sample_size by hand. Complete
 // checklists there: S1 (species A and B), S2 (A), S3 (no species, so it
