@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -135,6 +137,50 @@ func TestDriveTimesWithNoDestinationsSkipsTheServer(t *testing.T) {
 	got, err := NewClient(server.URL).DriveTimes(context.Background(), Point{}, nil)
 	if err != nil || got != nil {
 		t.Errorf("DriveTimes() = %v, %v, want nil, nil", got, err)
+	}
+}
+
+func TestDriveTimesLimitsConcurrentRequests(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	var active int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&active, 1)
+		<-release
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"code":"Ok","durations":[[0,90]],"destinations":[{"distance":3},{"distance":3}]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.URL)
+	destinations := []Point{{Latitude: 1, Longitude: 1}}
+
+	var group sync.WaitGroup
+	for range maxConcurrentRequests {
+		group.Go(func() {
+			_, _ = client.DriveTimes(context.Background(), Point{}, destinations)
+		})
+	}
+
+	// Wait for the first maxConcurrentRequests to occupy every slot before
+	// sending the one over the limit.
+	for atomic.LoadInt32(&active) < int32(maxConcurrentRequests) {
+		time.Sleep(time.Millisecond)
+	}
+
+	start := time.Now()
+	_, err := client.DriveTimes(context.Background(), Point{}, destinations)
+	elapsed := time.Since(start)
+
+	close(release)
+	group.Wait()
+
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("DriveTimes() with every slot taken: error = %v, want %v", err, ErrBusy)
+	}
+	if elapsed < osrmBusyWait {
+		t.Errorf("DriveTimes() gave up after %v, want at least osrmBusyWait (%v)", elapsed, osrmBusyWait)
 	}
 }
 

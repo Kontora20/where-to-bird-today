@@ -40,10 +40,12 @@ type Cache struct {
 
 // originTimes holds what is known from one start point.
 type originTimes struct {
-	// mu is held for a whole lookup, including the request to the server. A
+	// lock is held for a whole lookup, including the request to the server. A
 	// second search from the same start point waits for the first and then
-	// finds its answers here instead of asking again.
-	mu    sync.Mutex
+	// finds its answers here instead of asking again. It is a channel, not a
+	// sync.Mutex, so a waiter can give up on its own context instead of
+	// ignoring cancellation until whoever holds it finishes calling OSRM.
+	lock  chan struct{}
 	times map[Point]time.Duration
 }
 
@@ -61,8 +63,12 @@ func (c *Cache) DriveTimes(ctx context.Context, origin Point, destinations []Poi
 	}
 	origin = roundOrigin(origin)
 	known := c.originTimes(origin)
-	known.mu.Lock()
-	defer known.mu.Unlock()
+	select {
+	case known.lock <- struct{}{}:
+		defer func() { <-known.lock }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 
 	var missing []Point
 	for _, destination := range destinations {
@@ -108,7 +114,7 @@ func (c *Cache) originTimes(origin Point) *originTimes {
 			break
 		}
 	}
-	known = &originTimes{times: make(map[Point]time.Duration)}
+	known = &originTimes{lock: make(chan struct{}, 1), times: make(map[Point]time.Duration)}
 	c.origins[origin] = known
 	return known
 }

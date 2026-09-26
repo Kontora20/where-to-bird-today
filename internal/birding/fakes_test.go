@@ -126,13 +126,14 @@ func (f fakeTimeOfDayStore) GetSpeciesTimeOfDay(_ context.Context, arg store.Get
 // speciesWeeksRows are what its queries return; areaWeeksArgs records the
 // hotspots and species the weeks were asked for.
 type fakeAreaStore struct {
-	hotspotsWithin   []store.ListHotspotsWithinRow
-	areaWeeksRows    []store.GetAreaWeeksRow
-	areaWeeksErr     error
-	areaWeeksArgs    *store.GetAreaWeeksParams
-	speciesWeeksRows []store.GetAreaSpeciesWeeksRow
-	speciesWeeksErr  error
-	nameCandidates   map[int64]map[string]string
+	hotspotsWithin    []store.ListHotspotsWithinRow
+	hotspotsWithinErr error
+	areaWeeksRows     []store.GetAreaWeeksRow
+	areaWeeksErr      error
+	areaWeeksArgs     *store.GetAreaWeeksParams
+	speciesWeeksRows  []store.GetAreaSpeciesWeeksRow
+	speciesWeeksErr   error
+	nameCandidates    map[int64]map[string]string
 }
 
 func (f fakeAreaStore) GetAreaSpeciesWeeks(_ context.Context, _ []int64) ([]store.GetAreaSpeciesWeeksRow, error) {
@@ -147,6 +148,9 @@ func (f fakeAreaStore) GetCommonNames(_ context.Context, arg store.GetCommonName
 }
 
 func (f fakeAreaStore) ListHotspotsWithin(_ context.Context, _ store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error) {
+	if f.hotspotsWithinErr != nil {
+		return nil, f.hotspotsWithinErr
+	}
 	return f.hotspotsWithin, nil
 }
 

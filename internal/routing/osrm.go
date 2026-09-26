@@ -30,6 +30,19 @@ const maxSnapMeters = 5000
 // route from it.
 var ErrOriginOffRoad = errors.New("no road near the origin")
 
+// ErrBusy means every OSRM request slot was taken and stayed taken for
+// osrmBusyWait. Returned instead of piling requests onto the routing
+// container without bound.
+var ErrBusy = errors.New("routing server is busy")
+
+// maxConcurrentRequests caps how many table requests run against OSRM at
+// once. The container is memory-limited (row 20's hosting budget), and one
+// request can already ask for hundreds of destinations.
+const maxConcurrentRequests = 4
+
+// osrmBusyWait is how long a request waits for a free slot before giving up.
+const osrmBusyWait = 1 * time.Second
+
 // Point is a WGS 84 coordinate.
 type Point struct {
 	Latitude  float64
@@ -41,6 +54,10 @@ type Point struct {
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+
+	// slots is a channel used as a counting semaphore: a send acquires one of
+	// maxConcurrentRequests slots, a receive frees it.
+	slots chan struct{}
 }
 
 // NewClient returns a Client for the OSRM server at baseURL.
@@ -48,6 +65,7 @@ func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{Timeout: 10 * time.Second},
+		slots:      make(chan struct{}, maxConcurrentRequests),
 	}
 }
 
@@ -66,6 +84,15 @@ type tableResponse struct {
 func (c *Client) DriveTimes(ctx context.Context, origin Point, destinations []Point) ([]time.Duration, error) {
 	if len(destinations) == 0 {
 		return nil, nil
+	}
+
+	select {
+	case c.slots <- struct{}{}:
+		defer func() { <-c.slots }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(osrmBusyWait):
+		return nil, ErrBusy
 	}
 
 	coordinates := make([]string, 0, len(destinations)+1)

@@ -82,6 +82,16 @@ func run() error {
 	}
 	recommendations := birding.NewService(queries, driveTimes)
 
+	// Warm routing.Cache for the default start point and every major city
+	// before anyone searches from them, so a real search from one of them is
+	// answered from the cache instead of costing a table request of its own
+	// (master plan row 30). Runs in the background: a slow or failed warm-up
+	// must not delay the server coming up, and every real search still falls
+	// back to asking OSRM directly either way.
+	if driveTimes != nil {
+		go birding.WarmDriveTimeCache(ctx, logger, queries, driveTimes, warmupOrigins)
+	}
+
 	// The embedded FS has everything under a "build" prefix (that's what
 	// //go:embed all:build captured); Sub strips it so a request for
 	// "/index.html" maps to the FS root, matching what the browser asks for.
@@ -92,7 +102,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: api.NewRouter(logger, pool, queries, queries, recommendations, spaFS),
+		Handler: api.NewRouter(logger, pool, recommendations, spaFS),
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine
@@ -139,4 +149,17 @@ func run() error {
 
 	logger.Info("server stopped cleanly")
 	return nil
+}
+
+// warmupOrigins is the web app's own default search origin (central Vilnius,
+// web/src/routes/+page.svelte) plus Lithuania's four other largest cities --
+// real searches cluster around wherever a birder actually is, and warming a
+// handful of them is cheap: one drive-time request each, and five origins is
+// far below routing.Cache's 100-origin limit.
+var warmupOrigins = []routing.Point{
+	{Latitude: 54.6872, Longitude: 25.2797}, // Vilnius
+	{Latitude: 54.8985, Longitude: 23.9036}, // Kaunas
+	{Latitude: 55.7033, Longitude: 21.1443}, // Klaipėda
+	{Latitude: 55.9349, Longitude: 23.3140}, // Šiauliai
+	{Latitude: 55.7333, Longitude: 24.3667}, // Panevėžys
 }

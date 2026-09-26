@@ -48,10 +48,6 @@ func resolveLanguage(r *http.Request) string {
 // every chosen target can appear on it.
 const maxTargetSpecies = 10
 
-// maxDriveMinutes bounds ?max_minutes=. Four hours already reaches every
-// hotspot in the Baltics from anywhere in them.
-const maxDriveMinutes = 240
-
 // recommender ranks hotspots for a search.
 type recommender interface {
 	Recommend(ctx context.Context, params birding.Params) ([]birding.Recommendation, error)
@@ -149,8 +145,8 @@ func parseSearch(query url.Values) (search, error) {
 		parsed.maxMinutes, err = strconv.ParseFloat(raw, 64)
 		// Written as a positive test so NaN, which fails every comparison, is
 		// rejected too.
-		if err != nil || !(parsed.maxMinutes > 0 && parsed.maxMinutes <= maxDriveMinutes) {
-			return search{}, fmt.Errorf("max_minutes must be a number above 0 and at most %d", maxDriveMinutes)
+		if err != nil || !(parsed.maxMinutes > 0 && parsed.maxMinutes <= birding.MaxDriveMinutes) {
+			return search{}, fmt.Errorf("max_minutes must be a number above 0 and at most %d", birding.MaxDriveMinutes)
 		}
 	} else {
 		parsed.radiusKM, err = strconv.ParseFloat(query.Get("radius_km"), 64)
@@ -178,6 +174,8 @@ func writeSearchError(w http.ResponseWriter, logger *slog.Logger, err error, act
 		http.Error(w, "travel time is not available; search by radius_km instead", http.StatusServiceUnavailable)
 	case errors.Is(err, birding.ErrNoRoadNearOrigin):
 		http.Error(w, "no road near that location", http.StatusUnprocessableEntity)
+	case errors.Is(err, birding.ErrRoutingBusy):
+		http.Error(w, "too many searches right now; try again shortly", http.StatusServiceUnavailable)
 	default:
 		logger.Error(action+" failed", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)

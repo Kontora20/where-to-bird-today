@@ -20,7 +20,7 @@ import (
 // passes on what it is given and never touches the database itself. spaFS is
 // similarly just an fs.FS -- this package knows nothing about //go:embed or
 // the web module, only that it was handed something file-shaped to serve.
-func NewRouter(logger *slog.Logger, db pinger, ingestionRuns ingestionRunStore, hotspots hotspotStore, recommendations recommendationService, spaFS fs.FS) http.Handler {
+func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationService, spaFS fs.FS) http.Handler {
 	mux := http.NewServeMux()
 
 	// "GET /health" is a Go 1.22+ pattern: method and path in one string.
@@ -29,13 +29,17 @@ func NewRouter(logger *slog.Logger, db pinger, ingestionRuns ingestionRunStore, 
 	// free, with no configuration.
 	mux.Handle("GET /health", handleHealth(logger))
 	mux.Handle("GET /ready", handleReady(logger, db))
-	mux.Handle("POST /ingestion-runs", handleCreateIngestionRun(logger, ingestionRuns))
-	mux.Handle("GET /ingestion-runs/{id}", handleGetIngestionRun(logger, ingestionRuns))
-	mux.Handle("POST /hotspots", handleCreateHotspot(logger, hotspots))
-	mux.Handle("GET /hotspots/{id}", handleGetHotspot(logger, hotspots))
-	mux.Handle("GET /recommendations", handleGetRecommendations(logger, recommendations))
-	mux.Handle("GET /recommendations/weeks", handleGetAreaWeeks(logger, recommendations))
-	mux.Handle("GET /in-season", handleGetInSeason(logger, recommendations))
+
+	// The search endpoints cost a PostGIS query and, with a drive-time limit,
+	// an OSRM table request, so each is also rate-limited per address (row 31
+	// of the master plan). One limiter is shared across them: an address
+	// searching by radius and then by drive time still has one combined
+	// budget, not one per endpoint.
+	searchLimiter := newSearchRateLimiter()
+	limited := func(next http.Handler) http.Handler { return rateLimitSearches(searchLimiter, next) }
+	mux.Handle("GET /recommendations", limited(handleGetRecommendations(logger, recommendations)))
+	mux.Handle("GET /recommendations/weeks", limited(handleGetAreaWeeks(logger, recommendations)))
+	mux.Handle("GET /in-season", limited(handleGetInSeason(logger, recommendations)))
 	mux.Handle("GET /species", handleSearchSpecies(logger, recommendations))
 	mux.Handle("GET /hotspots/{hotspotId}/species/{speciesId}", handleGetSpeciesDetail(logger, recommendations))
 	// Catch-all for the SPA, GET-only. A bare "/" (no method) matches every

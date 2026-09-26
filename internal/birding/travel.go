@@ -14,6 +14,14 @@ import (
 // time, so hotspots beyond it can be dropped before asking for drive times.
 const maxSpeedKMPerMinute = 130.0 / 60
 
+// MaxDriveMinutes bounds a search's ?max_minutes=. Matches the UI's largest
+// choice: a higher limit only widens the PostGIS radius and the OSRM table
+// request (master plan row 31) for a search nobody's search box can ask for.
+// Exported, and the one definition of the bound, so the API's validation and
+// the drive-time cache's warm-up (row 30) can't drift apart the way the
+// bound itself already has once (240 minutes down to this).
+const MaxDriveMinutes = 120
+
 // ErrTravelTimeUnavailable means the request asked for a drive time limit
 // but no routing server is configured.
 var ErrTravelTimeUnavailable = errors.New("travel time is not available")
@@ -21,6 +29,10 @@ var ErrTravelTimeUnavailable = errors.New("travel time is not available")
 // ErrNoRoadNearOrigin means no road lies close enough to the search point to
 // start a route from it.
 var ErrNoRoadNearOrigin = routing.ErrOriginOffRoad
+
+// ErrRoutingBusy means the routing server had no free capacity for this
+// request.
+var ErrRoutingBusy = routing.ErrBusy
 
 // DriveTimeFinder measures the drive time from one point to many.
 type DriveTimeFinder interface {

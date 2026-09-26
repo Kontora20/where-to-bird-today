@@ -182,6 +182,39 @@ func TestCacheAsksOnceForSearchesStartedTogether(t *testing.T) {
 	}
 }
 
+// blockingFinder answers only once release is closed, so a test can hold a
+// Cache's lock open for as long as it needs to.
+type blockingFinder struct {
+	release chan struct{}
+}
+
+func (b blockingFinder) DriveTimes(_ context.Context, _ Point, destinations []Point) ([]time.Duration, error) {
+	<-b.release
+	return make([]time.Duration, len(destinations)), nil
+}
+
+func TestCacheRespectsCancellationWhileWaitingForTheLock(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	cache := NewCache(blockingFinder{release: release})
+	origin := Point{Latitude: 54.687, Longitude: 25.28}
+	destinations := []Point{point(1)}
+
+	// Starts a search that acquires the lock and then blocks inside the call
+	// to the server, so the lock stays held until release is closed below.
+	go func() { _, _ = cache.DriveTimes(context.Background(), origin, destinations) }()
+	time.Sleep(5 * time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := cache.DriveTimes(ctx, origin, destinations); !errors.Is(err, context.Canceled) {
+		t.Errorf("DriveTimes() with a cancelled context while the lock is held: error = %v, want %v", err, context.Canceled)
+	}
+
+	close(release)
+}
+
 func TestCacheWithNoDestinationsSkipsTheServer(t *testing.T) {
 	t.Parallel()
 

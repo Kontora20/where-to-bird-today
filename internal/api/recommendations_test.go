@@ -111,7 +111,7 @@ func TestGetRecommendations(t *testing.T) {
 		},
 		{
 			name:       "max_minutes above the limit",
-			query:      validQuery + "&max_minutes=241",
+			query:      validQuery + "&max_minutes=121",
 			wantStatus: http.StatusBadRequest,
 		},
 		{
@@ -135,6 +135,12 @@ func TestGetRecommendations(t *testing.T) {
 			query:      "lat=55.3167&lon=21.3667&max_minutes=45",
 			service:    fakeRecommender{err: fmt.Errorf("finding drive times: %w", birding.ErrNoRoadNearOrigin)},
 			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "routing server busy",
+			query:      "lat=55.3167&lon=21.3667&max_minutes=45",
+			service:    fakeRecommender{err: fmt.Errorf("finding drive times: %w", birding.ErrRoutingBusy)},
+			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:       "service error",
