@@ -16,6 +16,16 @@ export function checklistCount(hotspot: Recommendation): number {
 	return hotspot.top_species[0]?.checklists ?? 0;
 }
 
+// How many of birds have ever been recorded at hotspot -- the map's "Your
+// birds" bubble size and badge count.
+export function birdCount(hotspot: Recommendation): number {
+	return hotspot.last_seen?.length ?? 0;
+}
+
+// What a map bubble's size means: every hotspot's checklists this week of the
+// year, or just this search's birds.
+export type MapLayer = 'all' | 'yourBirds';
+
 export function distanceText(hotspot: Recommendation): string {
 	const km = `${hotspot.distance_km.toFixed(1)} km`;
 	return hotspot.drive_minutes ? `${hotspot.drive_minutes} min · ${km}` : km;
@@ -87,6 +97,15 @@ export function lastSeenStatus(
 		text: `${name} ${recent ? 'seen' : 'last seen'} ${seenText(latest.observed_on, today)}`,
 		recent
 	};
+}
+
+// The map's badge for a hotspot: how many of birds were ever recorded there,
+// and whether any of them was within the last week. Null when there is
+// nothing to badge.
+export function birdBadge(hotspot: Recommendation, birds: SpeciesMatch[], today: Date): { count: number; recent: boolean } | null {
+	if (birds.length === 0 || !hotspot.last_seen?.length) return null;
+	const recent = hotspot.last_seen.some((seen) => daysSince(seen.observed_on, today) <= recentDays);
+	return { count: hotspot.last_seen.length, recent };
 }
 
 // Today as YYYY-MM-DD in the reader's calendar. 'sv' formats a date that way.

@@ -272,6 +272,9 @@ func groupByHotspot(rows []store.RecommendHotspotsRow) []Recommendation {
 				Longitude:       row.Longitude.Float64,
 				DistanceKM:      row.DistanceMeters.Float64 / 1000,
 				Score:           float64(row.Score),
+				// Same reasoning as the outer slice: a hotspot with no
+				// seasonality rows this week must still send `[]`, not `null`.
+				TopSpecies:      []ExpectedSpecies{},
 				VerificationURL: verificationURL(row.HotspotSource, row.HotspotSourceRef),
 			})
 		}

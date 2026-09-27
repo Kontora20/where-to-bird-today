@@ -8,7 +8,7 @@
 	import Scrubber from '$lib/Scrubber.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
-	import { addDays, formatDay, todayIso, type ScrubberWeek } from '$lib/format';
+	import { addDays, formatDay, todayIso, type MapLayer, type ScrubberWeek } from '$lib/format';
 	import {
 		getAreaWeeks,
 		getRecommendations,
@@ -59,6 +59,13 @@
 	let locating = $state(false);
 	let error = $state('');
 	let selectedHotspotId = $state<number | null>(null);
+	let mapLayer = $state<MapLayer>('all');
+
+	// "Your birds" has nothing to size bubbles by once the list is empty, so
+	// the switch falls back rather than showing every bubble at minimum size.
+	$effect(() => {
+		if (targetSpecies.length === 0) mapLayer = 'all';
+	});
 	const selectedHotspot = $derived(recommendations.find((hotspot) => hotspot.hotspot_id === selectedHotspotId));
 
 	let openSpecies = $state<SpeciesDetail | null>(null);
@@ -402,11 +409,27 @@
 				{home}
 				hotspots={recommendations}
 				selectedId={selectedHotspotId}
+				birds={targetSpecies}
+				layer={mapLayer}
 				onselect={selectHotspot}
 				onpick={(lat, lon) => moveHome(lat, lon, 'your point')}
 			/>
+			<div class="layer-switch" role="group" aria-label="Map layer">
+				<button type="button" aria-pressed={mapLayer === 'all'} onclick={() => (mapLayer = 'all')}>
+					All hotspots
+				</button>
+				<button
+					type="button"
+					aria-pressed={mapLayer === 'yourBirds'}
+					disabled={targetSpecies.length === 0}
+					onclick={() => (mapLayer = 'yourBirds')}
+				>
+					Your birds
+				</button>
+			</div>
 			<p class="legend">
-				Bubble: checklists in this week of the year<br />
+				Bubble: {mapLayer === 'yourBirds' ? 'your birds ever seen here' : 'checklists in this week of the year'}<br
+				/>
 				Click the map to move your start point
 			</p>
 			{#if scrubberWeeks.length > 0}
@@ -661,6 +684,40 @@
 		line-height: 1.5;
 	}
 
+	.layer-switch {
+		position: absolute;
+		top: 16px;
+		right: 16px;
+		display: flex;
+		gap: 2px;
+		padding: 2px;
+		border-radius: 8px;
+		background: var(--color-control-track);
+		box-shadow: var(--shadow-raised);
+	}
+
+	.layer-switch button {
+		padding: 6px 10px;
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--color-text);
+		font: inherit;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.layer-switch button[aria-pressed='true'] {
+		background: var(--color-inverse);
+		color: var(--color-on-inverse);
+	}
+
+	.layer-switch button:disabled {
+		color: var(--color-muted);
+		cursor: not-allowed;
+	}
+
 	@media (max-width: 639px) {
 		.tabs {
 			display: flex;
@@ -715,6 +772,13 @@
 			position: fixed;
 			top: 68px;
 			left: 12px;
+			z-index: 5;
+		}
+
+		.layer-switch {
+			position: fixed;
+			top: 68px;
+			right: 12px;
 			z-index: 5;
 		}
 	}

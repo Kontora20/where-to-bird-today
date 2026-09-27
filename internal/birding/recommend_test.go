@@ -69,6 +69,9 @@ func TestRecommendGroupsRowsByHotspot(t *testing.T) {
 	if second.HotspotID != 2 || len(second.TopSpecies) != 0 {
 		t.Errorf("got[1] = %+v, want HotspotID=2 with no species", second)
 	}
+	if second.TopSpecies == nil {
+		t.Error("got[1].TopSpecies is nil, want an empty, non-nil slice (marshals to `null`, which the frontend does not expect)")
+	}
 	if second.VerificationURL != "" {
 		t.Errorf("got[1].VerificationURL = %q, want empty (source %q has no known link)", second.VerificationURL, "manual")
 	}

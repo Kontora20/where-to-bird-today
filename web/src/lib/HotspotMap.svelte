@@ -1,19 +1,27 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
+	// Only the base stylesheet: MarkerCluster.Default.css styles the plugin's
+	// own built-in coloured-circle icon, which iconCreateFunction below
+	// replaces entirely, so importing it would just be unused CSS.
+	import 'leaflet.markercluster/dist/MarkerCluster.css';
 	import type * as Leaflet from 'leaflet';
-	import type { Recommendation } from '$lib/api';
-	import { checklistCount } from '$lib/format';
+	import type { Recommendation, SpeciesMatch } from '$lib/api';
+	import { birdBadge, birdCount, checklistCount, type MapLayer } from '$lib/format';
 
 	interface Props {
 		home: { lat: number; lon: number };
 		hotspots: Recommendation[];
 		selectedId: number | null;
+		birds: SpeciesMatch[];
+		layer: MapLayer;
 		onselect: (hotspotId: number) => void;
 		onpick: (lat: number, lon: number) => void;
 	}
 
-	let { home, hotspots, selectedId, onselect, onpick }: Props = $props();
+	let { home, hotspots, selectedId, birds, layer, onselect, onpick }: Props = $props();
+
+	const today = new Date();
 
 	const smallestBubble = 40;
 	const bubbleRange = 32;
@@ -26,10 +34,15 @@
 	const cardShare = 0.6;
 	const bubbleClearance = (smallestBubble + bubbleRange) / 2;
 
+	// The pixel radius markers are grouped within, at any zoom: smaller than
+	// Leaflet.markercluster's own default (80) so a cluster only forms once
+	// bubbles would otherwise overlap, not whenever they're merely close.
+	const maxClusterRadius = 55;
+
 	let container: HTMLDivElement;
 	let leaflet: typeof Leaflet;
 	let map: Leaflet.Map;
-	let markersLayer: Leaflet.LayerGroup;
+	let markersLayer: Leaflet.MarkerClusterGroup;
 	let homeMarker: Leaflet.Marker | undefined;
 	let markers = new Map<number, { marker: Leaflet.Marker; offset: number }>();
 	let ready = $state(false);
@@ -39,6 +52,11 @@
 	onMount(() => {
 		void (async () => {
 			leaflet = await import('leaflet');
+			// leaflet.markercluster predates bundlers: it never imports Leaflet
+			// itself, it just extends a global `L` it assumes a <script> tag
+			// already created. This is that global, standing in for the tag.
+			(window as unknown as { L: typeof Leaflet }).L = leaflet;
+			await import('leaflet.markercluster');
 			map = leaflet.map(container, { zoomControl: false }).setView([home.lat, home.lon], 9);
 			leaflet
 				.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -47,7 +65,13 @@
 				})
 				.addTo(map);
 			leaflet.control.zoom({ position: 'bottomright' }).addTo(map);
-			markersLayer = leaflet.layerGroup().addTo(map);
+			markersLayer = leaflet
+				.markerClusterGroup({
+					maxClusterRadius,
+					showCoverageOnHover: false,
+					iconCreateFunction: (cluster) => clusterIcon(cluster.getChildCount())
+				})
+				.addTo(map);
 			map.on('click', (event) => onpick(event.latlng.lat, event.latlng.lng));
 			ready = true;
 		})();
@@ -75,14 +99,20 @@
 		if (!ready) return;
 		markersLayer.clearLayers();
 		markers.clear();
-		const largest = Math.max(1, ...hotspots.map(checklistCount));
+		const sizeOf = layer === 'yourBirds' ? birdCount : checklistCount;
+		const largest = Math.max(1, ...hotspots.map(sizeOf));
 		for (const hotspot of hotspots) {
-			const size = smallestBubble + bubbleRange * Math.sqrt(checklistCount(hotspot) / largest);
+			// A hotspot with nothing to show in this layer -- no checklists this
+			// week, or none of your birds -- draws no bubble; it still shows up
+			// in the list, but a map full of same-size "0" bubbles is noise, not
+			// information.
+			if (sizeOf(hotspot) === 0) continue;
+			const size = smallestBubble + bubbleRange * Math.sqrt(sizeOf(hotspot) / largest);
 			// Smaller bubbles draw above larger ones so none is hidden.
 			const offset = Math.round(smallestBubble + bubbleRange - size);
 			const marker = leaflet
 				.marker([hotspot.latitude, hotspot.longitude], {
-					icon: bubbleIcon(hotspot, size),
+					icon: bubbleIcon(hotspot, size, sizeOf(hotspot)),
 					title: hotspot.hotspot_name,
 					zIndexOffset: offset
 				})
@@ -96,18 +126,26 @@
 
 	$effect(() => {
 		if (!ready) return;
-		applySelection(selectedId);
-		const selected = selectedId === null ? undefined : markers.get(selectedId);
+		const id = selectedId;
+		applySelection(id);
+		const selected = id === null ? undefined : markers.get(id);
 		if (!selected) return;
-		// The hotspot card covers part of the map, so keep the whole bubble clear
-		// of it, not only its centre.
-		const phone = window.matchMedia(phoneQuery).matches;
-		map.panInside(selected.marker.getLatLng(), {
-			paddingTopLeft: [bubbleClearance, (phone ? 80 : 20) + bubbleClearance],
-			paddingBottomRight: [
-				(phone ? 20 : cardWidth) + bubbleClearance,
-				(phone ? window.innerHeight * cardShare : 20) + bubbleClearance
-			]
+		// A selected bubble may be sitting inside a collapsed cluster; this
+		// zooms in only as far as needed to split it back out, a no-op if it is
+		// already showing on its own. applySelection runs again once it does,
+		// since the marker had no DOM element to style before this.
+		markersLayer.zoomToShowLayer(selected.marker, () => {
+			applySelection(id);
+			// The hotspot card covers part of the map, so keep the whole bubble
+			// clear of it, not only its centre.
+			const phone = window.matchMedia(phoneQuery).matches;
+			map.panInside(selected.marker.getLatLng(), {
+				paddingTopLeft: [bubbleClearance, (phone ? 80 : 20) + bubbleClearance],
+				paddingBottomRight: [
+					(phone ? 20 : cardWidth) + bubbleClearance,
+					(phone ? window.innerHeight * cardShare : 20) + bubbleClearance
+				]
+			});
 		});
 	});
 
@@ -121,19 +159,43 @@
 
 	// The names come from outside, so the marker is built from elements and
 	// text nodes, never from an HTML string.
-	function bubbleIcon(hotspot: Recommendation, size: number): Leaflet.DivIcon {
+	function bubbleIcon(hotspot: Recommendation, size: number, count: number): Leaflet.DivIcon {
 		const bubble = document.createElement('div');
 		bubble.className = 'bubble';
-		bubble.textContent = String(checklistCount(hotspot));
+		bubble.textContent = String(count);
 		const label = document.createElement('span');
 		label.className = 'bubble-label';
 		label.textContent = hotspot.hotspot_name;
 		const wrapper = document.createElement('div');
 		wrapper.style.width = wrapper.style.height = '100%';
 		wrapper.append(bubble, label);
+		const badge = birdBadge(hotspot, birds, today);
+		if (badge) {
+			const badgeElement = document.createElement('div');
+			badgeElement.className = 'badge';
+			badgeElement.classList.toggle('recent', badge.recent);
+			badgeElement.textContent = String(badge.count);
+			wrapper.append(badgeElement);
+		}
 		return leaflet.divIcon({
 			className: 'bubble-icon',
 			html: wrapper,
+			iconSize: [size, size],
+			iconAnchor: [size / 2, size / 2]
+		});
+	}
+
+	// A cluster's number is how many hotspots it groups, not a sum of any
+	// hotspot's own count -- a different, unrelated quantity, so it gets its
+	// own modest size curve rather than sharing bubbleIcon's.
+	function clusterIcon(count: number): Leaflet.DivIcon {
+		const size = Math.min(smallestBubble + bubbleRange, smallestBubble + 6 * Math.sqrt(count));
+		const cluster = document.createElement('div');
+		cluster.className = 'cluster';
+		cluster.textContent = String(count);
+		return leaflet.divIcon({
+			className: 'cluster-icon',
+			html: cluster,
 			iconSize: [size, size],
 			iconAnchor: [size / 2, size / 2]
 		});
