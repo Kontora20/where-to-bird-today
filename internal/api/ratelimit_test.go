@@ -40,7 +40,7 @@ func TestRateLimitSearchesAnswers429OnceSpent(t *testing.T) {
 
 	limiter := newSearchRateLimiter()
 	limiter.now = time.Now
-	handler := rateLimitSearches(limiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := rateLimitSearches(limiter, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 

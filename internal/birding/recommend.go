@@ -266,12 +266,12 @@ func groupByHotspot(rows []store.RecommendHotspotsRow) []Recommendation {
 	for _, row := range rows {
 		if len(recommendations) == 0 || recommendations[len(recommendations)-1].HotspotID != row.HotspotID {
 			recommendations = append(recommendations, Recommendation{
-				HotspotID:       row.HotspotID,
-				HotspotName:     row.HotspotName,
-				Latitude:        row.Latitude.Float64,
-				Longitude:       row.Longitude.Float64,
-				DistanceKM:      row.DistanceMeters.Float64 / 1000,
-				Score:           float64(row.Score),
+				HotspotID:   row.HotspotID,
+				HotspotName: row.HotspotName,
+				Latitude:    row.Latitude.Float64,
+				Longitude:   row.Longitude.Float64,
+				DistanceKM:  row.DistanceMeters.Float64 / 1000,
+				Score:       float64(row.Score),
 				// Same reasoning as the outer slice: a hotspot with no
 				// seasonality rows this week must still send `[]`, not `null`.
 				TopSpecies:      []ExpectedSpecies{},

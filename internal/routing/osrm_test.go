@@ -145,7 +145,7 @@ func TestDriveTimesLimitsConcurrentRequests(t *testing.T) {
 
 	release := make(chan struct{})
 	var active int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&active, 1)
 		<-release
 		w.WriteHeader(http.StatusOK)
