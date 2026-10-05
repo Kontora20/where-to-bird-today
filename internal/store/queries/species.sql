@@ -32,7 +32,9 @@ WHERE (
         SELECT 1 FROM observations o
         WHERE o.species_id = sp.id AND o.hotspot_id IS NOT NULL
     )
-ORDER BY common_name
+-- An explicit collation, so the order (and which rows LIMIT keeps) does not
+-- depend on the database default: en_US locally, byte order on Neon.
+ORDER BY common_name COLLATE "und-x-icu"
 LIMIT sqlc.arg(result_limit);
 
 -- name: UpsertSpecies :one

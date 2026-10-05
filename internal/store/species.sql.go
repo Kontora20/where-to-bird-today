@@ -59,7 +59,7 @@ WHERE (
         SELECT 1 FROM observations o
         WHERE o.species_id = sp.id AND o.hotspot_id IS NOT NULL
     )
-ORDER BY common_name
+ORDER BY common_name COLLATE "und-x-icu"
 LIMIT $3
 `
 
@@ -81,6 +81,8 @@ type SearchSpeciesRow struct {
 // anything. strpos on lowered, unaccented text, not ILIKE, so a % or _ typed
 // by the user is a plain character rather than a pattern, and "zuvedra"
 // finds "Žuvėdra" (and the reverse).
+// An explicit collation, so the order (and which rows LIMIT keeps) does not
+// depend on the database default: en_US locally, byte order on Neon.
 func (q *Queries) SearchSpecies(ctx context.Context, arg SearchSpeciesParams) ([]SearchSpeciesRow, error) {
 	rows, err := q.db.Query(ctx, searchSpecies, arg.LangPriority, arg.Query, arg.ResultLimit)
 	if err != nil {
