@@ -51,13 +51,33 @@ Needs Azure CLI (`winget install Microsoft.AzureCLI`) and Docker.
    az storage file upload-batch --account-name <storageAccount> --destination osrm --source data/osm --pattern "baltics.osrm*"
    ```
 
-## Later deploys
+## Deploys from GitHub
 
-Push a new image and run step 4 again with the new tag. When it adds a migration, run it:
+After CI passes on `main`, `.github/workflows/deploy.yml` builds and pushes the image, runs the `migrate`
+job, then moves the server and the scheduled jobs to the new image. It only changes images. Changes to
+`main.bicep` are still deployed by hand with step 4, and that step needs the image that is running now,
+or it puts the old one back:
 
 ```bash
-az containerapp job start --resource-group where-to-bird-today --name wtbt-migrate
+az containerapp show --resource-group where-to-bird-today --name wtbt-server --query "properties.template.containers[0].image" -o tsv
 ```
+
+One-time setup, so the workflow can sign in to Azure with no stored password. GitHub vouches for each run
+from the `production` environment, and Azure trusts that alone:
+
+```bash
+app=$(az ad app create --display-name where-to-bird-today-deploy --query appId -o tsv)
+az ad sp create --id $app
+az ad app federated-credential create --id $app --parameters '{"name":"production","issuer":"https://token.actions.githubusercontent.com","subject":"repo:Kontora20/where-to-bird-today:environment:production","audiences":["api://AzureADTokenExchange"]}'
+az role assignment create --assignee $app --role Contributor --scope $(az group show --name where-to-bird-today --query id -o tsv)
+gh variable set AZURE_CLIENT_ID --body $app
+gh variable set AZURE_TENANT_ID --body $(az account show --query tenantId -o tsv)
+gh variable set AZURE_SUBSCRIPTION_ID --body $(az account show --query id -o tsv)
+```
+
+The workflow skips itself until `AZURE_CLIENT_ID` is set. GitHub creates the `production` environment
+on the first run; add yourself as a required reviewer there to approve each deploy. The three IDs are not
+secrets: without the federated credential they let no one in.
 
 ## Monthly eBird export
 
