@@ -15,6 +15,11 @@ import (
 // still has a limit (master plan row 31).
 const searchRequestsPerMinute = 60
 
+// maxTrackedAddresses is how many addresses the limiter holds before it drops
+// the ones whose window has ended, so many addresses seen once each cannot
+// grow its memory without limit.
+const maxTrackedAddresses = 10_000
+
 // searchRateLimiter is a per-address fixed-window counter: searchRequestsPerMinute
 // tokens, refilled once a minute. No external dependency and no persistence --
 // a restart resets everyone's window, which is fine for a limiter whose job is
@@ -36,9 +41,6 @@ func newSearchRateLimiter() *searchRateLimiter {
 
 // allow reports whether address has a token left in its current window,
 // spending one if so.
-//
-// ponytail: buckets is never swept, so an address seen once is never
-// forgotten; add an eviction pass if memory becomes an issue at real traffic.
 func (l *searchRateLimiter) allow(address string) bool {
 	now := l.now()
 
@@ -46,6 +48,13 @@ func (l *searchRateLimiter) allow(address string) bool {
 	defer l.mu.Unlock()
 
 	b, ok := l.buckets[address]
+	if !ok && len(l.buckets) >= maxTrackedAddresses {
+		for address, old := range l.buckets {
+			if !now.Before(old.resetAt) {
+				delete(l.buckets, address)
+			}
+		}
+	}
 	if !ok || !now.Before(b.resetAt) {
 		b = &bucket{remaining: searchRequestsPerMinute, resetAt: now.Add(time.Minute)}
 		l.buckets[address] = b
@@ -69,14 +78,14 @@ func rateLimitSearches(limiter *searchRateLimiter, next http.Handler) http.Handl
 	})
 }
 
-// clientAddress reads the address Azure Container Apps' ingress sets in
+// clientAddress reads the address Azure Container Apps' ingress appends to
 // X-Forwarded-For, falling back to the direct connection for local
-// development where nothing sets that header. A comma-separated list means
-// proxies before ours added their own hop; the first entry is the client.
+// development where nothing sets that header. Only the last entry is
+// trusted: everything before it was sent by the client, which can write any
+// address there to get a fresh rate-limit window on every request.
 func clientAddress(r *http.Request) string {
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		address, _, _ := strings.Cut(forwarded, ",")
-		return strings.TrimSpace(address)
+		return strings.TrimSpace(forwarded[strings.LastIndex(forwarded, ",")+1:])
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

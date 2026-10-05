@@ -1,3 +1,6 @@
-# allow crawling everything by default
+# The page itself may be crawled; the search endpoints it calls may not.
 User-agent: *
-Disallow:
+Disallow: /recommendations
+Disallow: /in-season
+Disallow: /species
+Disallow: /hotspots/

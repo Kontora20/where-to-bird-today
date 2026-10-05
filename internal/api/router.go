@@ -35,13 +35,18 @@ func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationSer
 	// of the master plan). One limiter is shared across them: an address
 	// searching by radius and then by drive time still has one combined
 	// budget, not one per endpoint.
+	// The species lookups get a limiter of their own, so typing in the
+	// search box does not spend the budget of the hotspot searches.
 	searchLimiter := newSearchRateLimiter()
-	limited := func(next http.Handler) http.Handler { return rateLimitSearches(searchLimiter, next) }
-	mux.Handle("GET /recommendations", limited(handleGetRecommendations(logger, recommendations)))
-	mux.Handle("GET /recommendations/weeks", limited(handleGetAreaWeeks(logger, recommendations)))
-	mux.Handle("GET /in-season", limited(handleGetInSeason(logger, recommendations)))
-	mux.Handle("GET /species", handleSearchSpecies(logger, recommendations))
-	mux.Handle("GET /hotspots/{hotspotId}/species/{speciesId}", handleGetSpeciesDetail(logger, recommendations))
+	speciesLimiter := newSearchRateLimiter()
+	limited := func(limiter *searchRateLimiter, next http.Handler) http.Handler {
+		return blockBots(rateLimitSearches(limiter, next))
+	}
+	mux.Handle("GET /recommendations", limited(searchLimiter, handleGetRecommendations(logger, recommendations)))
+	mux.Handle("GET /recommendations/weeks", limited(searchLimiter, handleGetAreaWeeks(logger, recommendations)))
+	mux.Handle("GET /in-season", limited(searchLimiter, handleGetInSeason(logger, recommendations)))
+	mux.Handle("GET /species", limited(speciesLimiter, handleSearchSpecies(logger, recommendations)))
+	mux.Handle("GET /hotspots/{hotspotId}/species/{speciesId}", limited(speciesLimiter, handleGetSpeciesDetail(logger, recommendations)))
 	// Catch-all for the SPA, GET-only. A bare "/" (no method) matches every
 	// method as well as every path -- it would swallow e.g. a POST to
 	// /hotspots too, silently replacing ServeMux's automatic 405 with the

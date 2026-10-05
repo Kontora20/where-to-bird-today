@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -73,7 +74,7 @@ func TestClientAddress(t *testing.T) {
 	}{
 		{name: "no proxy", remoteAddr: "1.2.3.4:5678", want: "1.2.3.4"},
 		{name: "one hop", forwarded: "1.2.3.4", remoteAddr: "10.0.0.1:5678", want: "1.2.3.4"},
-		{name: "several hops takes the first", forwarded: "1.2.3.4, 10.0.0.1", remoteAddr: "10.0.0.2:5678", want: "1.2.3.4"},
+		{name: "several hops takes the last", forwarded: "6.6.6.6, 1.2.3.4", remoteAddr: "10.0.0.2:5678", want: "1.2.3.4"},
 		{name: "remote addr with no port", remoteAddr: "1.2.3.4", want: "1.2.3.4"},
 	}
 
@@ -91,5 +92,23 @@ func TestClientAddress(t *testing.T) {
 				t.Errorf("clientAddress() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSearchRateLimiterDropsEndedWindows(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	limiter := newSearchRateLimiter()
+	limiter.now = func() time.Time { return now }
+
+	for i := range maxTrackedAddresses {
+		limiter.allow(fmt.Sprintf("10.0.%d.%d", i/256, i%256))
+	}
+	now = now.Add(time.Minute)
+	limiter.allow("1.2.3.4")
+
+	if got := len(limiter.buckets); got != 1 {
+		t.Errorf("tracked addresses after the windows ended = %d, want 1", got)
 	}
 }

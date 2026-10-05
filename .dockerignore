@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+.claude
+.serena
+data
+docs
+scripts
+web/node_modules
+web/build
+web/.svelte-kit
+*.exe
