@@ -13,8 +13,10 @@ to Key Vault, and the apps read them from there through a managed identity.
 
 Needs Azure CLI (`winget install Microsoft.AzureCLI`) and Docker.
 
-1. Create a Neon project in **AWS Europe Central 1 (Frankfurt)** with Postgres 17, and a database named
-   `wheretobird`. Copy its connection string with **connection pooling turned off**.
+1. Create a Neon project in **AWS Europe Central 1 (Frankfurt)** with Postgres 18, and keep its default
+   `neondb` database. Copy its connection string with **connection pooling turned off** (the host without
+   `-pooler`). If you use the Neon CLI, pass `--no-env-pull` to `neon link` and `neon checkout`: without it
+   they overwrite `DATABASE_URL` in `.env` with the Neon one.
 
 2. Copy the local database into Neon (653 MB). The dump creates the `postgis` and `unaccent` extensions
    itself. Paste the connection string when the command asks, so it stays out of your shell history.
@@ -33,12 +35,13 @@ Needs Azure CLI (`winget install Microsoft.AzureCLI`) and Docker.
    docker push ghcr.io/kontora20/where-to-bird-today:$(git rev-parse --short HEAD)
    ```
 
-4. Create the resource group and deploy. `az` prompts for `ghcrToken`, `databaseUrl` and `ebirdApiKey`.
+4. Create the resource group and deploy with `deploy/deploy.ps1`. It reads the Neon connection string from
+   the Neon CLI and the eBird key from `.env`, and asks for the `read:packages` token. The secrets reach
+   `az` through a parameters file that is deleted when it finishes: the Neon string contains `&`, which
+   breaks on the command line behind `az.cmd`. Leave out `-Image` on later runs to keep the running image.
 
-   ```bash
-   az login
-   az group create --name where-to-bird-today --location germanywestcentral
-   az deployment group create --resource-group where-to-bird-today --template-file deploy/main.bicep --parameters image=ghcr.io/kontora20/where-to-bird-today:<sha> ghcrUsername=<github user> budgetEmail=<email> adminPrincipalId=$(az ad signed-in-user show --query id -o tsv)
+   ```powershell
+   .\deploy\deploy.ps1 -Image ghcr.io/kontora20/where-to-bird-today:<sha> -BudgetEmail <email>
    ```
 
    If the first deploy fails with a Key Vault access error, run it again: the managed identity's role
@@ -51,16 +54,19 @@ Needs Azure CLI (`winget install Microsoft.AzureCLI`) and Docker.
    az storage file upload-batch --account-name <storageAccount> --destination osrm --source data/osm --pattern "baltics.osrm*"
    ```
 
+   OSRM exits if it starts while files are still uploading (`I/O error ... osrm_fingerprint.meta`). Restart
+   it once the upload has finished:
+
+   ```bash
+   az containerapp revision restart --resource-group where-to-bird-today --name wtbt-osrm --revision $(az containerapp revision list --resource-group where-to-bird-today --name wtbt-osrm --query "[?properties.active].name | [0]" -o tsv)
+   ```
+
 ## Deploys from GitHub
 
 After CI passes on `main`, `.github/workflows/deploy.yml` builds and pushes the image, runs the `migrate`
 job, then moves the server and the scheduled jobs to the new image. It only changes images. Changes to
-`main.bicep` are still deployed by hand with step 4, and that step needs the image that is running now,
-or it puts the old one back:
-
-```bash
-az containerapp show --resource-group where-to-bird-today --name wtbt-server --query "properties.template.containers[0].image" -o tsv
-```
+`main.bicep` are still deployed by hand with step 4, which keeps the running image when `-Image` is left
+out.
 
 One-time setup, so the workflow can sign in to Azure with no stored password. GitHub vouches for each run
 from the `production` environment, and Azure trusts that alone:

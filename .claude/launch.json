@@ -6,6 +6,12 @@
 			"runtimeExecutable": "npm",
 			"runtimeArgs": ["run", "dev", "--prefix", "web", "--", "--host"],
 			"port": 5173
+		},
+		{
+			"name": "server",
+			"runtimeExecutable": "powershell",
+			"runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/dev.ps1"],
+			"port": 8080
 		}
 	]
 }
