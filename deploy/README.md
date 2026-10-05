@@ -74,7 +74,7 @@ from the `production` environment, and Azure trusts that alone:
 ```bash
 app=$(az ad app create --display-name where-to-bird-today-deploy --query appId -o tsv)
 az ad sp create --id $app
-az ad app federated-credential create --id $app --parameters '{"name":"production","issuer":"https://token.actions.githubusercontent.com","subject":"repo:Kontora20/where-to-bird-today:environment:production","audiences":["api://AzureADTokenExchange"]}'
+az ad app federated-credential create --id $app --parameters '{"name":"production","issuer":"https://token.actions.githubusercontent.com","subject":"repo:Kontora20@25958394/where-to-bird-today@1327723444:environment:production","audiences":["api://AzureADTokenExchange"]}'
 az role assignment create --assignee $app --role Contributor --scope $(az group show --name where-to-bird-today --query id -o tsv)
 gh variable set AZURE_CLIENT_ID --body $app
 gh variable set AZURE_TENANT_ID --body $(az account show --query tenantId -o tsv)
