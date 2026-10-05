@@ -141,8 +141,8 @@ func TestRecentByRegion(t *testing.T) {
 		t.Fatalf("RecentByRegion: %v", err)
 	}
 
-	if gotPath != "/data/obs/LT/recent" || gotBack != "7" || gotHotspot != "true" {
-		t.Errorf("requested %s back=%s hotspot=%s, want /data/obs/LT/recent back=7 hotspot=true", gotPath, gotBack, gotHotspot)
+	if gotPath != "/data/obs/LT/recent" || gotBack != "30" || gotHotspot != "true" {
+		t.Errorf("requested %s back=%s hotspot=%s, want /data/obs/LT/recent back=30 hotspot=true", gotPath, gotBack, gotHotspot)
 	}
 	if len(got) != 2 || got[0].ObservedOn.Format("2006-01-02") != "2026-09-24" || got[1].ObservedOn.Format("2006-01-02") != "2026-09-25" {
 		t.Fatalf("RecentByRegion() = %+v, want two records dated 2026-09-24 and 2026-09-25", got)

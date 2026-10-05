@@ -16,9 +16,9 @@ import (
 // loader writes.
 const RecentSource = "ebird-recent"
 
-// recentDays is how far back each run asks. A run that fails or is skipped
-// for a few days is made up by the next one.
-const recentDays = 7
+// recentDays is how far back each run asks, eBird's maximum. A run that
+// fails or is skipped for a few weeks is made up by the next one.
+const recentDays = 30
 
 // recentLayout is the format of obsDt: eBird drops the time when the
 // observer gave none, so both forms occur.
