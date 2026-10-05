@@ -20,10 +20,9 @@ name: where-to-bird-today
 services:
   db:
     # Pinned deliberately, not :latest — a silent major-version bump would
-    # rewrite the data directory format and break the volume below.
-    # TODO(Phase 5): confirm this matches a version Azure Database for
-    # PostgreSQL Flexible Server offers, so local and cloud stay consistent.
-    image: postgis/postgis:17-3.5
+    # rewrite the data directory format and break the volume below. Keep the
+    # major version the same as the Neon project's.
+    image: postgis/postgis:18-3.6
     container_name: wtbt-postgres
     restart: unless-stopped
 
@@ -46,7 +45,11 @@ services:
       # A named volume, not a bind mount: bind-mounting a Postgres data
       # directory onto a Windows host filesystem causes permission and fsync
       # problems. `docker compose down -v` is what deletes it.
-      - pgdata:/var/lib/postgresql/data
+      # From Postgres 18 the image keeps data in a folder per major version
+      # under /var/lib/postgresql, and refuses to start with a volume on the
+      # old .../data path. The volume is named per major version, because a
+      # new major version cannot read an older one's files.
+      - pgdata18:/var/lib/postgresql
 
     healthcheck:
       # pg_isready reports "accepting connections", which is later than
@@ -82,4 +85,4 @@ services:
     mem_limit: 512m
 
 volumes:
-  pgdata:
+  pgdata18:

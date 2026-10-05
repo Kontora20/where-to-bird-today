@@ -41,7 +41,7 @@ func newTestQueries(t *testing.T) *store.Queries {
 
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx, "postgis/postgis:17-3.5",
+	pgContainer, err := postgres.Run(ctx, "postgis/postgis:18-3.6",
 		postgres.WithDatabase("wheretobird"),
 		postgres.WithUsername("birder"),
 		postgres.WithPassword("birder"),
