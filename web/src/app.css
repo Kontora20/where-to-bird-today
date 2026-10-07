@@ -254,3 +254,10 @@ button.week-bar {
 		line-height: 44px;
 	}
 }
+
+/* Pinch zooms the map on a touch screen, so its buttons are only clutter there. */
+@media (pointer: coarse) {
+	:root .leaflet-control-zoom {
+		display: none;
+	}
+}

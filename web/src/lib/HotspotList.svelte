@@ -16,6 +16,8 @@
 	// it off the screen; the rest are one click away.
 	const initiallyShown = 5;
 
+	const listsText = (count: number) => `${count} ${count === 1 ? 'list' : 'lists'}`;
+
 	const today = new Date();
 	let showAll = $state(false);
 	const shown = $derived(showAll ? hotspots : hotspots.slice(0, initiallyShown));
@@ -45,7 +47,7 @@
 				<span class="text">
 					<span class="top">
 						<span class="name">{hotspot.hotspot_name}</span>
-						<span class="count" title="Checklists in this week of the year">{checklistCount(hotspot)}</span>
+						<span class="count" title="Checklists in this week of the year">{listsText(checklistCount(hotspot))}</span>
 					</span>
 					<span class="meta">
 						{distanceText(hotspot)}{#if birds.length > 0}

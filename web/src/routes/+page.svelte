@@ -414,7 +414,7 @@
 					</button>
 					<button type="button" class="link" onclick={() => (planOpen = true)}>Plan a search</button>
 					{#if seasonCount > 0}
-						<button type="button" class="link" onclick={showSeason}>In season ↓</button>
+						<button type="button" class="link season-link" onclick={showSeason}>In season ↓</button>
 					{/if}
 				</div>
 				{#if seasonCount > 0}
@@ -509,6 +509,9 @@
 					<h3>{seasonTitle}</h3>
 					<span class="hint">Peaking around you</span>
 				</div>
+				{#if targetSpecies.length === 0 && seasonCount > 0}
+					<p class="hint padded">Tap + to add a bird to Your birds. The bars show its chance through the year.</p>
+				{/if}
 				{#if season && season.species.length > 0}
 					<InSeason
 						species={season.species}
@@ -576,7 +579,7 @@
 			>
 			{#if legendOpen}
 				<p id="map-legend" class="legend">
-					Bubble: {mapLayer === 'yourBirds' ? 'your birds ever seen here' : 'checklists in this week of the year'}<br
+					Bubble: {mapLayer === 'yourBirds' ? 'how many of your birds were seen here' : 'birdwatcher lists in this week of the year'}<br
 					/>
 					Click the map to move your start point
 				</p>
@@ -925,9 +928,13 @@
 
 	@media (max-width: 639px) {
 		.tabs {
+			position: sticky;
+			top: 0;
+			z-index: 3;
 			display: flex;
 			padding: 0 8px;
 			border-bottom: 1px solid var(--color-line);
+			background: var(--color-panel);
 		}
 
 		.tabs button {
@@ -1009,6 +1016,10 @@
 
 		.link {
 			min-height: 44px;
+		}
+
+		.season-link {
+			display: none;
 		}
 
 		.layer-switch button {
