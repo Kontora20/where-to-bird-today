@@ -1,0 +1,284 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Where to Bird Today\nTraffic, errors, scheduled jobs and platform events. Health and readiness probes are left out of the traffic panels. The server logs no addresses and no query strings, so usage is counted in requests, not visitors."
+      },
+      "name": "text-2737"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "tr",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 86400000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 2592000000
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### Traffic"
+      },
+      "name": "text-8352"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'wtbt-server' | where Log_s startswith '{' | extend j = parse_json(Log_s) | where tostring(j.msg) == 'http request' | extend path = tostring(j.path), status = toint(j.status), ms = todouble(j.duration) / 1000000.0 | where path !in ('/health', '/ready') | summarize requests = count() by bin(TimeGenerated, 1h), class = strcat(tostring(status / 100), 'xx') | order by TimeGenerated asc",
+        "size": 0,
+        "title": "Requests by status class",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "TimeGenerated",
+          "yAxis": [
+            "requests"
+          ],
+          "group": "class",
+          "createOtherGroup": 0
+        }
+      },
+      "name": "requests-over-time"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'wtbt-server' | where Log_s startswith '{' | extend j = parse_json(Log_s) | where tostring(j.msg) == 'http request' | extend path = tostring(j.path), status = toint(j.status), ms = todouble(j.duration) / 1000000.0 | where path !in ('/health', '/ready') | summarize requests = count(), errors = countif(status >= 500), p50_ms = round(percentile(ms, 50), 0), p95_ms = round(percentile(ms, 95), 0), max_ms = round(max(ms), 0) by path = iff(path startswith '/hotspots/', '/hotspots/{id}/species/{id}', iff(path startswith '/assets' or path startswith '/_app' or path contains '.', 'static files', path)) | order by requests desc",
+        "size": 0,
+        "title": "Endpoints: volume and latency",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "table"
+      },
+      "name": "endpoints"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'wtbt-server' | where Log_s startswith '{' | extend j = parse_json(Log_s) | where tostring(j.msg) == 'http request' | extend path = tostring(j.path), status = toint(j.status), ms = todouble(j.duration) / 1000000.0 | where path !in ('/health', '/ready') | where path in ('/species', '/recommendations', '/recommendations/weeks', '/in-season') | summarize p95_ms = percentile(ms, 95) by bin(TimeGenerated, 1h), path | order by TimeGenerated asc",
+        "size": 0,
+        "title": "Slowest endpoints, 95th percentile (ms)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "timechart"
+      },
+      "name": "p95-over-time"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### Errors and limits"
+      },
+      "name": "text-7934"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'wtbt-server' | where Log_s startswith '{' | extend j = parse_json(Log_s) | where tostring(j.msg) == 'http request' | extend path = tostring(j.path), status = toint(j.status), ms = todouble(j.duration) / 1000000.0 | where path !in ('/health', '/ready') | where status in (429, 403) | summarize requests = count() by bin(TimeGenerated, 1h), reason = iff(status == 429, 'rate limited', 'bot blocked') | order by TimeGenerated asc",
+        "size": 0,
+        "title": "Rate-limited (429) and bot-blocked (403) requests",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "TimeGenerated",
+          "yAxis": [
+            "requests"
+          ],
+          "group": "reason",
+          "createOtherGroup": 0
+        }
+      },
+      "name": "blocked"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'wtbt-server' | where Log_s startswith '{' | extend j = parse_json(Log_s) | where tostring(j.level) in ('ERROR', 'WARN') | project TimeGenerated, level = tostring(j.level), message = tostring(j.msg), error = tostring(j.error) | order by TimeGenerated desc | take 100",
+        "size": 0,
+        "title": "Server errors and warnings",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "table"
+      },
+      "name": "server-errors"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### Scheduled jobs"
+      },
+      "name": "text-8510"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL | where isnotempty(ContainerJobName_s) | summarize last_run = max(TimeGenerated), lines = count(), failures = countif(Log_s contains 'ERROR' or Log_s contains 'failed') by job = ContainerJobName_s | order by job asc",
+        "size": 0,
+        "title": "Last log line of each job",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "table"
+      },
+      "name": "jobs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppConsoleLogs_CL | where isnotempty(ContainerJobName_s) | project TimeGenerated, job = ContainerJobName_s, line = Log_s | order by TimeGenerated desc | take 200",
+        "size": 0,
+        "title": "Job log lines",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "table"
+      },
+      "name": "job-logs"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "### Platform"
+      },
+      "name": "text-4967"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppSystemLogs_CL | where isnotempty(ContainerAppName_s) | where Reason_s in ('ContainerStarted', 'ContainerTerminated') | summarize events = count() by bin(TimeGenerated, 1h), app = ContainerAppName_s, event = Reason_s | order by TimeGenerated asc",
+        "size": 0,
+        "title": "Server and OSRM starts and stops (scale from zero)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "TimeGenerated",
+          "yAxis": [
+            "events"
+          ],
+          "group": "app",
+          "createOtherGroup": 0
+        }
+      },
+      "name": "starts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ContainerAppSystemLogs_CL | where Type_s == 'Warning' | where Reason_s != 'ContainerTerminated' | project TimeGenerated, app = coalesce(ContainerAppName_s, JobName_s), Reason_s, Log_s | order by TimeGenerated desc | take 100",
+        "size": 0,
+        "title": "Platform warnings",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "table"
+      },
+      "name": "warnings"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Usage | where IsBillable == true | summarize megabytes = round(sum(Quantity), 2) by bin(TimeGenerated, 1d), DataType | order by TimeGenerated asc",
+        "size": 0,
+        "title": "Log volume against the 100 MB daily cap (MB)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "timeContextFromParameter": "TimeRange",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "TimeGenerated",
+          "yAxis": [
+            "megabytes"
+          ],
+          "group": "DataType",
+          "createOtherGroup": 0
+        }
+      },
+      "name": "ingest"
+    }
+  ],
+  "isLocked": false,
+  "fallbackResourceIds": [
+    "@@LOGS_ID@@"
+  ]
+}

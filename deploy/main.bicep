@@ -54,6 +54,19 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
+// The dashboard over the logs above: Azure portal > Monitor > Workbooks. Free; it only runs queries.
+resource workbook 'Microsoft.Insights/workbooks@2022-04-01' = {
+  name: guid(resourceGroup().id, '${namePrefix}-overview')
+  location: location
+  kind: 'shared'
+  properties: {
+    displayName: 'Where to Bird Today'
+    category: 'workbook'
+    sourceId: logs.id
+    serializedData: replace(loadTextContent('workbook.json'), '@@LOGS_ID@@', logs.id)
+  }
+}
+
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${namePrefix}-identity'
   location: location
