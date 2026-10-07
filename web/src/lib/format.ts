@@ -129,9 +129,9 @@ export function nextSaturday(isoDate: string): string {
 // The ways to limit a search, as the value "min:60" or "km:25".
 export const driveMinutes = [30, 45, 60, 90, 120];
 export const radiusKm = [10, 25, 50, 100];
-// What a typed-in range may be. The server caps drive time at 120 minutes
-// (birding.MaxDriveMinutes) and puts no cap on a radius, so the UI does.
-export const rangeLimits = { min: { low: 5, high: 120 }, km: { low: 1, high: 150 } };
+// What a typed-in range may be: the server's caps, birding.MaxDriveMinutes and
+// birding.MaxRadiusKM.
+export const rangeLimits = { min: { low: 5, high: 120 }, km: { low: 1, high: 300 } };
 
 export function rangeLabel(unit: 'min' | 'km', amount: number): string {
 	return unit === 'min' ? `${amount} min` : `${amount} km`;

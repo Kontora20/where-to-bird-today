@@ -22,6 +22,10 @@ const maxSpeedKMPerMinute = 130.0 / 60
 // bound itself already has once (240 minutes down to this).
 const MaxDriveMinutes = 120
 
+// MaxRadiusKM bounds a search's ?radius_km=. A radius wider than the country
+// only makes the PostGIS query return every hotspot there is.
+const MaxRadiusKM = 300
+
 // ErrTravelTimeUnavailable means the request asked for a drive time limit
 // but no routing server is configured.
 var ErrTravelTimeUnavailable = errors.New("travel time is not available")

@@ -65,6 +65,21 @@ func TestGetRecommendations(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 		},
 		{
+			name:       "radius_km at the cap",
+			query:      "lat=55.3167&lon=21.3667&radius_km=300",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "radius_km above the cap",
+			query:      "lat=55.3167&lon=21.3667&radius_km=300.5",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "NaN radius_km",
+			query:      "lat=55.3167&lon=21.3667&radius_km=NaN",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
 			name:       "invalid date",
 			query:      validQuery + "&date=not-a-date",
 			wantStatus: http.StatusBadRequest,

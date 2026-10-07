@@ -150,8 +150,8 @@ func parseSearch(query url.Values) (search, error) {
 		}
 	} else {
 		parsed.radiusKM, err = strconv.ParseFloat(query.Get("radius_km"), 64)
-		if err != nil || parsed.radiusKM <= 0 {
-			return search{}, errors.New("radius_km must be a positive number, or max_minutes must be given")
+		if err != nil || !(parsed.radiusKM > 0 && parsed.radiusKM <= birding.MaxRadiusKM) {
+			return search{}, fmt.Errorf("radius_km must be a number above 0 and at most %d, or max_minutes must be given", birding.MaxRadiusKM)
 		}
 	}
 
