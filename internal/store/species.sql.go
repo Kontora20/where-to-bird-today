@@ -56,8 +56,8 @@ WHERE (
         )
     )
   AND EXISTS (
-        SELECT 1 FROM observations o
-        WHERE o.species_id = sp.id AND o.hotspot_id IS NOT NULL
+        SELECT 1 FROM hotspot_species_last_seen ls
+        WHERE ls.species_id = sp.id
     )
 ORDER BY common_name COLLATE "und-x-icu"
 LIMIT $3
@@ -76,9 +76,9 @@ type SearchSpeciesRow struct {
 }
 
 // Species whose common name (any language) or scientific name contains the
-// query, for the target-species picker. Only species with a hotspot
-// observation are offered: a bird the app holds no data for cannot rank
-// anything. strpos on lowered, unaccented text, not ILIKE, so a % or _ typed
+// query, for the target-species picker. Only species recorded at a hotspot
+// are offered: a bird the app holds no data for cannot rank anything. This
+// reads hotspot_species_last_seen, never observations. strpos on lowered, unaccented text, not ILIKE, so a % or _ typed
 // by the user is a plain character rather than a pattern, and "zuvedra"
 // finds "Žuvėdra" (and the reverse).
 // An explicit collation, so the order (and which rows LIMIT keeps) does not

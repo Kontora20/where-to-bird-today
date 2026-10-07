@@ -1136,7 +1136,7 @@ func TestRecommendHotspots(t *testing.T) {
 // TestSearchSpecies checks the picker query against real Postgres: a match in
 // either language, the name returned in the requested language, scientific
 // name matching, wildcard characters treated literally, and species with no
-// hotspot observation left out.
+// last-seen row left out.
 func TestSearchSpecies(t *testing.T) {
 	t.Parallel()
 
@@ -1174,11 +1174,11 @@ func TestSearchSpecies(t *testing.T) {
 			return
 		}
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO observations (species_id, hotspot_id, location, observed_on, source, source_ref)
-			 VALUES ($1, $2, ST_SetSRID(ST_MakePoint(25, 55), 4326)::geography, '2026-05-01', 'test', $3)`,
-			species.ID, hotspot.ID, "test-search-"+ebirdCode,
+			`INSERT INTO hotspot_species_last_seen (hotspot_id, species_id, observed_on, sampling_event_id)
+			 VALUES ($1, $2, '2026-05-01', $3)`,
+			hotspot.ID, species.ID, "S-search-"+ebirdCode,
 		); err != nil {
-			t.Fatalf("seeding observation (%s): %v", ebirdCode, err)
+			t.Fatalf("seeding last seen (%s): %v", ebirdCode, err)
 		}
 	}
 	seedSpecies("Ciconia ciconia", "whitestk", "Baltasis gandras", "White Stork", true)
