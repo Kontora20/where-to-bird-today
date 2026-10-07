@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import type { Recommendation, SpeciesMatch } from '$lib/api';
 	import { checklistCount, distanceText, lastSeenStatus } from '$lib/format';
 
@@ -11,11 +12,27 @@
 
 	let { hotspots, selectedId, birds, onselect }: Props = $props();
 
+	// The list starts with the best few so it does not push the sections below
+	// it off the screen; the rest are one click away.
+	const initiallyShown = 5;
+
 	const today = new Date();
+	let showAll = $state(false);
+	const shown = $derived(showAll ? hotspots : hotspots.slice(0, initiallyShown));
+
+	// A hotspot picked on the map may be one the list has not shown yet.
+	$effect(() => {
+		const index = hotspots.findIndex((hotspot) => hotspot.hotspot_id === selectedId);
+		if (index < 0) return;
+		if (index >= initiallyShown) showAll = true;
+		void tick().then(() =>
+			document.getElementById(`hotspot-${selectedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+		);
+	});
 </script>
 
 <ul class="list">
-	{#each hotspots as hotspot (hotspot.hotspot_id)}
+	{#each shown as hotspot (hotspot.hotspot_id)}
 		{@const status = lastSeenStatus(hotspot, birds, today)}
 		<li id="hotspot-{hotspot.hotspot_id}">
 			<button
@@ -44,6 +61,11 @@
 		</li>
 	{/each}
 </ul>
+{#if hotspots.length > initiallyShown}
+	<button type="button" class="more" onclick={() => (showAll = !showAll)}>
+		{showAll ? 'Show fewer' : `Show ${hotspots.length - initiallyShown} more`}
+	</button>
+{/if}
 
 <style>
 	.list {
@@ -55,7 +77,7 @@
 		list-style: none;
 	}
 
-	button {
+	.list button {
 		display: flex;
 		gap: 12px;
 		width: 100%;
@@ -69,9 +91,22 @@
 		cursor: pointer;
 	}
 
-	button.selected {
+	.list button.selected {
 		border-color: var(--color-accent-strong);
 		background: var(--color-selected);
+	}
+
+	.more {
+		margin: 6px 12px 0;
+		padding: 8px 0;
+		border: 0;
+		background: none;
+		color: var(--color-accent-text);
+		font: inherit;
+		font-size: 0.9rem;
+		font-weight: 600;
+		text-decoration: underline;
+		cursor: pointer;
 	}
 
 	.ring {

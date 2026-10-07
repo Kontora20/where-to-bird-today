@@ -119,6 +119,24 @@ export function addDays(isoDate: string, days: number): string {
 	return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
+// The first Saturday after an ISO date, as YYYY-MM-DD.
+export function nextSaturday(isoDate: string): string {
+	const [year, month, day] = isoDate.split('-').map(Number);
+	const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+	return addDays(isoDate, (6 - weekday + 7) % 7 || 7);
+}
+
+// The ways to limit a search, as the value "min:60" or "km:25".
+export const driveMinutes = [30, 45, 60, 90, 120];
+export const radiusKm = [10, 25, 50, 100];
+// What a typed-in range may be. The server caps drive time at 120 minutes
+// (birding.MaxDriveMinutes) and puts no cap on a radius, so the UI does.
+export const rangeLimits = { min: { low: 5, high: 120 }, km: { low: 1, high: 150 } };
+
+export function rangeLabel(unit: 'min' | 'km', amount: number): string {
+	return unit === 'min' ? `${amount} min` : `${amount} km`;
+}
+
 // When a species is at its best, worded for the In season list.
 export function peakText(species: SeasonalSpecies): string {
 	const weeks = species.weeks_to_peak;

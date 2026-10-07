@@ -1,14 +1,23 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import Header from '$lib/Header.svelte';
 	import HotspotCard from '$lib/HotspotCard.svelte';
 	import HotspotList from '$lib/HotspotList.svelte';
 	import HotspotMap from '$lib/HotspotMap.svelte';
 	import InSeason from '$lib/InSeason.svelte';
+	import PlanSearch, { type Plan } from '$lib/PlanSearch.svelte';
+	import RangePicker from '$lib/RangePicker.svelte';
 	import Scrubber from '$lib/Scrubber.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
-	import { addDays, formatDay, todayIso, type MapLayer, type ScrubberWeek } from '$lib/format';
+	import {
+		addDays,
+		formatDay,
+		rangeLabel,
+		todayIso,
+		type MapLayer,
+		type ScrubberWeek
+	} from '$lib/format';
 	import {
 		getAreaWeeks,
 		getRecommendations,
@@ -28,11 +37,6 @@
 	// A change of range or date often comes as several in a row (arrow keys in
 	// the list, typing in the date), so the search waits for a pause.
 	const searchDelayMs = 300;
-
-	const ranges = [
-		...[30, 45, 60, 90, 120].map((minutes) => ({ value: `min:${minutes}`, label: `Within ${minutes} min` })),
-		...[10, 25, 50, 100].map((km) => ({ value: `km:${km}`, label: `Within ${km} km` }))
-	];
 
 	let home = $state({ lat: 54.6872, lon: 25.2797, label: 'Vilnius' });
 	let range = $state('min:60');
@@ -60,12 +64,37 @@
 	let error = $state('');
 	let selectedHotspotId = $state<number | null>(null);
 	let mapLayer = $state<MapLayer>('all');
+	let planOpen = $state(false);
+	// On a phone the range and the date are folded into one line to leave room
+	// for the lists; on a wider screen they are always open.
+	let controlsOpen = $state(false);
+	const controlsSummary = $derived.by(() => {
+		const [unit, amount] = range.split(':');
+		const reach = unit === 'min' ? `${rangeLabel('min', Number(amount))} by car` : `${rangeLabel('km', Number(amount))} straight line`;
+		return `${reach} · ${date === todayIso() ? 'Today' : formatDay(date)}`;
+	});
 
 	// "Your birds" has nothing to size bubbles by once the list is empty, so
 	// the switch falls back rather than showing every bubble at minimum size.
 	$effect(() => {
 		if (targetSpecies.length === 0) mapLayer = 'all';
 	});
+	let seasonSection: HTMLElement;
+	const seasonTitle = $derived(date === todayIso() ? 'In season now' : 'In season that week');
+	const seasonCount = $derived(season?.species.length ?? 0);
+	// The first few names of the In season list, for the line under the controls.
+	const seasonTeaser = $derived.by(() => {
+		const names = (season?.species ?? []).slice(0, 3).map((species) => species.common_name).join(', ');
+		return seasonCount > 3 ? `${names} and ${seasonCount - 3} more` : names;
+	});
+
+	// On a phone the section is a tab, so it is opened before it is scrolled to.
+	async function showSeason() {
+		tab = 'season';
+		await tick();
+		seasonSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
 	const selectedHotspot = $derived(recommendations.find((hotspot) => hotspot.hotspot_id === selectedHotspotId));
 
 	let openSpecies = $state<SpeciesDetail | null>(null);
@@ -155,7 +184,6 @@
 
 	function selectHotspot(hotspotId: number) {
 		selectedHotspotId = hotspotId;
-		document.getElementById(`hotspot-${hotspotId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
 	// The hotspot to show a species at when none was chosen: the selected one,
@@ -231,6 +259,17 @@
 		return addTargetSpecies(species);
 	}
 
+	// Applies everything the Plan a search panel set at once, as one search.
+	function applyPlan(plan: Plan) {
+		home = plan.home;
+		range = plan.range;
+		date = plan.date;
+		targetSpecies = plan.birds;
+		saveYourBirds(targetSpecies);
+		planOpen = false;
+		return refresh();
+	}
+
 	function removeTargetSpecies(speciesId: number) {
 		targetSpecies = targetSpecies.filter((target) => target.species_id !== speciesId);
 		saveYourBirds(targetSpecies);
@@ -294,23 +333,41 @@
 		<aside class="sidebar">
 			<section class="area">
 				<h2>Around {home.label}</h2>
-				<div class="controls">
-					<label class="pill">
-						<span class="visually-hidden">How far to travel</span>
-						<select bind:value={range} onchange={refreshSoon}>
-							{#each ranges as option (option.value)}
-								<option value={option.value}>{option.label}</option>
-							{/each}
-						</select>
-					</label>
-					<label class="pill">
-						<span class="visually-hidden">Date</span>
-						<input type="date" bind:value={date} onchange={refreshSoon} />
-					</label>
-				</div>
-				<button type="button" class="link" onclick={useMyLocation} disabled={locating}>
-					{locating ? 'Locating…' : 'Use my location'}
+				<button type="button" class="summary" aria-expanded={controlsOpen} onclick={() => (controlsOpen = !controlsOpen)}>
+					{controlsSummary}
+					<span aria-hidden="true">{controlsOpen ? '▴' : '▾'}</span>
 				</button>
+				<div class="fold" class:open={controlsOpen}>
+					<RangePicker
+						value={range}
+						place={home.label}
+						onchange={(next) => {
+							range = next;
+							refreshSoon();
+						}}
+					/>
+					<div class="controls">
+						<label class="pill">
+							<span class="visually-hidden">Date</span>
+							<input type="date" bind:value={date} onchange={refreshSoon} />
+						</label>
+					</div>
+				</div>
+				<div class="links">
+					<button type="button" class="link" onclick={useMyLocation} disabled={locating}>
+						{locating ? 'Locating…' : 'Use my location'}
+					</button>
+					<button type="button" class="link" onclick={() => (planOpen = true)}>Plan a search</button>
+					{#if seasonCount > 0}
+						<button type="button" class="link" onclick={showSeason}>In season ↓</button>
+					{/if}
+				</div>
+				{#if seasonCount > 0}
+					<button type="button" class="teaser" onclick={showSeason}>
+						<strong>{seasonTitle}:</strong>
+						{seasonTeaser}
+					</button>
+				{/if}
 			</section>
 
 			{#if error}
@@ -346,7 +403,7 @@
 			<div class="tabs" role="tablist" aria-label="Sections">
 				{#each tabs as item (item.id)}
 					<button type="button" role="tab" aria-selected={tab === item.id} onclick={() => (tab = item.id)}>
-						{item.label}
+						{item.id === 'season' && seasonCount > 0 ? `${item.label} (${seasonCount})` : item.label}
 					</button>
 				{/each}
 			</div>
@@ -371,9 +428,9 @@
 				/>
 			</section>
 
-			<section class="season" class:phone-hidden={tab !== 'season'}>
+			<section class="season" class:phone-hidden={tab !== 'season'} bind:this={seasonSection}>
 				<div class="row">
-					<h3>{date === todayIso() ? 'In season now' : 'In season that week'}</h3>
+					<h3>{seasonTitle}</h3>
 					<span class="hint">Peaking around you</span>
 				</div>
 				{#if season && season.species.length > 0}
@@ -458,6 +515,18 @@
 	</div>
 </div>
 
+{#if planOpen}
+	<PlanSearch
+		{home}
+		{range}
+		{date}
+		birds={targetSpecies}
+		maxBirds={maxTargetSpecies}
+		onapply={applyPlan}
+		onclose={() => (planOpen = false)}
+	/>
+{/if}
+
 {#if speciesLoading || speciesError || openSpecies}
 	<SpeciesPanel
 		loading={speciesLoading}
@@ -490,6 +559,35 @@
 		overflow-y: auto;
 		border-right: 1px solid var(--color-line);
 		background: var(--color-panel);
+	}
+
+	.summary {
+		display: none;
+	}
+
+	.fold {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 16px;
+	}
+
+	.teaser {
+		padding: 8px 12px;
+		border: 0;
+		border-radius: 10px;
+		background: var(--color-chip);
+		color: var(--color-text);
+		font: inherit;
+		font-size: 0.85rem;
+		line-height: 1.4;
+		text-align: left;
+		cursor: pointer;
 	}
 
 	.map-area {
@@ -526,7 +624,6 @@
 		gap: 8px;
 	}
 
-	.pill select,
 	.pill input {
 		height: 36px;
 		padding: 0 12px;
@@ -741,6 +838,25 @@
 		.tabs button[aria-selected='true'] {
 			border-bottom-color: var(--color-accent-strong);
 			color: var(--color-text);
+		}
+
+		.summary {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			min-height: 44px;
+			padding: 0 14px;
+			border: 1px solid var(--color-control-border);
+			border-radius: 10px;
+			background: var(--color-panel);
+			color: var(--color-text);
+			font: inherit;
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		.fold:not(.open) {
+			display: none;
 		}
 
 		.year-tab {

@@ -23,8 +23,8 @@
 
 	const today = new Date();
 
-	const smallestBubble = 40;
-	const bubbleRange = 32;
+	const smallestBubble = 22;
+	const bubbleRange = 16;
 	const phoneQuery = '(max-width: 639px)';
 	// The share of a phone's height the bottom sheet covers.
 	const sheetShare = 0.45;
@@ -37,7 +37,7 @@
 	// The pixel radius markers are grouped within, at any zoom: smaller than
 	// Leaflet.markercluster's own default (80) so a cluster only forms once
 	// bubbles would otherwise overlap, not whenever they're merely close.
-	const maxClusterRadius = 55;
+	const maxClusterRadius = 35;
 
 	let container: HTMLDivElement;
 	let leaflet: typeof Leaflet;
