@@ -5,9 +5,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 
 	"github.com/Kontora20/where-to-bird-today/internal/config"
 	"github.com/Kontora20/where-to-bird-today/internal/ingest"
@@ -25,6 +27,9 @@ func main() {
 }
 
 func run() error {
+	only := flag.String("only", "", "run only this provider, wikidata or inaturalist; all of them when empty")
+	flag.Parse()
+
 	ctx := context.Background()
 
 	cfg, err := config.Load()
@@ -48,6 +53,12 @@ func run() error {
 	providers := []media.Provider{
 		wikidata.NewClient(nil),
 		inaturalist.NewClient(nil),
+	}
+	if *only != "" {
+		providers = slices.DeleteFunc(providers, func(provider media.Provider) bool { return provider.Name() != *only })
+		if len(providers) == 0 {
+			return fmt.Errorf("unknown provider %q, want wikidata or inaturalist", *only)
+		}
 	}
 
 	var stats media.Stats

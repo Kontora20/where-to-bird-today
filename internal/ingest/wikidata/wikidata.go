@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +32,12 @@ const (
 	// commonsBatchSize is MediaWiki's titles-per-request cap for anonymous
 	// callers (bots get more; we aren't one).
 	commonsBatchSize = 50
+
+	// thumbWidth is the width in pixels of the thumbnail Commons is asked for.
+	// It is the icon beside a name in a list, a few tens of pixels on screen;
+	// 120 is one of Wikimedia's standard sizes and about 3 KB a photo, where
+	// the 960 px thumbnail asked for before was about 70 KB.
+	thumbWidth = 120
 )
 
 // userAgent identifies this client per the Wikimedia User-Agent policy
@@ -250,7 +257,7 @@ func (c *Client) fetchCommonsInfo(ctx context.Context, filenames []string) (map[
 			"action":              {"query"},
 			"prop":                {"imageinfo"},
 			"iiprop":              {"url|extmetadata"},
-			"iiurlwidth":          {"640"},
+			"iiurlwidth":          {strconv.Itoa(thumbWidth)},
 			"titles":              {strings.Join(batch, "|")},
 			"iiextmetadatafilter": {"LicenseShortName|Artist|LicenseUrl"},
 			"format":              {"json"},

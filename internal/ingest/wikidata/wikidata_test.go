@@ -47,6 +47,9 @@ func TestFindPhotosKeepsMultipleImagesPerSpecies(t *testing.T) {
 	defer sparqlServer.Close()
 
 	commonsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("iiurlwidth"); got != "120" {
+			t.Errorf("iiurlwidth = %q, want the 120 px icon size", got)
+		}
 		titles := strings.Split(r.URL.Query().Get("titles"), "|")
 		pages := make(map[string]any, len(titles))
 		for i, title := range titles {
