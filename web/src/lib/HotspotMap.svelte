@@ -23,7 +23,7 @@
 
 	const today = new Date();
 
-	const smallestBubble = 22;
+	const smallestBubble = 24;
 	const bubbleRange = 16;
 	const phoneQuery = '(max-width: 639px)';
 	// The share of a phone's height the bottom sheet covers.

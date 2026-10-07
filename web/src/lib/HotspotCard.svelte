@@ -275,5 +275,14 @@
 			border-radius: 20px 20px 0 0;
 			box-shadow: var(--shadow-sheet);
 		}
+
+		.close {
+			width: 44px;
+			height: 44px;
+		}
+
+		.seen button {
+			min-height: 44px;
+		}
 	}
 </style>

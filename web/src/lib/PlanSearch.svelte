@@ -36,7 +36,13 @@
 	let error = $state('');
 	let panel: HTMLElement;
 
-	onMount(() => panel.focus());
+	// The page behind is inert while this is open, so focus moves in here and,
+	// on closing, back to what opened it.
+	onMount(() => {
+		const opener = document.activeElement;
+		panel.focus();
+		return () => setTimeout(() => opener instanceof HTMLElement && opener.focus());
+	});
 
 	const today = todayIso();
 	const saturday = nextSaturday(today);

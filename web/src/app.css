@@ -239,3 +239,18 @@ button.week-bar {
 	color: var(--color-muted);
 	font-size: 0.75rem;
 }
+
+/* The bottom sheet covers the lower 45% of a phone, and with it the zoom
+   buttons and the map attribution, so both sit above it. */
+@media (max-width: 639px) {
+	:root .leaflet-bottom {
+		bottom: 45dvh;
+	}
+
+	:root .leaflet-touch .leaflet-bar a,
+	:root .leaflet-bar a {
+		width: 44px;
+		height: 44px;
+		line-height: 44px;
+	}
+}

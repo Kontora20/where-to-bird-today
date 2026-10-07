@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { HourFrequency, SpeciesDetail } from '$lib/api';
 	import { formatDay } from '$lib/format';
 
@@ -12,6 +13,16 @@
 	}
 
 	let { loading, error, species, hotspotName, onclose }: Props = $props();
+
+	let panel: HTMLElement;
+
+	// The page behind is inert while this is open, so focus moves in here and,
+	// on closing, back to what opened it.
+	onMount(() => {
+		const opener = document.activeElement;
+		panel.focus();
+		return () => setTimeout(() => opener instanceof HTMLElement && opener.focus());
+	});
 
 	const hoursAfterSunrise = Array.from({ length: 24 }, (_, index) => index);
 
@@ -49,7 +60,7 @@
 	onclick={(event) => event.target === event.currentTarget && onclose()}
 	role="presentation"
 >
-	<aside class="panel">
+	<div class="panel" role="dialog" aria-modal="true" aria-label={species?.common_name ?? 'Bird details'} tabindex="-1" bind:this={panel}>
 		<button type="button" class="close" onclick={onclose} aria-label="Close">✕</button>
 
 		{#if loading}
@@ -139,7 +150,7 @@
 				{/each}
 			</ul>
 		{/if}
-	</aside>
+	</div>
 </div>
 
 <style>
@@ -160,6 +171,7 @@
 		padding: 1.5rem;
 		background: var(--color-panel);
 		border-left: 1px solid var(--color-line);
+		outline: none;
 	}
 
 	.close {
@@ -243,5 +255,20 @@
 
 	.links a {
 		color: var(--color-accent-text);
+	}
+
+	@media (max-width: 639px) {
+		.close {
+			top: 0.5rem;
+			right: 0.5rem;
+			width: 44px;
+			height: 44px;
+		}
+
+		.links a {
+			display: flex;
+			align-items: center;
+			min-height: 44px;
+		}
 	}
 </style>

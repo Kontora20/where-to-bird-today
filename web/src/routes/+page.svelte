@@ -65,6 +65,30 @@
 	let selectedHotspotId = $state<number | null>(null);
 	let mapLayer = $state<MapLayer>('all');
 	let planOpen = $state(false);
+
+	// The map's legend shows for a few seconds, on load and after the layer
+	// changes, then gets out of the way; the i button brings it back.
+	const legendSeconds = 6;
+	let legendOpen = $state(true);
+	let legendTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function showLegend() {
+		legendOpen = true;
+		clearTimeout(legendTimer);
+		legendTimer = setTimeout(() => (legendOpen = false), legendSeconds * 1000);
+	}
+
+	function toggleLegend() {
+		if (!legendOpen) return showLegend();
+		clearTimeout(legendTimer);
+		legendOpen = false;
+	}
+
+	$effect(() => {
+		void mapLayer;
+		showLegend();
+		return () => clearTimeout(legendTimer);
+	});
 	// On a phone the range and the date are folded into one line to leave room
 	// for the lists; on a wider screen they are always open.
 	let controlsOpen = $state(false);
@@ -104,6 +128,33 @@
 	let speciesHotspotName = $state('');
 
 	onMount(refresh);
+
+	// The tabs are only on screen on a phone, so the sections are only tab
+	// panels there; elsewhere they are plain sections.
+	let phone = $state(false);
+	onMount(() => {
+		const query = matchMedia('(max-width: 639px)');
+		const update = () => (phone = query.matches);
+		update();
+		query.addEventListener('change', update);
+		return () => query.removeEventListener('change', update);
+	});
+
+	// Arrow keys move between the tabs, Home and End jump to the first and last.
+	function moveTab(event: KeyboardEvent) {
+		const last = tabs.length - 1;
+		const index = tabs.findIndex((item) => item.id === tab);
+		const next =
+			event.key === 'ArrowRight' ? (index === last ? 0 : index + 1)
+			: event.key === 'ArrowLeft' ? (index === 0 ? last : index - 1)
+			: event.key === 'Home' ? 0
+			: event.key === 'End' ? last
+			: -1;
+		if (next < 0) return;
+		event.preventDefault();
+		tab = tabs[next].id;
+		document.getElementById(`tab-${tab}`)?.focus();
+	}
 
 	let pendingRefresh: ReturnType<typeof setTimeout> | undefined;
 	// The search and the season in progress. Starting another of the same kind
@@ -321,7 +372,11 @@
 	}
 </script>
 
-<div class="shell">
+<svelte:head>
+	<title>Where to Bird Today</title>
+</svelte:head>
+
+<div class="shell" inert={planOpen || speciesLoading || !!speciesError || !!openSpecies}>
 	<Header
 		searchPlaceholder={targetSpecies.length >= maxTargetSpecies ? 'Limit reached' : 'Search a bird…'}
 		searchDisabled={targetSpecies.length >= maxTargetSpecies}
@@ -400,15 +455,29 @@
 				{/if}
 			</section>
 
-			<div class="tabs" role="tablist" aria-label="Sections">
+			<div class="tabs" role="tablist" aria-label="Sections" tabindex="-1" onkeydown={moveTab}>
 				{#each tabs as item (item.id)}
-					<button type="button" role="tab" aria-selected={tab === item.id} onclick={() => (tab = item.id)}>
+					<button
+						type="button"
+						role="tab"
+						id="tab-{item.id}"
+						aria-controls="panel-{item.id}"
+						aria-selected={tab === item.id}
+						tabindex={tab === item.id ? 0 : -1}
+						onclick={() => (tab = item.id)}
+					>
 						{item.id === 'season' && seasonCount > 0 ? `${item.label} (${seasonCount})` : item.label}
 					</button>
 				{/each}
 			</div>
 
-			<section class="hotspots" class:phone-hidden={tab !== 'hotspots'}>
+			<section
+				class="hotspots"
+				class:phone-hidden={tab !== 'hotspots'}
+				id="panel-hotspots"
+				role={phone ? 'tabpanel' : undefined}
+				aria-labelledby={phone ? 'tab-hotspots' : undefined}
+			>
 				<div class="row">
 					<h3>Hotspots in range</h3>
 					<span class="hint">{loading ? 'Searching…' : searched ? `${recommendations.length} found` : ''}</span>
@@ -428,7 +497,14 @@
 				/>
 			</section>
 
-			<section class="season" class:phone-hidden={tab !== 'season'} bind:this={seasonSection}>
+			<section
+				class="season"
+				class:phone-hidden={tab !== 'season'}
+				id="panel-season"
+				role={phone ? 'tabpanel' : undefined}
+				aria-labelledby={phone ? 'tab-season' : undefined}
+				bind:this={seasonSection}
+			>
 				<div class="row">
 					<h3>{seasonTitle}</h3>
 					<span class="hint">Peaking around you</span>
@@ -447,7 +523,13 @@
 				{/if}
 			</section>
 
-			<section class="year-tab" class:phone-hidden={tab !== 'year'}>
+			<section
+				class="year-tab"
+				class:phone-hidden={tab !== 'year'}
+				id="panel-year"
+				role={phone ? 'tabpanel' : undefined}
+				aria-labelledby={phone ? 'tab-year' : undefined}
+			>
 				{#if scrubberWeeks.length > 0}
 					<Scrubber
 						weeks={scrubberWeeks}
@@ -484,11 +566,21 @@
 					Your birds
 				</button>
 			</div>
-			<p class="legend">
-				Bubble: {mapLayer === 'yourBirds' ? 'your birds ever seen here' : 'checklists in this week of the year'}<br
-				/>
-				Click the map to move your start point
-			</p>
+			<button
+				type="button"
+				class="legend-button"
+				aria-label="What the map shows"
+				aria-expanded={legendOpen}
+				aria-controls="map-legend"
+				onclick={toggleLegend}>i</button
+			>
+			{#if legendOpen}
+				<p id="map-legend" class="legend">
+					Bubble: {mapLayer === 'yourBirds' ? 'your birds ever seen here' : 'checklists in this week of the year'}<br
+					/>
+					Click the map to move your start point
+				</p>
+			{/if}
 			{#if scrubberWeeks.length > 0}
 				<div class="scrubber-overlay">
 					<Scrubber
@@ -767,9 +859,25 @@
 		box-shadow: var(--shadow-raised);
 	}
 
-	.legend {
+	.legend-button {
 		position: absolute;
 		top: 16px;
+		left: 16px;
+		z-index: 5;
+		width: 36px;
+		height: 36px;
+		border: 0;
+		border-radius: 999px;
+		background: var(--color-panel);
+		box-shadow: var(--shadow-raised);
+		color: var(--color-text);
+		font: italic 700 1rem serif;
+		cursor: pointer;
+	}
+
+	.legend {
+		position: absolute;
+		top: 60px;
 		left: 16px;
 		margin: 0;
 		padding: 6px 10px;
@@ -886,9 +994,25 @@
 
 		.legend {
 			position: fixed;
-			top: 68px;
+			top: 120px;
 			left: 12px;
 			z-index: 5;
+		}
+
+		.legend-button {
+			position: fixed;
+			top: 68px;
+			left: 12px;
+			width: 44px;
+			height: 44px;
+		}
+
+		.link {
+			min-height: 44px;
+		}
+
+		.layer-switch button {
+			min-height: 44px;
 		}
 
 		.layer-switch {

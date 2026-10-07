@@ -109,6 +109,12 @@
 		cursor: pointer;
 	}
 
+	@media (max-width: 639px) {
+		.more {
+			min-height: 44px;
+		}
+	}
+
 	.ring {
 		flex-shrink: 0;
 		width: 22px;
