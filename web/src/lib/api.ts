@@ -59,6 +59,8 @@ export interface SeasonalSpecies {
 	weeks_to_peak: number;
 	// The same share for each of the 52 weeks.
 	year: number[];
+	// Absent when no photo is stored for the species.
+	photo?: Photo;
 }
 
 export interface Season {

@@ -134,6 +134,11 @@ type fakeAreaStore struct {
 	speciesWeeksRows  []store.GetAreaSpeciesWeeksRow
 	speciesWeeksErr   error
 	nameCandidates    map[int64]map[string]string
+	mediaRows         []store.SpeciesMedium
+}
+
+func (f fakeAreaStore) ListBestSpeciesMedia(_ context.Context, _ []int64) ([]store.SpeciesMedium, error) {
+	return f.mediaRows, nil
 }
 
 func (f fakeAreaStore) GetAreaSpeciesWeeks(_ context.Context, _ []int64) ([]store.GetAreaSpeciesWeeksRow, error) {

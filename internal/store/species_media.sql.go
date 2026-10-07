@@ -11,6 +11,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const listBestSpeciesMedia = `-- name: ListBestSpeciesMedia :many
+SELECT DISTINCT ON (species_id) species_id, source, source_ref, image_url, thumb_url, width, height, license, license_url, attribution, attribution_url, rank, fetched_at
+FROM species_media
+WHERE species_id = ANY($1::bigint[])
+ORDER BY species_id, rank
+`
+
+// The best-ranked stored photo of each of the species, for lists that show a
+// thumbnail beside a name. A species with no photo has no row.
+func (q *Queries) ListBestSpeciesMedia(ctx context.Context, speciesIds []int64) ([]SpeciesMedium, error) {
+	rows, err := q.db.Query(ctx, listBestSpeciesMedia, speciesIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpeciesMedium
+	for rows.Next() {
+		var i SpeciesMedium
+		if err := rows.Scan(
+			&i.SpeciesID,
+			&i.Source,
+			&i.SourceRef,
+			&i.ImageUrl,
+			&i.ThumbUrl,
+			&i.Width,
+			&i.Height,
+			&i.License,
+			&i.LicenseUrl,
+			&i.Attribution,
+			&i.AttributionUrl,
+			&i.Rank,
+			&i.FetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRelevantSpecies = `-- name: ListRelevantSpecies :many
 SELECT s.id, s.ebird_species_code, s.scientific_name, s.avibase_id, s.iucn_category, s.family, s.taxon_order, s.birds_of_the_world_url, s.birdlife_datazone_url, s.created_at, s.updated_at FROM species s WHERE s.id IN (SELECT DISTINCT species_id FROM observations)
 `

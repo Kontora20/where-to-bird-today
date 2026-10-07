@@ -20,7 +20,19 @@
 	{#each species as bird (bird.species_id)}
 		{@const tracked = birds.some((mine) => mine.species_id === bird.species_id)}
 		<li>
-			<span class="photo" aria-hidden="true"></span>
+			{#if bird.photo?.thumb_url}
+				<img
+					class="photo"
+					src={bird.photo.thumb_url}
+					alt=""
+					width="40"
+					height="40"
+					loading="lazy"
+					title="Photo: {bird.photo.attribution} · {bird.photo.license}"
+				/>
+			{:else}
+				<span class="photo" aria-hidden="true"></span>
+			{/if}
 			<button type="button" class="info" onclick={() => onopen(bird.species_id)}>
 				<span class="name">{bird.common_name}</span>
 				<span class="note">{peakText(bird)}</span>
@@ -67,6 +79,7 @@
 		width: 40px;
 		height: 40px;
 		border-radius: 8px;
+		object-fit: cover;
 		background: repeating-linear-gradient(
 			45deg,
 			var(--color-bar),

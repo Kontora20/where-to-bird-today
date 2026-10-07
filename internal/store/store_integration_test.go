@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"slices"
@@ -1219,6 +1220,57 @@ func TestSearchSpecies(t *testing.T) {
 				t.Errorf("SearchSpecies(%q) = %v, want %v (the unobserved species must never appear)", tc.query, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestListBestSpeciesMedia checks that each species comes back with only its
+// best-ranked photo, and that a species with no photo has no row.
+func TestListBestSpeciesMedia(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := New(newTestPool(t))
+
+	seedSpecies := func(scientificName, code string) int64 {
+		t.Helper()
+		species, err := queries.UpsertSpecies(ctx, UpsertSpeciesParams{
+			ScientificName:   scientificName,
+			EbirdSpeciesCode: pgtype.Text{String: code, Valid: true},
+			AvibaseID:        pgtype.Text{String: "avibase-" + code, Valid: true},
+		})
+		if err != nil {
+			t.Fatalf("UpsertSpecies (%s): %v", scientificName, err)
+		}
+		return species.ID
+	}
+	seedMedium := func(speciesID int64, ref string, rank int32) {
+		t.Helper()
+		if err := queries.UpsertSpeciesMedia(ctx, UpsertSpeciesMediaParams{
+			SpeciesID: speciesID, Source: "test", SourceRef: ref, ImageUrl: "https://example.org/" + ref + ".jpg",
+			License: "CC0", Attribution: "test", Rank: rank,
+		}); err != nil {
+			t.Fatalf("UpsertSpeciesMedia (%s): %v", ref, err)
+		}
+	}
+
+	withPhotos := seedSpecies("Testus mediaus", "mediaone")
+	alsoWithPhotos := seedSpecies("Testus mediaus alter", "mediatwo")
+	withoutPhotos := seedSpecies("Testus nomediaus", "medianone")
+	seedMedium(withPhotos, "best-media", 1)
+	seedMedium(withPhotos, "second-media", 2)
+	seedMedium(alsoWithPhotos, "only-media", 1)
+
+	rows, err := queries.ListBestSpeciesMedia(ctx, []int64{withPhotos, alsoWithPhotos, withoutPhotos})
+	if err != nil {
+		t.Fatalf("ListBestSpeciesMedia: %v", err)
+	}
+	got := make(map[int64]string)
+	for _, row := range rows {
+		got[row.SpeciesID] = row.SourceRef
+	}
+	want := map[int64]string{withPhotos: "best-media", alsoWithPhotos: "only-media"}
+	if !maps.Equal(got, want) {
+		t.Errorf("ListBestSpeciesMedia() = %v, want %v", got, want)
 	}
 }
 

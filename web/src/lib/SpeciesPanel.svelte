@@ -25,6 +25,7 @@
 	});
 
 	const hoursAfterSunrise = Array.from({ length: 24 }, (_, index) => index);
+	const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
 	// The hours within a tenth of the best one. Neighbouring hours join into one
 	// clock range.
@@ -103,6 +104,15 @@
 						></div>
 					{/each}
 				</div>
+				<div class="axis months" aria-hidden="true">
+					{#each months as month, index (index)}
+						<span>{month}</span>
+					{/each}
+				</div>
+				<ul class="legend">
+					<li><span class="swatch best"></span>Best weeks</li>
+					<li><span class="swatch"></span>Other weeks</li>
+				</ul>
 				<p class="chart-note">
 					{#if species.best_weeks.length > 0}Best: {species.best_weeks
 							.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`)
@@ -128,6 +138,17 @@
 						></div>
 					{/each}
 				</div>
+				<div class="axis hours" aria-hidden="true">
+					<span>Sunrise</span>
+					<span>+6 h</span>
+					<span>+12 h</span>
+					<span>+18 h</span>
+					<span>Sunrise</span>
+				</div>
+				<ul class="legend">
+					<li><span class="swatch best"></span>Best hours</li>
+					<li><span class="swatch"></span>Other hours</li>
+				</ul>
 				<p class="chart-note">
 					{#if best.length > 0}Best: {clockRanges(best).join(', ')}.{/if}
 					The bars run from sunrise around the clock; their height is relative to the best hour.
@@ -241,6 +262,50 @@
 	}
 
 	.hour-bar.best {
+		background: var(--color-accent-strong);
+	}
+
+	.axis {
+		display: flex;
+		margin-top: 2px;
+		color: var(--color-muted);
+		font: 0.7rem var(--font-mono);
+	}
+
+	.axis.months span {
+		flex: 1;
+		text-align: center;
+	}
+
+	.axis.hours {
+		justify-content: space-between;
+	}
+
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 14px;
+		margin: 6px 0 0;
+		padding: 0;
+		list-style: none;
+		color: var(--color-muted);
+		font-size: 0.75rem;
+	}
+
+	.legend li {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.swatch {
+		width: 12px;
+		height: 12px;
+		border-radius: 3px;
+		background: var(--color-bar);
+	}
+
+	.swatch.best {
 		background: var(--color-accent-strong);
 	}
 

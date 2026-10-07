@@ -9,6 +9,14 @@ SELECT s.* FROM species s WHERE s.id IN (SELECT DISTINCT species_id FROM observa
 -- panel reads (ADR 0004).
 SELECT * FROM species_media WHERE species_id = sqlc.arg(species_id) ORDER BY rank;
 
+-- name: ListBestSpeciesMedia :many
+-- The best-ranked stored photo of each of the species, for lists that show a
+-- thumbnail beside a name. A species with no photo has no row.
+SELECT DISTINCT ON (species_id) *
+FROM species_media
+WHERE species_id = ANY(sqlc.arg(species_ids)::bigint[])
+ORDER BY species_id, rank;
+
 -- name: UpsertSpeciesMedia :exec
 INSERT INTO species_media (
     species_id, source, source_ref, image_url, thumb_url, width, height,

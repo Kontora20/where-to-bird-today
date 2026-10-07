@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
 
@@ -38,6 +40,10 @@ func TestInSeasonPicksTheSpeciesAtTheirBest(t *testing.T) {
 
 	area := areaWithChecklists()
 	area.nameCandidates = map[int64]map[string]string{10: {"en": "White Stork", "lt": "Baltasis gandras"}}
+	area.mediaRows = []store.SpeciesMedium{{
+		SpeciesID: 10, ImageUrl: "https://example.org/stork.jpg", ThumbUrl: pgtype.Text{String: "https://example.org/stork-small.jpg", Valid: true},
+		License: "CC BY-SA 4.0", Attribution: "A. Photographer",
+	}}
 	var rows []store.GetAreaSpeciesWeeksRow
 	rows = append(rows, speciesInWeeks(10, "Ciconia ciconia", 38, 14, 14, 14, 14)...) // still to come: peaks in week 39
 	rows = append(rows, speciesInWeeks(11, "Parus major", 1, repeat(52, 10)...)...)   // the same all year: no lift
@@ -76,6 +82,13 @@ func TestInSeasonPicksTheSpeciesAtTheirBest(t *testing.T) {
 	}
 	if !slices.Equal(gotSummary, want) {
 		t.Errorf("species = %+v, want %+v", gotSummary, want)
+	}
+
+	if photo := got.Species[0].Photo; photo == nil || photo.ThumbURL != "https://example.org/stork-small.jpg" || photo.Attribution != "A. Photographer" {
+		t.Errorf("Species[0].Photo = %+v, want the stored thumbnail with its attribution", photo)
+	}
+	if got.Species[1].Photo != nil {
+		t.Errorf("Species[1].Photo = %+v, want nil for a species with no stored photo", got.Species[1].Photo)
 	}
 }
 

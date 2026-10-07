@@ -22,6 +22,17 @@ type Photo struct {
 	AttributionURL string `json:"attribution_url,omitempty"`
 }
 
+func photoOf(medium store.SpeciesMedium) *Photo {
+	return &Photo{
+		ImageURL:       medium.ImageUrl,
+		ThumbURL:       medium.ThumbUrl.String,
+		License:        medium.License,
+		LicenseURL:     medium.LicenseUrl.String,
+		Attribution:    medium.Attribution,
+		AttributionURL: medium.AttributionUrl.String,
+	}
+}
+
 // LatestChecklist is the most recent eBird checklist at the hotspot that
 // recorded the species: a link to the record behind the numbers.
 type LatestChecklist struct {
@@ -102,15 +113,7 @@ func (p *SpeciesPanel) SpeciesDetail(ctx context.Context, hotspotID, speciesID i
 	if len(media) > 0 {
 		// media is ordered by rank (ListSpeciesMedia's own ORDER BY), so the
 		// first row is the best one, per ADR 0004's "one photo" in the panel.
-		best := media[0]
-		photo = &Photo{
-			ImageURL:       best.ImageUrl,
-			ThumbURL:       best.ThumbUrl.String,
-			License:        best.License,
-			LicenseURL:     best.LicenseUrl.String,
-			Attribution:    best.Attribution,
-			AttributionURL: best.AttributionUrl.String,
-		}
+		photo = photoOf(media[0])
 	}
 
 	weeks, bestWeeks, err := seasonality(ctx, p.store, hotspotID, speciesID, date)

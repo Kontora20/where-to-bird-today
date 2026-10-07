@@ -37,6 +37,7 @@ type areaStore interface {
 	ListHotspotsWithin(ctx context.Context, arg store.ListHotspotsWithinParams) ([]store.ListHotspotsWithinRow, error)
 	GetAreaWeeks(ctx context.Context, arg store.GetAreaWeeksParams) ([]store.GetAreaWeeksRow, error)
 	GetAreaSpeciesWeeks(ctx context.Context, hotspotIDs []int64) ([]store.GetAreaSpeciesWeeksRow, error)
+	ListBestSpeciesMedia(ctx context.Context, speciesIDs []int64) ([]store.SpeciesMedium, error)
 }
 
 // WeekFinder finds the best weeks of species in an area. Its drive times may

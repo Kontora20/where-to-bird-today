@@ -56,6 +56,8 @@ type SeasonalSpecies struct {
 	PeakStart      string    `json:"peak_start"`
 	WeeksToPeak    int       `json:"weeks_to_peak"`
 	Year           []float32 `json:"year"`
+	// Absent when no photo is stored for the species.
+	Photo *Photo `json:"photo,omitempty"`
 }
 
 // Season is what an area holds in the week of a date: its checklists in each
@@ -202,12 +204,21 @@ func (f *WeekFinder) InSeason(ctx context.Context, p AreaParams, lang string) (S
 	if err != nil {
 		return Season{}, err
 	}
+	media, err := f.store.ListBestSpeciesMedia(ctx, ids)
+	if err != nil {
+		return Season{}, fmt.Errorf("loading species photos: %w", err)
+	}
+	photos := make(map[int64]*Photo, len(media))
+	for _, medium := range media {
+		photos[medium.SpeciesID] = photoOf(medium)
+	}
 	for i := range found {
 		name, ok := names[found[i].SpeciesID]
 		if !ok {
 			name = found[i].ScientificName
 		}
 		found[i].CommonName = name
+		found[i].Photo = photos[found[i].SpeciesID]
 	}
 	result.Species = found
 	return result, nil
