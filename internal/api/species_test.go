@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,6 +146,26 @@ func TestSearchSpecies(t *testing.T) {
 		{
 			name:       "blank q",
 			query:      "q=+++",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "longest accepted q",
+			query:      "q=" + strings.Repeat("ž", maxSpeciesQueryRunes),
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "q one rune too long",
+			query:      "q=" + strings.Repeat("ž", maxSpeciesQueryRunes+1),
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "NUL byte in q",
+			query:      "q=a%00",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid UTF-8 in q",
+			query:      "q=%ff%fe",
 			wantStatus: http.StatusBadRequest,
 		},
 		{

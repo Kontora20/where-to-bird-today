@@ -57,7 +57,7 @@ func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationSer
 	mux.Handle("GET /", handleSPA(spaFS))
 
 	// Middleware is applied by wrapping. The outermost wrapper runs first.
-	return logRequests(logger, mux)
+	return logRequests(logger, securityHeaders(mux))
 }
 
 // logRequests logs one structured line per request, after it completes.

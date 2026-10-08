@@ -30,6 +30,38 @@ func TestSPAServesRealFiles(t *testing.T) {
 	}
 }
 
+func TestSPACacheControl(t *testing.T) {
+	t.Parallel()
+
+	fsys := testSPAFS()
+	fsys["_app/immutable/chunk.js"] = &fstest.MapFile{Data: []byte("chunk")}
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "hashed file is kept for good", path: "/_app/immutable/chunk.js", want: "public, max-age=31536000, immutable"},
+		{name: "missing hashed file is not kept", path: "/_app/immutable/gone.js", want: "no-cache"},
+		{name: "client route gets the shell, revalidated", path: "/hotspot/42", want: "no-cache"},
+		{name: "other real file has no header", path: "/_app/immutable.js", want: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := httptest.NewRecorder()
+
+			handleSPA(fsys).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+
+			if got := rec.Header().Get("Cache-Control"); got != tc.want {
+				t.Errorf("Cache-Control = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestSPAFallsBackToIndexForUnknownPaths is the actual point of handleSPA:
 // a client-side route like /hotspot/42 isn't a real file in the build, but a
 // browser navigating there directly (or refreshing) still needs the app

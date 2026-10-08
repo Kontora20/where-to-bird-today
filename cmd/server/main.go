@@ -29,6 +29,10 @@ import (
 // kills the container, so this must stay comfortably under that grace period.
 const shutdownTimeout = 10 * time.Second
 
+// statementTimeout is how long one request's query may run. The slowest search
+// measured (300 km, drive time) takes under a second.
+const statementTimeout = 5 * time.Second
+
 // main is deliberately tiny. All real work happens in run, which returns an
 // error instead of exiting — the "os.Exit only in main" idiom.
 //
@@ -62,7 +66,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := store.NewPool(ctx, cfg.DatabaseURL)
+	pool, err := store.NewPool(ctx, cfg.DatabaseURL, store.WithStatementTimeout(statementTimeout))
 	if err != nil {
 		return fmt.Errorf("connecting to database: %w", err)
 	}

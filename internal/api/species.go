@@ -6,9 +6,27 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
+
+// maxSpeciesQueryRunes is the longest search text accepted. The search
+// lowercases and unaccents every species name for each request, so what it
+// costs grows with the length of the text.
+const maxSpeciesQueryRunes = 64
+
+// validSpeciesQuery reports why query cannot be searched for, or "" when it
+// can. Postgres rejects a NUL byte in text, which would answer 500.
+func validSpeciesQuery(query string) string {
+	switch {
+	case !utf8.ValidString(query) || strings.ContainsRune(query, 0):
+		return "q is not valid text"
+	case utf8.RuneCountInString(query) > maxSpeciesQueryRunes:
+		return "q is too long"
+	}
+	return ""
+}
 
 // handleSearchSpecies serves the target-species picker: species whose name
 // contains ?q=, named in the request's language.
@@ -17,6 +35,10 @@ func handleSearchSpecies(logger *slog.Logger, species speciesSearcher) http.Hand
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
 		if query == "" {
 			http.Error(w, "q is required", http.StatusBadRequest)
+			return
+		}
+		if reason := validSpeciesQuery(query); reason != "" {
+			http.Error(w, reason, http.StatusBadRequest)
 			return
 		}
 
