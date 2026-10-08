@@ -205,7 +205,7 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommender) 
 			return
 		}
 
-		writeJSON(w, logger, http.StatusOK, results)
+		writeSearchJSON(w, logger, results)
 	})
 }
 
@@ -237,7 +237,7 @@ func handleGetAreaWeeks(logger *slog.Logger, weeks weekFinder) http.Handler {
 			return
 		}
 
-		writeJSON(w, logger, http.StatusOK, found)
+		writeSearchJSON(w, logger, found)
 	})
 }
 
@@ -264,6 +264,6 @@ func handleGetInSeason(logger *slog.Logger, seasons seasonFinder) http.Handler {
 			return
 		}
 
-		writeJSON(w, logger, http.StatusOK, found)
+		writeSearchJSON(w, logger, found)
 	})
 }

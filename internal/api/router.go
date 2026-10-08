@@ -40,8 +40,9 @@ func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationSer
 	searchLimiter := newSearchRateLimiter(searchRequestsPerMinute)
 	speciesLimiter := newSearchRateLimiter(searchRequestsPerMinute)
 	driveTimeLimiter := newSearchRateLimiter(driveTimeRequestsPerMinute)
+	allLimiter := newSearchRateLimiter(allSearchesPerMinute)
 	limited := func(limiter *searchRateLimiter, next http.Handler) http.Handler {
-		return blockBots(rateLimitSearches(limiter, next))
+		return blockBots(rateLimitAllSearches(allLimiter, rateLimitSearches(limiter, gzipResponses(next))))
 	}
 	// Searches by drive time also spend a smaller budget of their own.
 	areaSearch := func(next http.Handler) http.Handler {
@@ -81,7 +82,13 @@ func logRequests(logger *slog.Logger, next http.Handler) http.Handler {
 
 		next.ServeHTTP(rec, r)
 
-		logger.Info("http request",
+		// A refused request is logged at debug level: a flood of them would
+		// otherwise cost as much in log storage as the requests it sends.
+		level := slog.LevelInfo
+		if rec.status == http.StatusTooManyRequests || rec.status == http.StatusForbidden {
+			level = slog.LevelDebug
+		}
+		logger.Log(r.Context(), level, "http request",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.Int("status", rec.status),

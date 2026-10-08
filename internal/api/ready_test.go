@@ -66,3 +66,28 @@ func TestReady(t *testing.T) {
 		})
 	}
 }
+
+// countingDatabase counts its pings.
+type countingDatabase struct {
+	pings *int
+}
+
+func (c countingDatabase) Ping(_ context.Context) error {
+	*c.pings++
+	return nil
+}
+
+func TestReadyReusesTheAnswerForAFewSeconds(t *testing.T) {
+	t.Parallel()
+
+	pings := 0
+	handler := handleReady(testLogger(), countingDatabase{pings: &pings})
+
+	for range 5 {
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/ready", nil))
+	}
+
+	if pings != 1 {
+		t.Errorf("database pinged %d times by 5 calls in a row, want 1", pings)
+	}
+}

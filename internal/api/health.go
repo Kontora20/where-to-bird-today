@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 )
 
 // healthResponse is the body of GET /health.
@@ -46,6 +47,18 @@ func handleHealth(logger *slog.Logger) http.Handler {
 //
 // Once the status line is sent, an error can no longer be reported to the
 // client, so a failed Write is logged rather than returned.
+// searchCacheSeconds is how long a browser may reuse the answer to a search.
+// The data changes at most daily, and a repeat of the same search (a language
+// switch back, a refresh) then costs no query.
+const searchCacheSeconds = 300
+
+// writeSearchJSON writes a successful answer to a search. Only a success is
+// marked cacheable: an error answer set with http.Error must not be kept.
+func writeSearchJSON(w http.ResponseWriter, logger *slog.Logger, v any) {
+	w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(searchCacheSeconds))
+	writeJSON(w, logger, http.StatusOK, v)
+}
+
 func writeJSON(w http.ResponseWriter, logger *slog.Logger, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {

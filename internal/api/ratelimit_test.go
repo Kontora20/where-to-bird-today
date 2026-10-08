@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -76,6 +77,14 @@ func TestClientAddress(t *testing.T) {
 		{name: "one hop", forwarded: "1.2.3.4", remoteAddr: "10.0.0.1:5678", want: "1.2.3.4"},
 		{name: "several hops takes the last", forwarded: "6.6.6.6, 1.2.3.4", remoteAddr: "10.0.0.2:5678", want: "1.2.3.4"},
 		{name: "remote addr with no port", remoteAddr: "1.2.3.4", want: "1.2.3.4"},
+		{name: "port is dropped", forwarded: "1.2.3.4:5678", remoteAddr: "10.0.0.1:1", want: "1.2.3.4"},
+		{name: "IPv4 inside IPv6 is plain IPv4", forwarded: "::ffff:1.2.3.4", remoteAddr: "10.0.0.1:1", want: "1.2.3.4"},
+		{name: "IPv6 is keyed by its /64", forwarded: "2001:db8:1:2:aaaa:bbbb:cccc:dddd", remoteAddr: "10.0.0.1:1", want: "2001:db8:1:2::/64"},
+		{name: "other IPv6 in the same /64", forwarded: "[2001:db8:1:2::1]:443", remoteAddr: "10.0.0.1:1", want: "2001:db8:1:2::/64"},
+		{name: "empty last entry uses the connection", forwarded: "1.2.3.4,", remoteAddr: "10.0.0.1:1", want: "10.0.0.1"},
+		{name: "not an address uses the connection", forwarded: "not-an-address", remoteAddr: "10.0.0.1:1", want: "10.0.0.1"},
+		{name: "leading zero uses the connection", forwarded: "01.2.3.4", remoteAddr: "10.0.0.1:1", want: "10.0.0.1"},
+		{name: "huge entry uses the connection", forwarded: strings.Repeat("9", 50_000), remoteAddr: "10.0.0.1:1", want: "10.0.0.1"},
 	}
 
 	for _, tc := range tests {
@@ -158,5 +167,45 @@ func TestRateLimitDriveTimeSearchesOnlyCountsDriveTime(t *testing.T) {
 				t.Errorf("second request: status = %d, want %d", rec.Code, tc.wantStatus)
 			}
 		})
+	}
+}
+
+func TestSearchRateLimiterRefusesNewAddressesWhenFull(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	limiter := newSearchRateLimiter(searchRequestsPerMinute)
+	limiter.now = func() time.Time { return now }
+
+	for i := range maxTrackedAddresses {
+		limiter.allow(fmt.Sprintf("10.0.%d.%d", i/256, i%256))
+	}
+
+	if limiter.allow("1.2.3.4") {
+		t.Error("allow() for a new address with a full map of live windows = true, want false")
+	}
+	if got := len(limiter.buckets); got != maxTrackedAddresses {
+		t.Errorf("tracked addresses = %d, want %d (a refused address is not remembered)", got, maxTrackedAddresses)
+	}
+	if !limiter.allow("10.0.0.0") {
+		t.Error("allow() for an address already tracked = false, want true")
+	}
+}
+
+func TestRateLimitAllSearchesSharesOneBudget(t *testing.T) {
+	t.Parallel()
+
+	handler := rateLimitAllSearches(newSearchRateLimiter(1), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	statuses := make([]int, 0, 2)
+	for _, remoteAddr := range []string{"1.1.1.1:1", "2.2.2.2:2"} {
+		req := httptest.NewRequest(http.MethodGet, "/recommendations", nil)
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		statuses = append(statuses, rec.Code)
+	}
+
+	if statuses[0] != http.StatusOK || statuses[1] != http.StatusTooManyRequests {
+		t.Errorf("statuses = %v, want the second address refused after the first spent the budget", statuses)
 	}
 }

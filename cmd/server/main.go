@@ -116,6 +116,10 @@ func run() error {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+
+		// The default allows 1 MB of headers per request. A browser sends a
+		// few KB, and Azure's ingress adds a few hundred bytes.
+		MaxHeaderBytes: 16 << 10,
 	}
 
 	// ListenAndServe blocks, so it runs in a goroutine while main waits on

@@ -49,7 +49,7 @@ func handleSearchSpecies(logger *slog.Logger, species speciesSearcher) http.Hand
 			return
 		}
 
-		writeJSON(w, logger, http.StatusOK, matches)
+		writeSearchJSON(w, logger, matches)
 	})
 }
 
@@ -88,6 +88,6 @@ func handleGetSpeciesDetail(logger *slog.Logger, species speciesDetailer) http.H
 			return
 		}
 
-		writeJSON(w, logger, http.StatusOK, detail)
+		writeSearchJSON(w, logger, detail)
 	})
 }
