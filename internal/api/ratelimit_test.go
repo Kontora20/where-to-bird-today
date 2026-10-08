@@ -126,7 +126,7 @@ func TestRateLimitSearchesSaysWhenToRetry(t *testing.T) {
 	t.Parallel()
 
 	limiter := newSearchRateLimiter(1)
-	handler := rateLimitSearches(limiter, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	handler := rateLimitSearches(limiter, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	req := httptest.NewRequest(http.MethodGet, "/recommendations", nil)
 	req.RemoteAddr = "9.9.9.9:12345"
 
@@ -155,7 +155,7 @@ func TestRateLimitDriveTimeSearchesOnlyCountsDriveTime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := rateLimitDriveTimeSearches(newSearchRateLimiter(1), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+			handler := rateLimitDriveTimeSearches(newSearchRateLimiter(1), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 			req := httptest.NewRequest(http.MethodGet, "/recommendations"+tc.query, nil)
 			req.RemoteAddr = "9.9.9.9:12345"
 
@@ -195,7 +195,7 @@ func TestSearchRateLimiterRefusesNewAddressesWhenFull(t *testing.T) {
 func TestRateLimitAllSearchesSharesOneBudget(t *testing.T) {
 	t.Parallel()
 
-	handler := rateLimitAllSearches(newSearchRateLimiter(1), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	handler := rateLimitAllSearches(newSearchRateLimiter(1), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	statuses := make([]int, 0, 2)
 	for _, remoteAddr := range []string{"1.1.1.1:1", "2.2.2.2:2"} {
 		req := httptest.NewRequest(http.MethodGet, "/recommendations", nil)
