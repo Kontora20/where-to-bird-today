@@ -227,3 +227,60 @@ func TestCacheWithNoDestinationsSkipsTheServer(t *testing.T) {
 		t.Errorf("server was called %d times, want 0", len(finder.asked))
 	}
 }
+
+// searchedFrom reports whether the server had to be asked about origin: a
+// search from an origin the cache holds costs no request.
+func searchedFrom(t *testing.T, cache *Cache, finder *fakeFinder, origin Point) bool {
+	t.Helper()
+
+	before := len(finder.asked)
+	if _, err := cache.DriveTimes(context.Background(), origin, []Point{point(1)}); err != nil {
+		t.Fatalf("DriveTimes() error = %v", err)
+	}
+	return len(finder.asked) > before
+}
+
+// farOrigin is the nth start point in a line a degree apart, so none of them
+// round to the same one.
+func farOrigin(n int) Point { return Point{Latitude: 50 + float64(n)*0.01, Longitude: 20} }
+
+func TestCacheDropsTheLeastRecentlyUsedOrigin(t *testing.T) {
+	t.Parallel()
+
+	finder := &fakeFinder{}
+	cache := NewCache(finder)
+	for n := range maxCachedOrigins {
+		searchedFrom(t, cache, finder, farOrigin(n))
+	}
+
+	// Origin 0 was searched first, but searching it again makes origin 1 the
+	// one used longest ago.
+	if searchedFrom(t, cache, finder, farOrigin(0)) {
+		t.Fatal("origin 0 was asked for again before the cache was full")
+	}
+	searchedFrom(t, cache, finder, farOrigin(maxCachedOrigins))
+
+	if searchedFrom(t, cache, finder, farOrigin(0)) {
+		t.Error("origin 0 was dropped although it was used most recently")
+	}
+	if !searchedFrom(t, cache, finder, farOrigin(1)) {
+		t.Error("origin 1 was kept although it was used longest ago")
+	}
+}
+
+func TestCacheKeepsPinnedOrigins(t *testing.T) {
+	t.Parallel()
+
+	pinned := Point{Latitude: 54.6872, Longitude: 25.2797}
+	finder := &fakeFinder{}
+	cache := NewCache(finder, pinned)
+	searchedFrom(t, cache, finder, pinned)
+
+	for n := range 3 * maxCachedOrigins {
+		searchedFrom(t, cache, finder, farOrigin(n))
+	}
+
+	if searchedFrom(t, cache, finder, pinned) {
+		t.Error("the pinned origin was dropped by searches from other origins")
+	}
+}

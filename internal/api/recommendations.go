@@ -175,6 +175,7 @@ func writeSearchError(w http.ResponseWriter, logger *slog.Logger, err error, act
 	case errors.Is(err, birding.ErrNoRoadNearOrigin):
 		http.Error(w, "no_road_near_origin", http.StatusUnprocessableEntity)
 	case errors.Is(err, birding.ErrRoutingBusy):
+		w.Header().Set("Retry-After", "2")
 		http.Error(w, "routing_busy", http.StatusServiceUnavailable)
 	default:
 		logger.Error(action+" failed", slog.Any("error", err))

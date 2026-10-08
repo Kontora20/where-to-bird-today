@@ -325,3 +325,18 @@ func TestGetRecommendationsResponseBody(t *testing.T) {
 		t.Errorf("body = %+v, want %+v", got, want)
 	}
 }
+
+func TestWriteSearchErrorSaysWhenToRetryWhenRoutingIsBusy(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+
+	writeSearchError(rec, testLogger(), fmt.Errorf("finding drive times: %w", birding.ErrRoutingBusy), "searching")
+
+	if got, want := rec.Code, http.StatusServiceUnavailable; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if got, want := rec.Header().Get("Retry-After"), "2"; got != want {
+		t.Errorf("Retry-After = %q, want %q", got, want)
+	}
+}

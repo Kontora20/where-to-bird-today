@@ -12,7 +12,7 @@ func TestSearchRateLimiterAllow(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	limiter := newSearchRateLimiter()
+	limiter := newSearchRateLimiter(searchRequestsPerMinute)
 	limiter.now = func() time.Time { return now }
 
 	for i := range searchRequestsPerMinute {
@@ -39,7 +39,7 @@ func TestSearchRateLimiterAllow(t *testing.T) {
 func TestRateLimitSearchesAnswers429OnceSpent(t *testing.T) {
 	t.Parallel()
 
-	limiter := newSearchRateLimiter()
+	limiter := newSearchRateLimiter(searchRequestsPerMinute)
 	limiter.now = time.Now
 	handler := rateLimitSearches(limiter, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -99,7 +99,7 @@ func TestSearchRateLimiterDropsEndedWindows(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	limiter := newSearchRateLimiter()
+	limiter := newSearchRateLimiter(searchRequestsPerMinute)
 	limiter.now = func() time.Time { return now }
 
 	for i := range maxTrackedAddresses {
@@ -110,5 +110,53 @@ func TestSearchRateLimiterDropsEndedWindows(t *testing.T) {
 
 	if got := len(limiter.buckets); got != 1 {
 		t.Errorf("tracked addresses after the windows ended = %d, want 1", got)
+	}
+}
+
+func TestRateLimitSearchesSaysWhenToRetry(t *testing.T) {
+	t.Parallel()
+
+	limiter := newSearchRateLimiter(1)
+	handler := rateLimitSearches(limiter, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	req := httptest.NewRequest(http.MethodGet, "/recommendations", nil)
+	req.RemoteAddr = "9.9.9.9:12345"
+
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Header().Get("Retry-After"), "60"; got != want {
+		t.Errorf("Retry-After = %q, want %q", got, want)
+	}
+}
+
+func TestRateLimitDriveTimeSearchesOnlyCountsDriveTime(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		query      string
+		wantStatus int
+	}{
+		{name: "drive time is limited", query: "?lat=54.7&lon=25.3&max_minutes=60", wantStatus: http.StatusTooManyRequests},
+		{name: "radius is not", query: "?lat=54.7&lon=25.3&radius_km=50", wantStatus: http.StatusOK},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := rateLimitDriveTimeSearches(newSearchRateLimiter(1), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+			req := httptest.NewRequest(http.MethodGet, "/recommendations"+tc.query, nil)
+			req.RemoteAddr = "9.9.9.9:12345"
+
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantStatus {
+				t.Errorf("second request: status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+		})
 	}
 }

@@ -29,12 +29,18 @@ type driveTimeFinder interface {
 // not yet known from that start point are asked for. The road data does not
 // change while the server runs, so an entry never goes stale.
 //
+// When the cache is full the start point used longest ago is dropped, except
+// the pinned ones: the cities the server warms at startup stay for good, so a
+// run of searches from unusual points cannot cost them their answers.
+//
 // The start point must be a real coordinate: NaN is never equal to itself, so
 // it could not be found again. The API rejects it before a search starts.
 type Cache struct {
-	next driveTimeFinder
+	next   driveTimeFinder
+	pinned map[Point]bool
 
 	mu      sync.Mutex
+	uses    uint64
 	origins map[Point]*originTimes
 }
 
@@ -47,11 +53,19 @@ type originTimes struct {
 	// ignoring cancellation until whoever holds it finishes calling OSRM.
 	lock  chan struct{}
 	times map[Point]time.Duration
+
+	// lastUse is the Cache's use counter at the latest search from this point.
+	lastUse uint64
 }
 
 // NewCache returns a Cache that asks next for the drive times it does not know.
-func NewCache(next driveTimeFinder) *Cache {
-	return &Cache{next: next, origins: make(map[Point]*originTimes)}
+// The pinned start points are never dropped.
+func NewCache(next driveTimeFinder, pinned ...Point) *Cache {
+	pinnedOrigins := make(map[Point]bool, len(pinned))
+	for _, origin := range pinned {
+		pinnedOrigins[roundOrigin(origin)] = true
+	}
+	return &Cache{next: next, pinned: pinnedOrigins, origins: make(map[Point]*originTimes)}
 }
 
 // DriveTimes returns the drive time from origin, rounded to about 100 m, to
@@ -102,21 +116,38 @@ func (c *Cache) originTimes(origin Point) *originTimes {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.uses++
 	known, ok := c.origins[origin]
 	if ok {
+		known.lastUse = c.uses
 		return known
 	}
 	if len(c.origins) >= maxCachedOrigins {
-		// ponytail: drops an arbitrary origin; keep the order of use and drop
-		// the least recently used one if the hit rate matters.
-		for evicted := range c.origins {
-			delete(c.origins, evicted)
-			break
-		}
+		c.dropLeastRecentlyUsed()
 	}
-	known = &originTimes{lock: make(chan struct{}, 1), times: make(map[Point]time.Duration)}
+	known = &originTimes{lock: make(chan struct{}, 1), times: make(map[Point]time.Duration), lastUse: c.uses}
 	c.origins[origin] = known
 	return known
+}
+
+// dropLeastRecentlyUsed removes the start point searched longest ago that is
+// not pinned. The caller holds c.mu. It looks at every origin, which is at
+// most maxCachedOrigins and happens only when a new start point arrives.
+func (c *Cache) dropLeastRecentlyUsed() {
+	var oldest Point
+	var oldestUse uint64
+	found := false
+	for origin, known := range c.origins {
+		if c.pinned[origin] {
+			continue
+		}
+		if !found || known.lastUse < oldestUse {
+			oldest, oldestUse, found = origin, known.lastUse, true
+		}
+	}
+	if found {
+		delete(c.origins, oldest)
+	}
 }
 
 func roundOrigin(origin Point) Point {

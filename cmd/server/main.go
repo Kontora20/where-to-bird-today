@@ -82,7 +82,7 @@ func run() error {
 	// nil, so the interface is only assigned when a server is configured.
 	var driveTimes birding.DriveTimeFinder
 	if cfg.OSRMURL != "" {
-		driveTimes = routing.NewCache(routing.NewClient(cfg.OSRMURL))
+		driveTimes = routing.NewCache(routing.NewClient(cfg.OSRMURL), warmupOrigins...)
 	}
 	recommendations := birding.NewService(queries, driveTimes)
 
