@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { HourFrequency, SpeciesDetail } from '$lib/api';
 	import { monthInitials, t } from '$lib/i18n.svelte';
-	import { formatDay } from '$lib/format';
+	import { formatDay, httpsUrl } from '$lib/format';
 
 	interface Props {
 		loading: boolean;
@@ -78,8 +78,8 @@
 				<figure>
 					<img src={species.photo.image_url} alt={species.common_name} />
 					<figcaption>
-						{#if species.photo.attribution_url}
-							<a href={species.photo.attribution_url} target="_blank" rel="noopener noreferrer">
+						{#if httpsUrl(species.photo.attribution_url)}
+							<a href={httpsUrl(species.photo.attribution_url)} target="_blank" rel="noopener noreferrer">
 								{species.photo.attribution}
 							</a>
 						{:else}
@@ -166,12 +166,12 @@
 			<ul class="links">
 				{#each [
 					{
-						url: species.latest_checklist?.url,
+						url: httpsUrl(species.latest_checklist?.url),
 						label: t('species.latest', { date: species.latest_checklist?.observed_on ?? '' })
 					},
-					{ url: species.ebird_url, label: 'eBird' },
-					{ url: species.birds_of_the_world_url, label: 'Birds of the World' },
-					{ url: species.birdlife_datazone_url, label: 'BirdLife DataZone' }
+					{ url: httpsUrl(species.ebird_url), label: 'eBird' },
+					{ url: httpsUrl(species.birds_of_the_world_url), label: 'Birds of the World' },
+					{ url: httpsUrl(species.birdlife_datazone_url), label: 'BirdLife DataZone' }
 				] as link (link.label)}
 					{#if link.url}
 						<li><a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a></li>

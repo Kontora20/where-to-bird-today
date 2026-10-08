@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/Kontora20/where-to-bird-today/internal/httpsurl"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
 
@@ -22,14 +23,16 @@ type Photo struct {
 	AttributionURL string `json:"attribution_url,omitempty"`
 }
 
+// photoOf cleans the links again on the way out: rows stored before the
+// ingest did so may hold a link that is not https.
 func photoOf(medium store.SpeciesMedium) *Photo {
 	return &Photo{
-		ImageURL:       medium.ImageUrl,
-		ThumbURL:       medium.ThumbUrl.String,
+		ImageURL:       httpsurl.Normalize(medium.ImageUrl),
+		ThumbURL:       httpsurl.Normalize(medium.ThumbUrl.String),
 		License:        medium.License,
-		LicenseURL:     medium.LicenseUrl.String,
+		LicenseURL:     httpsurl.Normalize(medium.LicenseUrl.String),
 		Attribution:    medium.Attribution,
-		AttributionURL: medium.AttributionUrl.String,
+		AttributionURL: httpsurl.Normalize(medium.AttributionUrl.String),
 	}
 }
 

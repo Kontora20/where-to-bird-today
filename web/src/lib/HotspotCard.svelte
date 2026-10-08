@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Recommendation, SpeciesMatch } from '$lib/api';
 	import { t } from '$lib/i18n.svelte';
-	import { chanceKey, checklistCount, distanceText, fewChecklists, sighting } from '$lib/format';
+	import { chanceKey, checklistCount, distanceText, fewChecklists, httpsUrl, sighting } from '$lib/format';
 
 	interface Props {
 		hotspot: Recommendation;
@@ -82,8 +82,8 @@
 
 	<div class="actions">
 		<button type="button" class="primary" onclick={onsearchhere}>{t('card.searchHere')}</button>
-		{#if hotspot.verification_url}
-			<a href={hotspot.verification_url} target="_blank" rel="noopener noreferrer">eBird ↗</a>
+		{#if httpsUrl(hotspot.verification_url)}
+			<a href={httpsUrl(hotspot.verification_url)} target="_blank" rel="noopener noreferrer">eBird ↗</a>
 		{/if}
 	</div>
 </section>

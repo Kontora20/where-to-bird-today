@@ -2,6 +2,17 @@ import { formatDate, formatNumber, t } from '$lib/i18n.svelte';
 import type { MessageKey } from '$lib/messages';
 import type { LastSeen, Recommendation, SeasonalSpecies, SpeciesMatch } from '$lib/api';
 
+// The address when it is an https link, otherwise nothing. Links come from
+// the server, which got some of them from outside; a "javascript:" address
+// would run when followed.
+export function httpsUrl(value: string | undefined): string | undefined {
+	try {
+		return value && new URL(value).protocol === 'https:' ? value : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 // How many checklists are too few to trust a share.
 export const fewChecklists = 5;
 
@@ -81,7 +92,7 @@ export function sighting(lastSeen: LastSeen | undefined, today: Date): Sighting 
 	return {
 		text: days <= relativeDays ? `${when} · ${weekday}` : t('seen.last', { when }),
 		recent: days <= recentDays,
-		url: lastSeen.checklist_url
+		url: httpsUrl(lastSeen.checklist_url)
 	};
 }
 

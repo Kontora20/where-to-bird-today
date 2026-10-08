@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/Kontora20/where-to-bird-today/internal/httpsurl"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
 )
 
@@ -66,6 +67,15 @@ func Sync(ctx context.Context, queries *store.Queries, species []store.Species, 
 		providerStats := ProviderStats{Provider: provider.Name(), SpeciesFound: len(found)}
 		for speciesID, photos := range found {
 			for _, photo := range photos {
+				// A provider's links come from outside: a photo whose image is
+				// not an https link is skipped, any other bad link is left out.
+				photo.ImageURL = httpsurl.Normalize(photo.ImageURL)
+				if photo.ImageURL == "" {
+					continue
+				}
+				photo.ThumbURL = httpsurl.Normalize(photo.ThumbURL)
+				photo.LicenseURL = httpsurl.Normalize(photo.LicenseURL)
+				photo.AttributionURL = httpsurl.Normalize(photo.AttributionURL)
 				err := queries.UpsertSpeciesMedia(ctx, store.UpsertSpeciesMediaParams{
 					SpeciesID:      speciesID,
 					Source:         provider.Name(),

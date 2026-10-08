@@ -164,3 +164,55 @@ func TestSyncOrdersRankAcrossProviders(t *testing.T) {
 		t.Errorf("stork rows = %+v, want exactly one row at rank 0", storkRows)
 	}
 }
+
+func TestSyncKeepsOnlyHTTPSLinks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	queries := newTestQueries(t)
+
+	crane := seedSpecies(ctx, t, queries, "Grus grus", "avibase-99B8841E")
+
+	provider := fakeProvider{
+		name: "wikidata",
+		photos: map[int64][]Photo{
+			crane.ID: {
+				{
+					SourceRef:      "clean",
+					ImageURL:       "https://example.org/clean.jpg",
+					ThumbURL:       "data:text/html,<script>alert(1)</script>",
+					License:        "CC BY-SA 3.0",
+					LicenseURL:     "http://creativecommons.org/licenses/by-sa/3.0/",
+					AttributionURL: "javascript:alert(1)",
+				},
+				{SourceRef: "bad-image", ImageURL: "javascript:alert(1)", License: "CC0"},
+			},
+		},
+	}
+
+	stats, err := Sync(ctx, queries, []store.Species{crane}, []Provider{provider})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if got := stats.Providers[0].PhotosWritten; got != 1 {
+		t.Errorf("PhotosWritten = %d, want 1 (the photo with a bad image link is skipped)", got)
+	}
+
+	rows, err := queries.ListSpeciesMedia(ctx, crane.ID)
+	if err != nil {
+		t.Fatalf("ListSpeciesMedia: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("crane has %d species_media rows, want 1", len(rows))
+	}
+	row := rows[0]
+	if row.ThumbUrl.Valid {
+		t.Errorf("ThumbUrl = %q, want none", row.ThumbUrl.String)
+	}
+	if row.AttributionUrl.Valid {
+		t.Errorf("AttributionUrl = %q, want none", row.AttributionUrl.String)
+	}
+	if got, want := row.LicenseUrl.String, "https://creativecommons.org/licenses/by-sa/3.0/"; got != want {
+		t.Errorf("LicenseUrl = %q, want %q (http is upgraded)", got, want)
+	}
+}
