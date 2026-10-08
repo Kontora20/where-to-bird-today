@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Recommendation, SpeciesMatch } from '$lib/api';
+	import { t } from '$lib/i18n.svelte';
 	import { checklistCount, distanceText, sighting } from '$lib/format';
 
 	interface Props {
@@ -31,14 +32,14 @@
 		<div>
 			<h2>{hotspot.hotspot_name}</h2>
 			<p class="meta">
-				{checklists} {checklists === 1 ? 'checklist' : 'checklists'} in this week of the year · {distanceText(hotspot)}
+				{t('card.meta', { count: checklists })} · {distanceText(hotspot)}
 			</p>
 		</div>
-		<button type="button" class="close" onclick={onclose} aria-label="Close">✕</button>
+		<button type="button" class="close" onclick={onclose} aria-label={t('common.close')}>✕</button>
 	</div>
 
 	{#if mine.length > 0}
-		<h3>Your birds here</h3>
+		<h3>{t('card.yourBirds')}</h3>
 		<ul class="mine">
 			{#each mine as entry (entry.bird.species_id)}
 				<li>
@@ -55,7 +56,7 @@
 	{/if}
 
 	{#if shown.length > 0}
-		<h3>Most likely this week</h3>
+		<h3>{t('card.likely')}</h3>
 		<ul class="seen">
 			{#each shown as species (species.species_id)}
 				{@const percent = Math.round(species.frequency * 100)}
@@ -69,14 +70,14 @@
 			{/each}
 		</ul>
 		<p class="note">
-			Share of that week's checklists that recorded the bird. Select a bird for its season and time of day.
+			{t('card.share')}
 		</p>
 	{:else}
-		<p class="note">No checklists at this hotspot in this week of the year.</p>
+		<p class="note">{t('card.noChecklists')}</p>
 	{/if}
 
 	<div class="actions">
-		<button type="button" class="primary" onclick={onsearchhere}>Search around here</button>
+		<button type="button" class="primary" onclick={onsearchhere}>{t('card.searchHere')}</button>
 		{#if hotspot.verification_url}
 			<a href={hotspot.verification_url} target="_blank" rel="noopener noreferrer">eBird ↗</a>
 		{/if}

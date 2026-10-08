@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import Header from '$lib/Header.svelte';
 	import HotspotCard from '$lib/HotspotCard.svelte';
 	import HotspotList from '$lib/HotspotList.svelte';
@@ -9,6 +9,7 @@
 	import RangePicker from '$lib/RangePicker.svelte';
 	import Scrubber from '$lib/Scrubber.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
+	import { locale, placeLabel, t } from '$lib/i18n.svelte';
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
 	import {
 		addDays,
@@ -19,10 +20,12 @@
 		type ScrubberWeek
 	} from '$lib/format';
 	import {
+		ApiError,
 		getAreaWeeks,
 		getRecommendations,
 		getSeason,
 		getSpeciesDetail,
+		searchSpecies,
 		type AreaWeeks as AreaWeeksData,
 		type Recommendation,
 		type SeasonalSpecies,
@@ -52,11 +55,7 @@
 	// What the area holds in the week of the date: null until it has been asked.
 	let season = $state<Season | null>(null);
 	// What the phone's bottom sheet shows: its three tabs.
-	const tabs = [
-		{ id: 'hotspots', label: 'Hotspots' },
-		{ id: 'season', label: 'In season' },
-		{ id: 'year', label: 'The year' }
-	] as const;
+	const tabs = [{ id: 'hotspots' }, { id: 'season' }, { id: 'year' }] as const;
 	let tab = $state<(typeof tabs)[number]['id']>('hotspots');
 	let searched = $state(false);
 	let loading = $state(false);
@@ -94,8 +93,11 @@
 	let controlsOpen = $state(false);
 	const controlsSummary = $derived.by(() => {
 		const [unit, amount] = range.split(':');
-		const reach = unit === 'min' ? `${rangeLabel('min', Number(amount))} by car` : `${rangeLabel('km', Number(amount))} straight line`;
-		return `${reach} · ${date === todayIso() ? 'Today' : formatDay(date)}`;
+		const reach =
+			unit === 'min'
+				? t('area.summaryCar', { amount: rangeLabel('min', Number(amount)) })
+				: t('area.summaryStraight', { amount: rangeLabel('km', Number(amount)) });
+		return `${reach} · ${date === todayIso() ? t('common.today') : formatDay(date)}`;
 	});
 
 	// "Your birds" has nothing to size bubbles by once the list is empty, so
@@ -104,12 +106,12 @@
 		if (targetSpecies.length === 0) mapLayer = 'all';
 	});
 	let seasonSection: HTMLElement;
-	const seasonTitle = $derived(date === todayIso() ? 'In season now' : 'In season that week');
+	const seasonTitle = $derived(t(date === todayIso() ? 'season.titleNow' : 'season.titleThen'));
 	const seasonCount = $derived(season?.species.length ?? 0);
 	// The first few names of the In season list, for the line under the controls.
 	const seasonTeaser = $derived.by(() => {
 		const names = (season?.species ?? []).slice(0, 3).map((species) => species.common_name).join(', ');
-		return seasonCount > 3 ? `${names} and ${seasonCount - 3} more` : names;
+		return seasonCount > 3 ? t('area.teaserMore', { names, count: seasonCount - 3 }) : names;
 	});
 
 	// On a phone the section is a tab, so it is opened before it is scrolled to.
@@ -128,6 +130,36 @@
 	let speciesHotspotName = $state('');
 
 	onMount(refresh);
+
+	// Bird names, hotspot names and the season come in the chosen language, so
+	// a change of language asks for them again.
+	let shownLanguage = locale.language;
+	$effect(() => {
+		const language = locale.language;
+		if (language === shownLanguage) return;
+		shownLanguage = language;
+		untrack(() => {
+			void renameYourBirds();
+			void refresh();
+		});
+	});
+
+	// Your birds is saved with the names of the language it was added in; each
+	// bird is looked up again by its scientific name for the new one.
+	async function renameYourBirds() {
+		const renamed = await Promise.all(
+			targetSpecies.map(async (bird) => {
+				try {
+					const matches = await searchSpecies(bird.scientific_name);
+					return matches.find((match) => match.species_id === bird.species_id) ?? bird;
+				} catch {
+					return bird;
+				}
+			})
+		);
+		targetSpecies = renamed;
+		saveYourBirds(renamed);
+	}
 
 	// The tabs are only on screen on a phone, so the sections are only tab
 	// panels there; elsewhere they are plain sections.
@@ -218,7 +250,7 @@
 			if (!found.some((hotspot) => hotspot.hotspot_id === selectedHotspotId)) selectedHotspotId = null;
 		} catch (err) {
 			if (signal.aborted) return;
-			error = err instanceof Error ? err.message : 'search failed';
+			error = err instanceof ApiError ? err.message : t('error.searchFailed');
 			recommendations = [];
 			areaWeeks = null;
 			searched = false;
@@ -250,7 +282,7 @@
 	function openSpeciesAnywhere(speciesId: number) {
 		const hotspot = hotspotFor(speciesId);
 		if (hotspot) return openSpeciesDetail(hotspot, speciesId);
-		error = 'There is no hotspot in range to show that bird at.';
+		error = t('error.noHotspotForBird');
 	}
 
 	async function openSpeciesDetail(hotspot: Recommendation, speciesId: number) {
@@ -261,7 +293,7 @@
 		try {
 			openSpecies = await getSpeciesDetail(hotspot.hotspot_id, speciesId, date || undefined);
 		} catch (err) {
-			speciesError = err instanceof Error ? err.message : 'failed to load species detail';
+			speciesError = err instanceof ApiError ? err.message : t('error.speciesDetailFailed');
 		} finally {
 			speciesLoading = false;
 		}
@@ -274,7 +306,7 @@
 
 	function useMyLocation() {
 		if (!navigator.geolocation) {
-			error = 'geolocation is not supported by this browser';
+			error = t('error.noGeolocation');
 			return;
 		}
 		error = '';
@@ -336,7 +368,7 @@
 				start: week.start,
 				value: week.smoothed_frequency,
 				emphasized: week.best,
-				title: `Week ${week.week}: ${(week.smoothed_frequency * 100).toFixed(0)}% of checklists`
+				title: t('year.barShare', { week: week.week, percent: (week.smoothed_frequency * 100).toFixed(0) })
 			}));
 		}
 		return (season?.checklists ?? []).map((week) => ({
@@ -344,16 +376,18 @@
 			start: week.start,
 			value: week.checklists,
 			emphasized: true,
-			title: `Week ${week.week}: ${week.checklists} ${week.checklists === 1 ? 'checklist' : 'checklists'}`
+			title: t('year.barCount', { week: week.week, count: week.checklists })
 		}));
 	});
 	const selectedWeek = $derived(scrubberWeeks.findLastIndex((week) => week.start <= date));
 	const scrubberNote = $derived(
 		areaWeeks && areaWeeks.weeks.length > 0
 			? areaWeeks.best_weeks.length > 0
-				? `Best weeks for your birds: ${areaWeeks.best_weeks.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`).join(', ')}.`
-				: 'Bars show how likely your birds are in each week.'
-			: 'Bars show the checklists recorded in the area each week.'
+				? t('year.noteBest', {
+						ranges: areaWeeks.best_weeks.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`).join(', ')
+					})
+				: t('year.noteBirds')
+			: t('year.noteArea')
 	);
 
 	function searchWeek(start: string) {
@@ -373,12 +407,12 @@
 </script>
 
 <svelte:head>
-	<title>Where to Bird Today</title>
+	<title>{t('app.title')}</title>
 </svelte:head>
 
 <div class="shell" inert={planOpen || speciesLoading || !!speciesError || !!openSpecies}>
 	<Header
-		searchPlaceholder={targetSpecies.length >= maxTargetSpecies ? 'Limit reached' : 'Search a bird…'}
+		searchPlaceholder={t(targetSpecies.length >= maxTargetSpecies ? 'search.limit' : 'search.placeholder')}
 		searchDisabled={targetSpecies.length >= maxTargetSpecies}
 		onpickspecies={addTargetSpecies}
 		onerror={(message) => (error = message)}
@@ -387,7 +421,7 @@
 	<div class="body">
 		<aside class="sidebar">
 			<section class="area">
-				<h2>Around {home.label}</h2>
+				<h2>{t('area.heading', { place: placeLabel(home.label) })}</h2>
 				<button type="button" class="summary" aria-expanded={controlsOpen} onclick={() => (controlsOpen = !controlsOpen)}>
 					{controlsSummary}
 					<span aria-hidden="true">{controlsOpen ? '▴' : '▾'}</span>
@@ -403,18 +437,18 @@
 					/>
 					<div class="controls">
 						<label class="pill">
-							<span class="visually-hidden">Date</span>
+							<span class="visually-hidden">{t('common.date')}</span>
 							<input type="date" bind:value={date} onchange={refreshSoon} />
 						</label>
 					</div>
 				</div>
 				<div class="links">
 					<button type="button" class="link" onclick={useMyLocation} disabled={locating}>
-						{locating ? 'Locating…' : 'Use my location'}
+						{locating ? t('area.locating') : t('area.useMyLocation')}
 					</button>
-					<button type="button" class="link" onclick={() => (planOpen = true)}>Plan a search</button>
+					<button type="button" class="link" onclick={() => (planOpen = true)}>{t('area.plan')}</button>
 					{#if seasonCount > 0}
-						<button type="button" class="link season-link" onclick={showSeason}>In season ↓</button>
+						<button type="button" class="link season-link" onclick={showSeason}>{t('area.seasonLink')}</button>
 					{/if}
 				</div>
 				{#if seasonCount > 0}
@@ -431,7 +465,7 @@
 
 			<section class="birds">
 				<div class="row">
-					<h3>Your birds</h3>
+					<h3>{t('common.yourBirds')}</h3>
 					<span class="count">{targetSpecies.length} / {maxTargetSpecies}</span>
 				</div>
 				{#if targetSpecies.length > 0}
@@ -445,17 +479,17 @@
 										type="button"
 										class="remove"
 										onclick={() => removeTargetSpecies(target.species_id)}
-										aria-label="Remove {target.common_name}">✕</button
+										aria-label={t('common.remove', { name: target.common_name })}>✕</button
 									>
 								</li>
 						{/each}
 					</ul>
 				{:else}
-					<p class="hint">Search a bird in the box above to rank hotspots for it.</p>
+					<p class="hint">{t('birds.hint')}</p>
 				{/if}
 			</section>
 
-			<div class="tabs" role="tablist" aria-label="Sections" tabindex="-1" onkeydown={moveTab}>
+			<div class="tabs" role="tablist" aria-label={t('tabs.label')} tabindex="-1" onkeydown={moveTab}>
 				{#each tabs as item (item.id)}
 					<button
 						type="button"
@@ -466,7 +500,9 @@
 						tabindex={tab === item.id ? 0 : -1}
 						onclick={() => (tab = item.id)}
 					>
-						{item.id === 'season' && seasonCount > 0 ? `${item.label} (${seasonCount})` : item.label}
+						{item.id === 'season' && seasonCount > 0
+							? t('tabs.withCount', { label: t('tabs.season'), count: seasonCount })
+							: t(`tabs.${item.id}`)}
 					</button>
 				{/each}
 			</div>
@@ -479,14 +515,12 @@
 				aria-labelledby={phone ? 'tab-hotspots' : undefined}
 			>
 				<div class="row">
-					<h3>Hotspots in range</h3>
-					<span class="hint">{loading ? 'Searching…' : searched ? `${recommendations.length} found` : ''}</span>
+					<h3>{t('hotspots.heading')}</h3>
+					<span class="hint">{loading ? t('hotspots.searching') : searched ? t('hotspots.found', { count: recommendations.length }) : ''}</span>
 				</div>
 				{#if searched && recommendations.length === 0}
 					<p class="hint padded">
-						{targetSpecies.length > 0
-							? 'No hotspot in range has these birds for that week.'
-							: 'No hotspots found in range.'}
+						{t(targetSpecies.length > 0 ? 'hotspots.noneForBirds' : 'hotspots.none')}
 					</p>
 				{/if}
 				<HotspotList
@@ -507,10 +541,10 @@
 			>
 				<div class="row">
 					<h3>{seasonTitle}</h3>
-					<span class="hint">Peaking around you</span>
+					<span class="hint">{t('season.peaking')}</span>
 				</div>
 				{#if targetSpecies.length === 0 && seasonCount > 0}
-					<p class="hint padded">Tap + to add a bird to Your birds. The bars show its chance through the year.</p>
+					<p class="hint padded">{t('season.addHint')}</p>
 				{/if}
 				{#if season && season.species.length > 0}
 					<InSeason
@@ -522,7 +556,7 @@
 						onopen={openSpeciesAnywhere}
 					/>
 				{:else if season}
-					<p class="hint padded">Nothing stands out around you that week.</p>
+					<p class="hint padded">{t('season.none')}</p>
 				{/if}
 			</section>
 
@@ -556,9 +590,9 @@
 				onselect={selectHotspot}
 				onpick={(lat, lon) => moveHome(lat, lon, 'your point')}
 			/>
-			<div class="layer-switch" role="group" aria-label="Map layer">
+			<div class="layer-switch" role="group" aria-label={t('map.layer')}>
 				<button type="button" aria-pressed={mapLayer === 'all'} onclick={() => (mapLayer = 'all')}>
-					All hotspots
+					{t('map.all')}
 				</button>
 				<button
 					type="button"
@@ -566,22 +600,21 @@
 					disabled={targetSpecies.length === 0}
 					onclick={() => (mapLayer = 'yourBirds')}
 				>
-					Your birds
+					{t('common.yourBirds')}
 				</button>
 			</div>
 			<button
 				type="button"
 				class="legend-button"
-				aria-label="What the map shows"
+				aria-label={t('map.legendButton')}
 				aria-expanded={legendOpen}
 				aria-controls="map-legend"
 				onclick={toggleLegend}>i</button
 			>
 			{#if legendOpen}
 				<p id="map-legend" class="legend">
-					Bubble: {mapLayer === 'yourBirds' ? 'how many of your birds were seen here' : 'birdwatcher lists in this week of the year'}<br
-					/>
-					Click the map to move your start point
+					{t(mapLayer === 'yourBirds' ? 'map.bubbleBirds' : 'map.bubbleAll')}<br />
+					{t('map.clickToMove')}
 				</p>
 			{/if}
 			{#if scrubberWeeks.length > 0}

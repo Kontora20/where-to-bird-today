@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { searchSpecies, type SpeciesMatch } from '$lib/api';
+	import { ApiError, searchSpecies, type SpeciesMatch } from '$lib/api';
+	import { t } from '$lib/i18n.svelte';
 
 	interface Props {
 		placeholder: string;
@@ -33,7 +34,7 @@
 				// A slower earlier request must not overwrite a newer one.
 				if (typed === query.trim()) suggestions = matches;
 			} catch (err) {
-				onerror(err instanceof Error ? err.message : 'species search failed');
+				onerror(err instanceof ApiError ? err.message : t('error.speciesSearchFailed'));
 			}
 		}, 200);
 	}

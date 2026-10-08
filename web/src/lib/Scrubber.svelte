@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { monthInitials, t } from '$lib/i18n.svelte';
 	import { formatDay, type ScrubberWeek } from '$lib/format';
 
 	interface Props {
@@ -13,17 +14,17 @@
 
 	let { weeks, selected, note, onpick, onshift, ontoday }: Props = $props();
 
-	const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+	const months = $derived(monthInitials());
 	const highest = $derived(Math.max(...weeks.map((week) => week.value)));
 </script>
 
-<section class="scrubber" aria-label="Slide through the year">
+<section class="scrubber" aria-label={t('year.label')}>
 	<div class="head">
-		<h2>Slide through the year</h2>
+		<h2>{t('year.label')}</h2>
 		<div class="buttons">
-			<button type="button" class="step" aria-label="Previous week" onclick={() => onshift(-1)}>◀</button>
-			<button type="button" class="step" aria-label="Next week" onclick={() => onshift(1)}>▶</button>
-			<button type="button" onclick={ontoday}>Today</button>
+			<button type="button" class="step" aria-label={t('year.previous')} onclick={() => onshift(-1)}>◀</button>
+			<button type="button" class="step" aria-label={t('year.next')} onclick={() => onshift(1)}>▶</button>
+			<button type="button" onclick={ontoday}>{t('common.today')}</button>
 		</div>
 	</div>
 
@@ -36,7 +37,7 @@
 				class:selected={index === selected}
 				style="height: {highest > 0 ? Math.max(3, Math.round((week.value / highest) * 56)) : 3}px"
 				title={week.title}
-				aria-label="Week {week.week}, from {formatDay(week.start)}"
+				aria-label={t('year.weekFrom', { week: week.week, day: formatDay(week.start) })}
 				aria-current={index === selected ? 'date' : undefined}
 				onclick={() => onpick(week.start)}
 			></button>
@@ -49,7 +50,7 @@
 	</div>
 
 	<p class="note">
-		{#if selected >= 0}<b>Week of {formatDay(weeks[selected].start)}.</b>{/if}
+		{#if selected >= 0}<b>{t('year.weekOf', { day: formatDay(weeks[selected].start) })}</b>{/if}
 		<span>{note}</span>
 	</p>
 </section>

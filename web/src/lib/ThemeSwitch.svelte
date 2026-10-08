@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n.svelte';
 	import { chooseTheme, theme, type ThemeChoice } from '$lib/theme.svelte';
 
 	const choices: ThemeChoice[] = ['system', 'light', 'dark'];
@@ -32,11 +33,11 @@
 	</svg>
 {/snippet}
 
-<div class="group" role="group" aria-label="Theme">
+<div class="group" role="group" aria-label={t('theme.label')}>
 	{#each choices as choice (choice)}
 		<button type="button" aria-pressed={theme.choice === choice} onclick={() => chooseTheme(choice)}>
 			{@render icon(choice)}
-			<span>{choice}</span>
+			<span>{t(`theme.${choice}`)}</span>
 		</button>
 	{/each}
 </div>
@@ -44,7 +45,7 @@
 <button
 	type="button"
 	class="cycle"
-	aria-label="Theme: {theme.choice}. Change theme"
+	aria-label={t('theme.change', { theme: t(`theme.${theme.choice}`) })}
 	onclick={() => chooseTheme(next())}
 >
 	{@render icon(theme.choice)}

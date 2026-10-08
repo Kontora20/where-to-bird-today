@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { SeasonalSpecies, SpeciesMatch } from '$lib/api';
+	import { t } from '$lib/i18n.svelte';
 	import { peakText, sparkBars } from '$lib/format';
 
 	interface Props {
@@ -28,7 +29,7 @@
 					width="40"
 					height="40"
 					loading="lazy"
-					title="Photo: {bird.photo.attribution} · {bird.photo.license}"
+					title={t('season.photo', { attribution: bird.photo.attribution, license: bird.photo.license })}
 				/>
 			{:else}
 				<span class="photo" aria-hidden="true"></span>
@@ -37,7 +38,7 @@
 				<span class="name">{bird.common_name}</span>
 				<span class="note">{peakText(bird)}</span>
 			</button>
-			<span class="spark" aria-hidden="true" title="Chance of seeing it through the year">
+			<span class="spark" aria-hidden="true" title={t('season.chance')}>
 				{#each sparkBars(bird.year, week) as bar, index (index)}
 					<span class={bar.kind} style="height: {bar.height}px"></span>
 				{/each}
@@ -47,7 +48,7 @@
 				class="toggle"
 				class:tracked
 				aria-pressed={tracked}
-				aria-label={tracked ? `Remove ${bird.common_name} from Your birds` : `Add ${bird.common_name} to Your birds`}
+				aria-label={t(tracked ? 'season.drop' : 'season.add', { name: bird.common_name })}
 				disabled={!tracked && full}
 				onclick={() => ontoggle(bird)}
 			>

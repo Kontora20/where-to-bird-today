@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { HourFrequency, SpeciesDetail } from '$lib/api';
+	import { monthInitials, t } from '$lib/i18n.svelte';
 	import { formatDay } from '$lib/format';
 
 	interface Props {
@@ -25,7 +26,7 @@
 	});
 
 	const hoursAfterSunrise = Array.from({ length: 24 }, (_, index) => index);
-	const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+	const months = $derived(monthInitials());
 
 	// The hours within a tenth of the best one. Neighbouring hours join into one
 	// clock range.
@@ -61,17 +62,17 @@
 	onclick={(event) => event.target === event.currentTarget && onclose()}
 	role="presentation"
 >
-	<div class="panel" role="dialog" aria-modal="true" aria-label={species?.common_name ?? 'Bird details'} tabindex="-1" bind:this={panel}>
-		<button type="button" class="close" onclick={onclose} aria-label="Close">✕</button>
+	<div class="panel" role="dialog" aria-modal="true" aria-label={species?.common_name ?? t('species.details')} tabindex="-1" bind:this={panel}>
+		<button type="button" class="close" onclick={onclose} aria-label={t('common.close')}>✕</button>
 
 		{#if loading}
-			<p>Loading…</p>
+			<p>{t('common.loading')}</p>
 		{:else if error}
 			<p class="error" role="alert">{error}</p>
 		{:else if species}
 			<h2>{species.common_name}</h2>
-			<p class="scientific-name">{species.scientific_name}</p>
-			<p class="where">Figures for {hotspotName}</p>
+			<p class="scientific-name" lang="la">{species.scientific_name}</p>
+			<p class="where">{t('species.figures', { hotspot: hotspotName })}</p>
 
 			{#if species.photo}
 				<figure>
@@ -91,16 +92,20 @@
 
 			{#if species.seasonality.length > 0}
 				{@const highest = Math.max(...species.seasonality.map((week) => week.smoothed_frequency))}
-				<h3>Seasonality at this hotspot</h3>
+				<h3>{t('species.seasonality')}</h3>
 				<div class="seasonality">
 					{#each species.seasonality as week (week.week)}
 						<div
 							class="week-bar"
 							class:best={week.best}
 							style="height: {highest > 0 ? (week.smoothed_frequency / highest) * 100 : 0}%"
-							title="Week {week.week}: {(week.smoothed_frequency * 100).toFixed(0)}% expected ({week.checklists === 0
-								? 'no checklists here'
-								: `${(week.frequency * 100).toFixed(0)}% of ${week.checklists} ${week.checklists === 1 ? 'checklist' : 'checklists'} here`})"
+							title="{t('species.week', { week: week.week })}: {t('species.expected', {
+								percent: (week.smoothed_frequency * 100).toFixed(0),
+								detail:
+									week.checklists === 0
+										? t('species.noChecklists')
+										: t('species.shareOf', { percent: (week.frequency * 100).toFixed(0), count: week.checklists })
+							})}"
 						></div>
 					{/each}
 				</div>
@@ -110,21 +115,21 @@
 					{/each}
 				</div>
 				<ul class="legend">
-					<li><span class="swatch best"></span>Best weeks</li>
-					<li><span class="swatch"></span>Other weeks</li>
+					<li><span class="swatch best"></span>{t('species.bestWeeks')}</li>
+					<li><span class="swatch"></span>{t('species.otherWeeks')}</li>
 				</ul>
 				<p class="chart-note">
-					{#if species.best_weeks.length > 0}Best: {species.best_weeks
-							.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`)
-							.join(', ')}.{/if}
-					Each week is pooled with the weeks either side; bar height is relative to the best week.
+					{#if species.best_weeks.length > 0}{t('species.best', {
+							ranges: species.best_weeks.map((range) => `${formatDay(range.start)} – ${formatDay(range.end)}`).join(', ')
+						})}{/if}
+					{t('species.weeksNote')}
 				</p>
 			{/if}
 
 			{#if species.time_of_day.length > 0}
 				{@const highest = Math.max(...species.time_of_day.map((hour) => hour.adjusted_frequency))}
 				{@const best = bestHours(species.time_of_day, highest)}
-				<h3>Time of day at this hotspot</h3>
+				<h3>{t('species.timeOfDay')}</h3>
 				<div class="time-of-day">
 					{#each hoursAfterSunrise as hourAfterSunrise (hourAfterSunrise)}
 						{@const match = species.time_of_day.find((hour) => hour.hours_after_sunrise === hourAfterSunrise)}
@@ -133,25 +138,28 @@
 							class:best={match && best.includes(match)}
 							style="height: {match && highest > 0 ? (match.adjusted_frequency / highest) * 100 : 0}%"
 							title={match
-								? `${match.start}–${match.end}: ${(match.adjusted_frequency * 100).toFixed(0)}% expected (${(match.frequency * 100).toFixed(0)}% of ${match.checklists} ${match.checklists === 1 ? 'checklist' : 'checklists'} here)`
-								: 'no data'}
+								? `${match.start}–${match.end}: ${t('species.expected', {
+										percent: (match.adjusted_frequency * 100).toFixed(0),
+										detail: t('species.shareOf', { percent: (match.frequency * 100).toFixed(0), count: match.checklists })
+									})}`
+								: t('species.noData')}
 						></div>
 					{/each}
 				</div>
 				<div class="axis hours" aria-hidden="true">
-					<span>Sunrise</span>
-					<span>+6 h</span>
-					<span>+12 h</span>
-					<span>+18 h</span>
-					<span>Sunrise</span>
+					<span>{t('species.sunrise')}</span>
+					<span>{t('species.hoursAfter', { hours: 6 })}</span>
+					<span>{t('species.hoursAfter', { hours: 12 })}</span>
+					<span>{t('species.hoursAfter', { hours: 18 })}</span>
+					<span>{t('species.sunrise')}</span>
 				</div>
 				<ul class="legend">
-					<li><span class="swatch best"></span>Best hours</li>
-					<li><span class="swatch"></span>Other hours</li>
+					<li><span class="swatch best"></span>{t('species.bestHours')}</li>
+					<li><span class="swatch"></span>{t('species.otherHours')}</li>
 				</ul>
 				<p class="chart-note">
-					{#if best.length > 0}Best: {clockRanges(best).join(', ')}.{/if}
-					The bars run from sunrise around the clock; their height is relative to the best hour.
+					{#if best.length > 0}{t('species.best', { ranges: clockRanges(best).join(', ') })}{/if}
+					{t('species.hoursNote')}
 				</p>
 			{/if}
 
@@ -159,7 +167,7 @@
 				{#each [
 					{
 						url: species.latest_checklist?.url,
-						label: `Latest record at this hotspot (${species.latest_checklist?.observed_on})`
+						label: t('species.latest', { date: species.latest_checklist?.observed_on ?? '' })
 					},
 					{ url: species.ebird_url, label: 'eBird' },
 					{ url: species.birds_of_the_world_url, label: 'Birds of the World' },

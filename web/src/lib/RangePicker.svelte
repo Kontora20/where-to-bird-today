@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { placeLabel, t } from '$lib/i18n.svelte';
 	import { driveMinutes, radiusKm, rangeLabel, rangeLimits } from '$lib/format';
 
 	interface Props {
@@ -45,17 +46,17 @@
 </script>
 
 <div class="picker">
-	<div class="toggle" role="group" aria-label="Measure the distance by">
-		<button type="button" aria-pressed={unit === 'min'} onclick={() => setUnit('min')}>Drive time</button>
-		<button type="button" aria-pressed={unit === 'km'} onclick={() => setUnit('km')}>Straight line</button>
+	<div class="toggle" role="group" aria-label={t('range.measureBy')}>
+		<button type="button" aria-pressed={unit === 'min'} onclick={() => setUnit('min')}>{t('range.driveTime')}</button>
+		<button type="button" aria-pressed={unit === 'km'} onclick={() => setUnit('km')}>{t('range.straightLine')}</button>
 	</div>
-	<div class="amounts" role="group" aria-label={unit === 'min' ? 'Minutes of driving' : 'Kilometres'}>
+	<div class="amounts" role="group" aria-label={t(unit === 'min' ? 'range.minutesGroup' : 'range.kilometresGroup')}>
 		{#each amounts as option (option)}
 			<button type="button" aria-pressed={!custom && option === amount} onclick={() => pick(option)}>
 				{rangeLabel(unit, option)}
 			</button>
 		{/each}
-		<button type="button" aria-pressed={custom} onclick={() => (customOpen = true)}>Custom</button>
+		<button type="button" aria-pressed={custom} onclick={() => (customOpen = true)}>{t('range.custom')}</button>
 	</div>
 	{#if custom}
 		<label class="custom">
@@ -68,16 +69,12 @@
 				value={amount}
 				onchange={(event) => setCustom(event.currentTarget)}
 			/>
-			{unit === 'min' ? 'minutes' : 'km'}
+			{t(unit === 'min' ? 'range.minutesUnit' : 'range.kmUnit')}
 			<span class="limits">({limits.low}–{limits.high})</span>
 		</label>
 	{/if}
 	<p class="caption">
-		{#if unit === 'min'}
-			Hotspots up to {amount} minutes by car from {place}.
-		{:else}
-			Hotspots up to {amount} km from {place}, measured in a straight line.
-		{/if}
+		{t(unit === 'min' ? 'range.captionDrive' : 'range.captionStraight', { amount, place: placeLabel(place) })}
 	</p>
 </div>
 

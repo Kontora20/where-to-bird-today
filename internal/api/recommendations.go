@@ -171,11 +171,11 @@ func parseSearch(query url.Values) (search, error) {
 func writeSearchError(w http.ResponseWriter, logger *slog.Logger, err error, action string) {
 	switch {
 	case errors.Is(err, birding.ErrTravelTimeUnavailable):
-		http.Error(w, "travel time is not available; search by radius_km instead", http.StatusServiceUnavailable)
+		http.Error(w, "travel_time_unavailable", http.StatusServiceUnavailable)
 	case errors.Is(err, birding.ErrNoRoadNearOrigin):
-		http.Error(w, "no road near that location", http.StatusUnprocessableEntity)
+		http.Error(w, "no_road_near_origin", http.StatusUnprocessableEntity)
 	case errors.Is(err, birding.ErrRoutingBusy):
-		http.Error(w, "too many searches right now; try again shortly", http.StatusServiceUnavailable)
+		http.Error(w, "routing_busy", http.StatusServiceUnavailable)
 	default:
 		logger.Error(action+" failed", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)

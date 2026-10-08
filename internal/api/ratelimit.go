@@ -71,7 +71,7 @@ func (l *searchRateLimiter) allow(address string) bool {
 func rateLimitSearches(limiter *searchRateLimiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !limiter.allow(clientAddress(r)) {
-			http.Error(w, "too many searches; slow down", http.StatusTooManyRequests)
+			http.Error(w, "rate_limited", http.StatusTooManyRequests)
 			return
 		}
 		next.ServeHTTP(w, r)

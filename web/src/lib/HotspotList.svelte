@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import type { Recommendation, SpeciesMatch } from '$lib/api';
+	import { formatNumber, t } from '$lib/i18n.svelte';
 	import { checklistCount, distanceText, lastSeenStatus } from '$lib/format';
 
 	interface Props {
@@ -15,8 +16,6 @@
 	// The list starts with the best few so it does not push the sections below
 	// it off the screen; the rest are one click away.
 	const initiallyShown = 5;
-
-	const listsText = (count: number) => `${count} ${count === 1 ? 'list' : 'lists'}`;
 
 	const today = new Date();
 	let showAll = $state(false);
@@ -47,11 +46,11 @@
 				<span class="text">
 					<span class="top">
 						<span class="name">{hotspot.hotspot_name}</span>
-						<span class="count" title="Checklists in this week of the year">{listsText(checklistCount(hotspot))}</span>
+						<span class="count" title={t('list.countTitle')}>{t('list.count', { count: checklistCount(hotspot) })}</span>
 					</span>
 					<span class="meta">
 						{distanceText(hotspot)}{#if birds.length > 0}
-							· {hotspot.score.toFixed(1)} of {birds.length} of your birds expected{/if}
+							· {t('list.expected', { score: formatNumber(hotspot.score, 1), count: birds.length })}{/if}
 					</span>
 					{#if status}
 						<span class="status" class:recent={status.recent}>
@@ -65,7 +64,7 @@
 </ul>
 {#if hotspots.length > initiallyShown}
 	<button type="button" class="more" onclick={() => (showAll = !showAll)}>
-		{showAll ? 'Show fewer' : `Show ${hotspots.length - initiallyShown} more`}
+		{showAll ? t('list.showFewer') : t('list.showMore', { count: hotspots.length - initiallyShown })}
 	</button>
 {/if}
 

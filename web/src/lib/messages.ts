@@ -1,0 +1,355 @@
+// One Plural entry holds a message for each count category of the language:
+// English needs one and other, Lithuanian also few (2 to 9, 22 to 29, ...).
+export interface Plural {
+	one: string;
+	few?: string;
+	other: string;
+}
+
+type Message = string | Plural;
+
+export const en = {
+	'app.title': 'Where to Bird Today',
+
+	'common.close': 'Close',
+	'common.today': 'Today',
+	'common.cancel': 'Cancel',
+	'common.date': 'Date',
+	'common.remove': 'Remove {name}',
+	'common.loading': 'Loading…',
+	'common.yourBirds': 'Your birds',
+
+	'language.label': 'Language',
+	'theme.label': 'Theme',
+	'theme.change': 'Theme: {theme}. Change theme',
+	'theme.system': 'system',
+	'theme.light': 'light',
+	'theme.dark': 'dark',
+
+	'place.you': 'your location',
+	'place.point': 'your point',
+
+	'search.placeholder': 'Search a bird…',
+	'search.limit': 'Limit reached',
+
+	'error.searchFailed': 'search failed',
+	'error.speciesSearchFailed': 'species search failed',
+	'error.speciesDetailFailed': 'failed to load species detail',
+	'error.noHotspotForBird': 'There is no hotspot in range to show that bird at.',
+	'error.noGeolocation': 'geolocation is not supported by this browser',
+	'error.travelTimeUnavailable': 'Travel time is not available; search by straight line instead.',
+	'error.noRoad': 'There is no road near that location.',
+	'error.routingBusy': 'Too many searches right now; try again shortly.',
+	'error.rateLimited': 'Too many searches; slow down.',
+	'error.server': 'Something went wrong on the server.',
+
+	'area.heading': 'Around {place}',
+	'area.summaryCar': '{amount} by car',
+	'area.summaryStraight': '{amount} straight line',
+	'area.useMyLocation': 'Use my location',
+	'area.locating': 'Locating…',
+	'area.plan': 'Plan a search',
+	'area.seasonLink': 'In season ↓',
+	'area.teaserMore': '{names} and {count} more',
+
+	'birds.hint': 'Search a bird in the box above to rank hotspots for it.',
+
+	'tabs.label': 'Sections',
+	'tabs.hotspots': 'Hotspots',
+	'tabs.season': 'In season',
+	'tabs.year': 'The year',
+	'tabs.withCount': '{label} ({count})',
+
+	'hotspots.heading': 'Hotspots in range',
+	'hotspots.searching': 'Searching…',
+	'hotspots.found': '{count} found',
+	'hotspots.noneForBirds': 'No hotspot in range has these birds for that week.',
+	'hotspots.none': 'No hotspots found in range.',
+
+	'season.titleNow': 'In season now',
+	'season.titleThen': 'In season that week',
+	'season.peaking': 'Peaking around you',
+	'season.addHint': 'Tap + to add a bird to Your birds. The bars show its chance through the year.',
+	'season.none': 'Nothing stands out around you that week.',
+	'season.photo': 'Photo: {attribution} · {license}',
+	'season.chance': 'Chance of seeing it through the year',
+	'season.add': 'Add {name} to Your birds',
+	'season.drop': 'Remove {name} from Your birds',
+	'season.peakingNow': 'Peaking now',
+	'season.peaksOn': 'Peaks {day}, in {weeks} weeks',
+	'season.peakedOn': 'Peaked {day}, {weeks} weeks ago',
+
+	'map.layer': 'Map layer',
+	'map.all': 'All hotspots',
+	'map.legendButton': 'What the map shows',
+	'map.bubbleAll': 'Bubble: birdwatcher lists in this week of the year',
+	'map.bubbleBirds': 'Bubble: how many of your birds were seen here',
+	'map.clickToMove': 'Click the map to move your start point',
+
+	'list.count': { one: '{count} list', other: '{count} lists' },
+	'list.countTitle': 'Checklists in this week of the year',
+	'list.expected': '{score} of {count} of your birds expected',
+	'list.showFewer': 'Show fewer',
+	'list.showMore': 'Show {count} more',
+
+	'card.meta': {
+		one: '{count} checklist in this week of the year',
+		other: '{count} checklists in this week of the year'
+	},
+	'card.yourBirds': 'Your birds here',
+	'card.likely': 'Most likely this week',
+	'card.share':
+		"Share of that week's checklists that recorded the bird. Select a bird for its season and time of day.",
+	'card.noChecklists': 'No checklists at this hotspot in this week of the year.',
+	'card.searchHere': 'Search around here',
+
+	'seen.today': 'today',
+	'seen.yesterday': 'yesterday',
+	'seen.daysAgo': '{count} days ago',
+	'seen.never': 'never recorded here',
+	'seen.last': 'last seen {when}',
+	'seen.noneOfYours': 'None of your birds recorded here',
+	'seen.aBird': 'A bird of yours',
+	'seen.recent': '{name} seen {when}',
+	'seen.old': '{name} last seen {when}',
+
+	'range.min': '{amount} min',
+	'range.km': '{amount} km',
+	'range.measureBy': 'Measure the distance by',
+	'range.driveTime': 'Drive time',
+	'range.straightLine': 'Straight line',
+	'range.minutesGroup': 'Minutes of driving',
+	'range.kilometresGroup': 'Kilometres',
+	'range.custom': 'Custom',
+	'range.minutesUnit': 'minutes',
+	'range.kmUnit': 'km',
+	'range.captionDrive': 'Hotspots up to {amount} minutes by car from {place}.',
+	'range.captionStraight': 'Hotspots up to {amount} km from {place}, measured in a straight line.',
+
+	'plan.title': 'Plan a search',
+	'plan.start': 'Starting from',
+	'plan.yourLocation': 'Your location',
+	'plan.useLocation': 'Use my location',
+	'plan.hint': 'For an exact point, close this and click the map.',
+	'plan.howFar': 'How far',
+	'plan.when': 'When',
+	'plan.saturday': 'Sat {day}',
+	'plan.other': 'Other',
+	'plan.lookingFor': 'Looking for',
+	'plan.search': 'Search',
+
+	'year.label': 'Slide through the year',
+	'year.previous': 'Previous week',
+	'year.next': 'Next week',
+	'year.weekFrom': 'Week {week}, from {day}',
+	'year.weekOf': 'Week of {day}.',
+	'year.barShare': 'Week {week}: {percent}% of checklists',
+	'year.barCount': {
+		one: 'Week {week}: {count} checklist',
+		other: 'Week {week}: {count} checklists'
+	},
+	'year.noteBest': 'Best weeks for your birds: {ranges}.',
+	'year.noteBirds': 'Bars show how likely your birds are in each week.',
+	'year.noteArea': 'Bars show the checklists recorded in the area each week.',
+
+	'species.details': 'Bird details',
+	'species.figures': 'Figures for {hotspot}',
+	'species.seasonality': 'Seasonality at this hotspot',
+	'species.week': 'Week {week}',
+	'species.expected': '{percent}% expected ({detail})',
+	'species.noChecklists': 'no checklists here',
+	'species.shareOf': {
+		one: '{percent}% of {count} checklist here',
+		other: '{percent}% of {count} checklists here'
+	},
+	'species.bestWeeks': 'Best weeks',
+	'species.otherWeeks': 'Other weeks',
+	'species.best': 'Best: {ranges}.',
+	'species.weeksNote': 'Each week is pooled with the weeks either side; bar height is relative to the best week.',
+	'species.timeOfDay': 'Time of day at this hotspot',
+	'species.noData': 'no data',
+	'species.sunrise': 'Sunrise',
+	'species.hoursAfter': '+{hours} h',
+	'species.bestHours': 'Best hours',
+	'species.otherHours': 'Other hours',
+	'species.hoursNote': 'The bars run from sunrise around the clock; their height is relative to the best hour.',
+	'species.latest': 'Latest record at this hotspot ({date})'
+} satisfies Record<string, Message>;
+
+export type MessageKey = keyof typeof en;
+
+// Typed against the English keys: a key missing here, or one that English
+// does not have, fails `npm run check`.
+export const lt: Record<MessageKey, Message> = {
+	'app.title': 'Kur šiandien stebėti paukščius',
+
+	'common.close': 'Uždaryti',
+	'common.today': 'Šiandien',
+	'common.cancel': 'Atšaukti',
+	'common.date': 'Data',
+	'common.remove': 'Pašalinti: {name}',
+	'common.loading': 'Kraunama…',
+	'common.yourBirds': 'Jūsų paukščiai',
+
+	'language.label': 'Kalba',
+	'theme.label': 'Tema',
+	'theme.change': 'Tema: {theme}. Keisti temą',
+	'theme.system': 'sistemos',
+	'theme.light': 'šviesi',
+	'theme.dark': 'tamsi',
+
+	'place.you': 'jūsų vieta',
+	'place.point': 'jūsų pasirinktas taškas',
+
+	'search.placeholder': 'Ieškoti paukščio…',
+	'search.limit': 'Pasiekta riba',
+
+	'error.searchFailed': 'paieška nepavyko',
+	'error.speciesSearchFailed': 'paukščių paieška nepavyko',
+	'error.speciesDetailFailed': 'nepavyko įkelti paukščio duomenų',
+	'error.noHotspotForBird': 'Pasirinktu nuotoliu nėra stebėjimo vietos, kurioje būtų galima parodyti šį paukštį.',
+	'error.noGeolocation': 'šioje naršyklėje vietos nustatymas nepalaikomas',
+	'error.travelTimeUnavailable': 'Kelio laikas šiuo metu nepasiekiamas; ieškokite tiesia linija.',
+	'error.noRoad': 'Šalia šios vietos nėra kelio.',
+	'error.routingBusy': 'Dabar per daug paieškų; pabandykite po akimirkos.',
+	'error.rateLimited': 'Per daug paieškų; šiek tiek lėčiau.',
+	'error.server': 'Serverio klaida.',
+
+	'area.heading': 'Paieškos centras: {place}',
+	'area.summaryCar': '{amount} automobiliu',
+	'area.summaryStraight': '{amount} tiesia linija',
+	'area.useMyLocation': 'Naudoti mano vietą',
+	'area.locating': 'Nustatoma vieta…',
+	'area.plan': 'Suplanuoti paiešką',
+	'area.seasonLink': 'Sezono paukščiai ↓',
+	'area.teaserMore': '{names} ir dar {count}',
+
+	'birds.hint': 'Ieškokite paukščio laukelyje viršuje – stebėjimo vietos bus išrikiuotos pagal jį.',
+
+	'tabs.label': 'Skyriai',
+	'tabs.hotspots': 'Stebėjimo vietos',
+	'tabs.season': 'Sezono paukščiai',
+	'tabs.year': 'Metai',
+	'tabs.withCount': '{label} ({count})',
+
+	'hotspots.heading': 'Pasiekiamos stebėjimo vietos',
+	'hotspots.searching': 'Ieškoma…',
+	'hotspots.found': 'Rasta: {count}',
+	'hotspots.noneForBirds': 'Nė vienoje pasiekiamoje stebėjimo vietoje šių paukščių tą savaitę nėra.',
+	'hotspots.none': 'Pasiekiamų stebėjimo vietų nerasta.',
+
+	'season.titleNow': 'Dabar pasirodo',
+	'season.titleThen': 'Tą savaitę pasirodo',
+	'season.peaking': 'Sezono pikas aplink jus',
+	'season.addHint':
+		'Paspauskite +, kad įtrauktumėte paukštį į „Jūsų paukščius“. Stulpeliai rodo tikimybę jį pamatyti per metus.',
+	'season.none': 'Tą savaitę aplink jus jokia rūšis ypač neišsiskiria.',
+	'season.photo': 'Nuotrauka: {attribution} · {license}',
+	'season.chance': 'Tikimybė pamatyti per metus',
+	'season.add': 'Įtraukti į „Jūsų paukščius“: {name}',
+	'season.drop': 'Pašalinti iš „Jūsų paukščių“: {name}',
+	'season.peakingNow': 'Pikas dabar',
+	'season.peaksOn': 'Pikas {day}, po {weeks} sav.',
+	'season.peakedOn': 'Pikas buvo {day}, prieš {weeks} sav.',
+
+	'map.layer': 'Žemėlapio sluoksnis',
+	'map.all': 'Visos stebėjimo vietos',
+	'map.legendButton': 'Ką rodo žemėlapis',
+	'map.bubbleAll': 'Burbulas: paukštininkų sąrašai šią metų savaitę',
+	'map.bubbleBirds': 'Burbulas: kiek jūsų paukščių čia matyta',
+	'map.clickToMove': 'Spustelėkite žemėlapį, kad perkeltumėte paieškos centrą',
+
+	'list.count': { one: '{count} sąrašas', few: '{count} sąrašai', other: '{count} sąrašų' },
+	'list.countTitle': 'Sąrašai šią metų savaitę',
+	'list.expected': 'tikėtina {score} iš {count} jūsų paukščių',
+	'list.showFewer': 'Rodyti mažiau',
+	'list.showMore': 'Rodyti dar {count}',
+
+	'card.meta': {
+		one: '{count} sąrašas šią metų savaitę',
+		few: '{count} sąrašai šią metų savaitę',
+		other: '{count} sąrašų šią metų savaitę'
+	},
+	'card.yourBirds': 'Jūsų paukščiai čia',
+	'card.likely': 'Labiausiai tikėtini šią savaitę',
+	'card.share':
+		'Tos savaitės sąrašų, kuriuose paukštis buvo užfiksuotas, dalis. Pasirinkite paukštį, kad pamatytumėte jo sezoną ir paros laiką.',
+	'card.noChecklists': 'Šioje stebėjimo vietoje šią metų savaitę sąrašų nėra.',
+	'card.searchHere': 'Ieškoti aplink čia',
+
+	'seen.today': 'šiandien',
+	'seen.yesterday': 'vakar',
+	'seen.daysAgo': 'prieš {count} d.',
+	'seen.never': 'čia niekada neregistruota',
+	'seen.last': 'paskutinį kartą {when}',
+	'seen.noneOfYours': 'Čia nė vienas jūsų paukštis neregistruotas',
+	'seen.aBird': 'Jūsų paukštis',
+	'seen.recent': '{name}: {when}',
+	'seen.old': '{name}: paskutinį kartą {when}',
+
+	'range.min': '{amount} min.',
+	'range.km': '{amount} km',
+	'range.measureBy': 'Atstumas matuojamas',
+	'range.driveTime': 'Kelio laiku',
+	'range.straightLine': 'Tiesia linija',
+	'range.minutesGroup': 'Važiavimo minutės',
+	'range.kilometresGroup': 'Kilometrai',
+	'range.custom': 'Kita',
+	'range.minutesUnit': 'min.',
+	'range.kmUnit': 'km',
+	'range.captionDrive': 'Stebėjimo vietos iki {amount} min. kelio automobiliu. Paieškos centras: {place}.',
+	'range.captionStraight': 'Stebėjimo vietos iki {amount} km tiesia linija. Paieškos centras: {place}.',
+
+	'plan.title': 'Suplanuoti paiešką',
+	'plan.start': 'Pradžios vieta',
+	'plan.yourLocation': 'Jūsų vieta',
+	'plan.useLocation': 'Naudoti mano vietą',
+	'plan.hint': 'Norėdami nurodyti tikslų tašką, uždarykite langą ir spustelėkite žemėlapį.',
+	'plan.howFar': 'Kaip toli',
+	'plan.when': 'Kada',
+	'plan.saturday': 'Šeš. {day}',
+	'plan.other': 'Kita',
+	'plan.lookingFor': 'Ieškoma',
+	'plan.search': 'Ieškoti',
+
+	'year.label': 'Slinkite per metus',
+	'year.previous': 'Ankstesnė savaitė',
+	'year.next': 'Kita savaitė',
+	'year.weekFrom': '{week} savaitė, nuo {day}',
+	'year.weekOf': 'Savaitė nuo {day}.',
+	'year.barShare': '{week} savaitė: {percent} % sąrašų',
+	'year.barCount': {
+		one: '{week} savaitė: {count} sąrašas',
+		few: '{week} savaitė: {count} sąrašai',
+		other: '{week} savaitė: {count} sąrašų'
+	},
+	'year.noteBest': 'Geriausios savaitės jūsų paukščiams: {ranges}.',
+	'year.noteBirds': 'Stulpeliai rodo, kiek tikėtini jūsų paukščiai kiekvieną savaitę.',
+	'year.noteArea': 'Stulpeliai rodo, kiek sąrašų kiekvieną savaitę užregistruota šioje apylinkėje.',
+
+	'species.details': 'Paukščio duomenys',
+	'species.figures': 'Duomenys: {hotspot}',
+	'species.seasonality': 'Sezoniškumas šioje stebėjimo vietoje',
+	'species.week': '{week} savaitė',
+	'species.expected': 'tikėtina {percent} % ({detail})',
+	'species.noChecklists': 'čia sąrašų nėra',
+	'species.shareOf': {
+		one: '{percent} % iš {count} sąrašo čia',
+		few: '{percent} % iš {count} sąrašų čia',
+		other: '{percent} % iš {count} sąrašų čia'
+	},
+	'species.bestWeeks': 'Geriausios savaitės',
+	'species.otherWeeks': 'Kitos savaitės',
+	'species.best': 'Geriausia: {ranges}.',
+	'species.weeksNote':
+		'Kiekviena savaitė sujungiama su gretimomis savaitėmis; stulpelio aukštis rodomas lyginant su geriausia savaite.',
+	'species.timeOfDay': 'Paros laikas šioje stebėjimo vietoje',
+	'species.noData': 'nėra duomenų',
+	'species.sunrise': 'Saulėtekis',
+	'species.hoursAfter': '+{hours} val.',
+	'species.bestHours': 'Geriausios valandos',
+	'species.otherHours': 'Kitos valandos',
+	'species.hoursNote':
+		'Stulpeliai eina nuo saulėtekio visą parą; jų aukštis rodomas lyginant su geriausia valanda.',
+	'species.latest': 'Naujausias įrašas šioje stebėjimo vietoje ({date})'
+};

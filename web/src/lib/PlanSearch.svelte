@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import type { SpeciesMatch } from '$lib/api';
+	import { placeLabel, t } from '$lib/i18n.svelte';
 	import { cities, type Place } from '$lib/cities';
 	import { formatDay, nextSaturday, todayIso } from '$lib/format';
 	import RangePicker from '$lib/RangePicker.svelte';
@@ -57,7 +58,7 @@
 
 	function useMyLocation() {
 		if (!navigator.geolocation) {
-			error = 'geolocation is not supported by this browser';
+			error = t('error.noGeolocation');
 			return;
 		}
 		error = '';
@@ -104,57 +105,57 @@
 	<div class="panel" role="dialog" aria-modal="true" aria-labelledby="plan-title" tabindex="-1" bind:this={panel}>
 		<form onsubmit={submit}>
 			<header>
-				<h2 id="plan-title">Plan a search</h2>
-				<button type="button" class="close" onclick={onclose} aria-label="Close">✕</button>
+				<h2 id="plan-title">{t('plan.title')}</h2>
+				<button type="button" class="close" onclick={onclose} aria-label={t('common.close')}>✕</button>
 			</header>
 
 			<div class="fields">
 				<div class="field">
-					<label for="plan-start">Starting from</label>
+					<label for="plan-start">{t('plan.start')}</label>
 					<div class="start">
 						<select id="plan-start" value={startKey(start)} onchange={(event) => pickCity(event.currentTarget.value)}>
 							{#if !knownCity}
-								<option value={startKey(start)}>{start.label === 'you' ? 'Your location' : start.label}</option>
+								<option value={startKey(start)}>{placeLabel(start.label)}</option>
 							{/if}
 							{#each cities as city (city.label)}
 								<option value={startKey(city)}>{city.label}</option>
 							{/each}
 						</select>
-						<button type="button" class="square" onclick={useMyLocation} disabled={locating} aria-label="Use my location">
+						<button type="button" class="square" onclick={useMyLocation} disabled={locating} aria-label={t('plan.useLocation')}>
 							<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
 								<circle cx="12" cy="12" r="4" />
 								<path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
 							</svg>
 						</button>
 					</div>
-					<p class="hint">For an exact point, close this and click the map.</p>
+					<p class="hint">{t('plan.hint')}</p>
 					{#if error}
 						<p class="error" role="alert">{error}</p>
 					{/if}
 				</div>
 
 				<div class="field">
-					<span class="label">How far</span>
-					<RangePicker value={draftRange} place={start.label === 'you' ? 'your location' : start.label} onchange={(next) => (draftRange = next)} />
+					<span class="label">{t('plan.howFar')}</span>
+					<RangePicker value={draftRange} place={start.label} onchange={(next) => (draftRange = next)} />
 				</div>
 
 				<div class="field">
-					<span class="label">When</span>
+					<span class="label">{t('plan.when')}</span>
 					<div class="days">
-						<button type="button" aria-pressed={!showOtherDate && day === today} onclick={() => pickDay(today)}>Today</button>
+						<button type="button" aria-pressed={!showOtherDate && day === today} onclick={() => pickDay(today)}>{t('common.today')}</button>
 						<button type="button" aria-pressed={!showOtherDate && day === saturday} onclick={() => pickDay(saturday)}>
-							Sat {formatDay(saturday)}
+							{t('plan.saturday', { day: formatDay(saturday) })}
 						</button>
-						<button type="button" aria-pressed={showOtherDate} onclick={() => (otherDate = true)}>Other</button>
+						<button type="button" aria-pressed={showOtherDate} onclick={() => (otherDate = true)}>{t('plan.other')}</button>
 					</div>
 					{#if showOtherDate}
-						<input type="date" class="date" aria-label="Date" bind:value={day} />
+						<input type="date" class="date" aria-label={t('common.date')} bind:value={day} />
 					{/if}
 				</div>
 
 				<div class="field">
 					<div class="row">
-						<span class="label">Looking for</span>
+						<span class="label">{t('plan.lookingFor')}</span>
 						<span class="count">{draftBirds.length} / {maxBirds}</span>
 					</div>
 					{#if draftBirds.length > 0}
@@ -162,13 +163,13 @@
 							{#each draftBirds as bird (bird.species_id)}
 								<li>
 									{bird.common_name}
-									<button type="button" onclick={() => removeBird(bird.species_id)} aria-label="Remove {bird.common_name}">✕</button>
+									<button type="button" onclick={() => removeBird(bird.species_id)} aria-label={t('common.remove', { name: bird.common_name })}>✕</button>
 								</li>
 							{/each}
 						</ul>
 					{/if}
 					<SpeciesSearch
-						placeholder={draftBirds.length >= maxBirds ? 'Limit reached' : 'Search a bird…'}
+						placeholder={t(draftBirds.length >= maxBirds ? 'search.limit' : 'search.placeholder')}
 						disabled={draftBirds.length >= maxBirds}
 						onpick={addBird}
 						onerror={(message) => (error = message)}
@@ -177,8 +178,8 @@
 			</div>
 
 			<footer>
-				<button type="button" class="cancel" onclick={onclose}>Cancel</button>
-				<button type="submit" class="search">Search</button>
+				<button type="button" class="cancel" onclick={onclose}>{t('common.cancel')}</button>
+				<button type="submit" class="search">{t('plan.search')}</button>
 			</footer>
 		</form>
 	</div>

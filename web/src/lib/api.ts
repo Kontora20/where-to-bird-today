@@ -1,3 +1,6 @@
+import { hotspotName, locale, t } from '$lib/i18n.svelte';
+import type { MessageKey } from '$lib/messages';
+
 // Field names match the Go API's JSON exactly (see
 // internal/birding/recommend.go), so there is no mapping layer to keep in
 // sync -- just the wire shape, typed.
@@ -76,12 +79,31 @@ export interface SpeciesMatch {
 	scientific_name: string;
 }
 
-export async function searchSpecies(query: string): Promise<SpeciesMatch[]> {
-	const response = await fetch(`/species?${new URLSearchParams({ q: query })}`);
+// An error whose message is worded for the reader, in their language.
+export class ApiError extends Error {}
+
+// What the server's plain-text error codes say; any other 4xx text is shown
+// as it is.
+const errorMessages: Record<string, MessageKey> = {
+	travel_time_unavailable: 'error.travelTimeUnavailable',
+	no_road_near_origin: 'error.noRoad',
+	routing_busy: 'error.routingBusy',
+	rate_limited: 'error.rateLimited'
+};
+
+async function getJson<T>(path: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
+	params.set('lang', locale.language);
+	const response = await fetch(`${path}?${params}`, { signal });
 	if (!response.ok) {
-		throw new Error(`species search failed: ${response.status}`);
+		const code = (await response.text()).trim();
+		const key = errorMessages[code];
+		throw new ApiError(key ? t(key) : response.status < 500 && code ? code : t('error.server'));
 	}
 	return response.json();
+}
+
+export function searchSpecies(query: string): Promise<SpeciesMatch[]> {
+	return getJson('/species', new URLSearchParams({ q: query }));
 }
 
 // An area and a day, and optionally the species, as every search of an area asks.
@@ -95,8 +117,6 @@ export interface SearchQuery {
 	speciesIds?: number[];
 }
 
-// The server's plain-text reason ("no road near that location") is meant to
-// be shown.
 async function getSearch<T>(path: string, query: SearchQuery, signal?: AbortSignal): Promise<T> {
 	const params = new URLSearchParams({
 		lat: String(query.lat),
@@ -114,15 +134,12 @@ async function getSearch<T>(path: string, query: SearchQuery, signal?: AbortSign
 		params.append('species', String(speciesId));
 	}
 
-	const response = await fetch(`${path}?${params}`, { signal });
-	if (!response.ok) {
-		throw new Error((await response.text()).trim() || `${path} request failed: ${response.status}`);
-	}
-	return response.json();
+	return getJson(path, params, signal);
 }
 
-export function getRecommendations(query: SearchQuery, signal?: AbortSignal): Promise<Recommendation[]> {
-	return getSearch('/recommendations', query, signal);
+export async function getRecommendations(query: SearchQuery, signal?: AbortSignal): Promise<Recommendation[]> {
+	const found = await getSearch<Recommendation[]>('/recommendations', query, signal);
+	return found.map((hotspot) => ({ ...hotspot, hotspot_name: hotspotName(hotspot.hotspot_name) }));
 }
 
 // The year over the hotspots of an area for the species in the query, which
@@ -213,14 +230,10 @@ export interface SpeciesDetail {
 }
 
 // date (YYYY-MM-DD) sets the day the time of day is shown at; today when omitted.
-export async function getSpeciesDetail(hotspotId: number, speciesId: number, date?: string): Promise<SpeciesDetail> {
+export function getSpeciesDetail(hotspotId: number, speciesId: number, date?: string): Promise<SpeciesDetail> {
 	const params = new URLSearchParams();
 	if (date) {
 		params.set('date', date);
 	}
-	const response = await fetch(`/hotspots/${hotspotId}/species/${speciesId}?${params}`);
-	if (!response.ok) {
-		throw new Error(`species detail request failed: ${response.status}`);
-	}
-	return response.json();
+	return getJson(`/hotspots/${hotspotId}/species/${speciesId}`, params);
 }

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { SpeciesMatch } from '$lib/api';
+	import { t } from '$lib/i18n.svelte';
+	import LanguageSwitch from '$lib/LanguageSwitch.svelte';
 	import SpeciesSearch from '$lib/SpeciesSearch.svelte';
 	import ThemeSwitch from '$lib/ThemeSwitch.svelte';
 
@@ -25,7 +27,7 @@
 				fill="var(--color-accent)"
 			/>
 		</svg>
-		<h1>Where to Bird Today</h1>
+		<h1>{t('app.title')}</h1>
 	</div>
 	<div class="search">
 		<SpeciesSearch
@@ -35,6 +37,7 @@
 			{onerror}
 		/>
 	</div>
+	<LanguageSwitch />
 	<ThemeSwitch />
 </header>
 
