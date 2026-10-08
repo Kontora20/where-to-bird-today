@@ -41,6 +41,9 @@
 
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
+			// Closing the suggestions is this key press's whole job: a dialog
+			// around the box must not close with them.
+			if (suggestions.length > 0) event.preventDefault();
 			suggestions = [];
 		} else if (event.key === 'Enter' && suggestions.length > 0) {
 			event.preventDefault();

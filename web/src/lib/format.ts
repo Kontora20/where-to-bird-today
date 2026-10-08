@@ -131,6 +131,18 @@ export function todayIso(): string {
 	return new Date().toLocaleDateString('sv');
 }
 
+// The dates the page accepts. The year is limited because Date.UTC reads the
+// years 0 to 99 as 1900 to 1999, and a six-digit year is not a date the server
+// takes.
+export const dateLimits = { min: '2000-01-01', max: '2100-12-31' };
+
+// Whether value is a real day, as YYYY-MM-DD, within dateLimits. An empty date
+// input, which the browser allows, is not one.
+export function isUsableDate(value: string): boolean {
+	if (!/^\d{4}-\d\d-\d\d$/.test(value) || value < dateLimits.min || value > dateLimits.max) return false;
+	return addDays(value, 0) === value;
+}
+
 // The date a number of days after an ISO date, as YYYY-MM-DD.
 export function addDays(isoDate: string, days: number): string {
 	const [year, month, day] = isoDate.split('-').map(Number);

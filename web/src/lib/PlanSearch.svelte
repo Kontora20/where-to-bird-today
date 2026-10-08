@@ -3,7 +3,7 @@
 	import type { SpeciesMatch } from '$lib/api';
 	import { placeLabel, t } from '$lib/i18n.svelte';
 	import { cities, type Place } from '$lib/cities';
-	import { formatDay, nextSaturday, todayIso } from '$lib/format';
+	import { dateLimits, formatDay, isUsableDate, nextSaturday, todayIso } from '$lib/format';
 	import RangePicker from '$lib/RangePicker.svelte';
 	import SpeciesSearch from '$lib/SpeciesSearch.svelte';
 
@@ -91,13 +91,13 @@
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
-		onapply({ home: start, range: draftRange, date: day || today, birds: draftBirds });
+		onapply({ home: start, range: draftRange, date: isUsableDate(day) ? day : today, birds: draftBirds });
 	}
 </script>
 
 <svelte:window
 	onkeydown={(event) => {
-		if (event.key === 'Escape') onclose();
+		if (event.key === 'Escape' && !event.defaultPrevented) onclose();
 	}}
 />
 
@@ -149,7 +149,14 @@
 						<button type="button" aria-pressed={showOtherDate} onclick={() => (otherDate = true)}>{t('plan.other')}</button>
 					</div>
 					{#if showOtherDate}
-						<input type="date" class="date" aria-label={t('common.date')} bind:value={day} />
+						<input
+							type="date"
+							class="date"
+							aria-label={t('common.date')}
+							min={dateLimits.min}
+							max={dateLimits.max}
+							bind:value={day}
+						/>
 					{/if}
 				</div>
 

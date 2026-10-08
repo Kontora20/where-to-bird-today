@@ -143,6 +143,7 @@
 	.name {
 		font-size: 0.95rem;
 		font-weight: 700;
+		overflow-wrap: anywhere;
 	}
 
 	.count {

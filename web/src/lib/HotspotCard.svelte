@@ -113,9 +113,14 @@
 		gap: 8px;
 	}
 
+	.head > div {
+		min-width: 0;
+	}
+
 	h2 {
 		margin: 0;
 		font-size: 1.1rem;
+		overflow-wrap: anywhere;
 	}
 
 	h3 {
@@ -218,6 +223,7 @@
 
 	.name {
 		flex: 0 0 130px;
+		overflow-wrap: anywhere;
 	}
 
 	.track {

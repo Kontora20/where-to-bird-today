@@ -72,7 +72,11 @@
 					iconCreateFunction: (cluster) => clusterIcon(cluster.getChildCount())
 				})
 				.addTo(map);
-			map.on('click', (event) => onpick(event.latlng.lat, event.latlng.lng));
+			map.on('click', (event) => {
+				// The map repeats across the date line; the API takes -180 to 180.
+				const point = event.latlng.wrap();
+				onpick(point.lat, point.lng);
+			});
 			ready = true;
 		})();
 		return () => map?.remove();

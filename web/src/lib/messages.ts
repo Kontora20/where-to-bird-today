@@ -17,6 +17,7 @@ export const en = {
 	'common.date': 'Date',
 	'common.remove': 'Remove {name}',
 	'common.loading': 'Loading…',
+	'common.retry': 'Try again',
 	'common.yourBirds': 'Your birds',
 
 	'language.label': 'Language',
@@ -42,6 +43,7 @@ export const en = {
 	'error.routingBusy': 'Too many searches right now; try again shortly.',
 	'error.rateLimited': 'Too many searches; slow down.',
 	'error.server': 'Something went wrong on the server.',
+	'error.crashed': 'Something went wrong on this page.',
 
 	'area.heading': 'Around {place}',
 	'area.summaryCar': '{amount} by car',
@@ -195,6 +197,7 @@ export const lt: Record<MessageKey, Message> = {
 	'common.date': 'Data',
 	'common.remove': 'Pašalinti: {name}',
 	'common.loading': 'Kraunama…',
+	'common.retry': 'Bandyti dar kartą',
 	'common.yourBirds': 'Jūsų paukščiai',
 
 	'language.label': 'Kalba',
@@ -220,6 +223,7 @@ export const lt: Record<MessageKey, Message> = {
 	'error.routingBusy': 'Dabar per daug paieškų; pabandykite po akimirkos.',
 	'error.rateLimited': 'Per daug paieškų; šiek tiek lėčiau.',
 	'error.server': 'Serverio klaida.',
+	'error.crashed': 'Puslapyje įvyko klaida.',
 
 	'area.heading': 'Paieškos centras: {place}',
 	'area.summaryCar': '{amount} automobiliu',

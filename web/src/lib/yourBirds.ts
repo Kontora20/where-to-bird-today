@@ -2,12 +2,20 @@ import type { SpeciesMatch } from '$lib/api';
 
 const storageKey = 'birds';
 
+// The longest name kept: real names are far shorter, and a name goes into the
+// page and, for the language switch, into a request.
+const maxNameLength = 100;
+
 function isSpeciesMatch(value: unknown): value is SpeciesMatch {
 	const bird = value as Partial<SpeciesMatch> | null;
 	return (
 		typeof bird?.species_id === 'number' &&
+		Number.isSafeInteger(bird.species_id) &&
+		bird.species_id > 0 &&
 		typeof bird.common_name === 'string' &&
-		typeof bird.scientific_name === 'string'
+		bird.common_name.length <= maxNameLength &&
+		typeof bird.scientific_name === 'string' &&
+		bird.scientific_name.length <= maxNameLength
 	);
 }
 
@@ -17,7 +25,10 @@ export function loadYourBirds(limit: number): SpeciesMatch[] {
 	try {
 		const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? '[]');
 		if (!Array.isArray(saved)) return [];
-		const birds = new Map(saved.filter(isSpeciesMatch).map((bird) => [bird.species_id, bird]));
+		const birds = new Map<number, SpeciesMatch>();
+		for (const bird of saved.filter(isSpeciesMatch)) {
+			if (!birds.has(bird.species_id)) birds.set(bird.species_id, bird);
+		}
 		return [...birds.values()].slice(0, limit);
 	} catch {
 		return [];

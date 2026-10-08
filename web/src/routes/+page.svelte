@@ -13,7 +13,9 @@
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
 	import {
 		addDays,
+		dateLimits,
 		formatDay,
+		isUsableDate,
 		rangeLabel,
 		todayIso,
 		type MapLayer,
@@ -145,20 +147,28 @@
 	});
 
 	// Your birds is saved with the names of the language it was added in; each
-	// bird is looked up again by its scientific name for the new one.
+	// bird is looked up again by its scientific name for the new one. The new
+	// names are put onto the list as it is when the lookups end, so a bird
+	// removed meanwhile stays removed, and a rename that a later language
+	// switch has replaced is dropped.
+	let latestRename = 0;
 	async function renameYourBirds() {
-		const renamed = await Promise.all(
+		const thisRename = ++latestRename;
+		const renamed = new Map<number, SpeciesMatch>();
+		await Promise.all(
 			targetSpecies.map(async (bird) => {
 				try {
 					const matches = await searchSpecies(bird.scientific_name);
-					return matches.find((match) => match.species_id === bird.species_id) ?? bird;
+					const match = matches.find((candidate) => candidate.species_id === bird.species_id);
+					if (match) renamed.set(bird.species_id, match);
 				} catch {
-					return bird;
+					// the bird keeps the name it has
 				}
 			})
 		);
-		targetSpecies = renamed;
-		saveYourBirds(renamed);
+		if (thisRename !== latestRename) return;
+		targetSpecies = targetSpecies.map((bird) => renamed.get(bird.species_id) ?? bird);
+		saveYourBirds(targetSpecies);
 	}
 
 	// The tabs are only on screen on a phone, so the sections are only tab
@@ -285,21 +295,31 @@
 		error = t('error.noHotspotForBird');
 	}
 
+	// The species request in progress. Closing the panel aborts it, so a slow
+	// answer neither keeps the page locked nor opens the panel again later.
+	let speciesInProgress: AbortController | undefined;
+
 	async function openSpeciesDetail(hotspot: Recommendation, speciesId: number) {
+		speciesInProgress?.abort();
+		const { signal } = (speciesInProgress = new AbortController());
 		speciesHotspotName = hotspot.hotspot_name;
 		speciesError = '';
 		speciesLoading = true;
 		openSpecies = null;
 		try {
-			openSpecies = await getSpeciesDetail(hotspot.hotspot_id, speciesId, date || undefined);
+			const detail = await getSpeciesDetail(hotspot.hotspot_id, speciesId, date || undefined, signal);
+			if (!signal.aborted) openSpecies = detail;
 		} catch (err) {
+			if (signal.aborted) return;
 			speciesError = err instanceof ApiError ? err.message : t('error.speciesDetailFailed');
 		} finally {
-			speciesLoading = false;
+			if (!signal.aborted) speciesLoading = false;
 		}
 	}
 
 	function closeSpeciesDetail() {
+		speciesInProgress?.abort();
+		speciesLoading = false;
 		openSpecies = null;
 		speciesError = '';
 	}
@@ -396,7 +416,14 @@
 	}
 
 	function shiftWeek(weeks: number) {
-		date = addDays(date, 7 * weeks);
+		const shifted = addDays(date, 7 * weeks);
+		if (isUsableDate(shifted)) date = shifted;
+		refreshSoon();
+	}
+
+	// The date box can be emptied or typed into a date the page cannot use.
+	function changeDate() {
+		if (!isUsableDate(date)) date = todayIso();
 		refreshSoon();
 	}
 
@@ -438,7 +465,7 @@
 					<div class="controls">
 						<label class="pill">
 							<span class="visually-hidden">{t('common.date')}</span>
-							<input type="date" bind:value={date} onchange={refreshSoon} />
+							<input type="date" min={dateLimits.min} max={dateLimits.max} bind:value={date} onchange={changeDate} />
 						</label>
 					</div>
 				</div>
@@ -846,6 +873,8 @@
 	}
 
 	.chips .name {
+		overflow-wrap: anywhere;
+		text-align: left;
 		width: auto;
 		height: auto;
 		padding: 0;

@@ -53,7 +53,7 @@
 
 <svelte:window
 	onkeydown={(event) => {
-		if (event.key === 'Escape') onclose();
+		if (event.key === 'Escape' && !event.defaultPrevented) onclose();
 	}}
 />
 
@@ -220,6 +220,7 @@
 
 	h2 {
 		margin: 0 0 0.15rem;
+		overflow-wrap: anywhere;
 	}
 
 	h3 {

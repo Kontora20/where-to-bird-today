@@ -82,8 +82,8 @@ export interface SpeciesMatch {
 // An error whose message is worded for the reader, in their language.
 export class ApiError extends Error {}
 
-// What the server's plain-text error codes say; any other 4xx text is shown
-// as it is.
+// What the server's plain-text error codes say; any other answer reads as a
+// server error, whatever text it came with.
 const errorMessages: Record<string, MessageKey> = {
 	travel_time_unavailable: 'error.travelTimeUnavailable',
 	no_road_near_origin: 'error.noRoad',
@@ -91,13 +91,16 @@ const errorMessages: Record<string, MessageKey> = {
 	rate_limited: 'error.rateLimited'
 };
 
+// How long a request may take before the page gives up on it.
+const requestTimeoutMs = 15_000;
+
 async function getJson<T>(path: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
 	params.set('lang', locale.language);
-	const response = await fetch(`${path}?${params}`, { signal });
+	const timeout = AbortSignal.timeout(requestTimeoutMs);
+	const response = await fetch(`${path}?${params}`, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
 	if (!response.ok) {
 		const code = (await response.text()).trim();
-		const key = errorMessages[code];
-		throw new ApiError(key ? t(key) : response.status < 500 && code ? code : t('error.server'));
+		throw new ApiError(t(errorMessages[code] ?? 'error.server'));
 	}
 	return response.json();
 }
@@ -139,7 +142,11 @@ async function getSearch<T>(path: string, query: SearchQuery, signal?: AbortSign
 
 export async function getRecommendations(query: SearchQuery, signal?: AbortSignal): Promise<Recommendation[]> {
 	const found = await getSearch<Recommendation[]>('/recommendations', query, signal);
-	return found.map((hotspot) => ({ ...hotspot, hotspot_name: hotspotName(hotspot.hotspot_name) }));
+	return found.map((hotspot) => ({
+		...hotspot,
+		hotspot_name: hotspotName(hotspot.hotspot_name),
+		top_species: hotspot.top_species ?? []
+	}));
 }
 
 // The year over the hotspots of an area for the species in the query, which
@@ -153,12 +160,20 @@ export interface AreaWeeks {
 	best_weeks: WeekRange[];
 }
 
-export function getAreaWeeks(query: SearchQuery, signal?: AbortSignal): Promise<AreaWeeks> {
-	return getSearch('/recommendations/weeks', query, signal);
+// The lists of an answer are never null on the page, whatever the server sent:
+// one null would stop the page from drawing at all.
+export async function getAreaWeeks(query: SearchQuery, signal?: AbortSignal): Promise<AreaWeeks> {
+	const area = await getSearch<AreaWeeks>('/recommendations/weeks', query, signal);
+	return { ...area, weeks: area.weeks ?? [], best_weeks: area.best_weeks ?? [] };
 }
 
-export function getSeason(query: SearchQuery, signal?: AbortSignal): Promise<Season> {
-	return getSearch('/in-season', query, signal);
+export async function getSeason(query: SearchQuery, signal?: AbortSignal): Promise<Season> {
+	const season = await getSearch<Season>('/in-season', query, signal);
+	return {
+		...season,
+		checklists: season.checklists ?? [],
+		species: (season.species ?? []).map((bird) => ({ ...bird, year: bird.year ?? [] }))
+	};
 }
 
 export interface Photo {
@@ -230,10 +245,21 @@ export interface SpeciesDetail {
 }
 
 // date (YYYY-MM-DD) sets the day the time of day is shown at; today when omitted.
-export function getSpeciesDetail(hotspotId: number, speciesId: number, date?: string): Promise<SpeciesDetail> {
+export async function getSpeciesDetail(
+	hotspotId: number,
+	speciesId: number,
+	date?: string,
+	signal?: AbortSignal
+): Promise<SpeciesDetail> {
 	const params = new URLSearchParams();
 	if (date) {
 		params.set('date', date);
 	}
-	return getJson(`/hotspots/${hotspotId}/species/${speciesId}`, params);
+	const detail = await getJson<SpeciesDetail>(`/hotspots/${hotspotId}/species/${speciesId}`, params, signal);
+	return {
+		...detail,
+		seasonality: detail.seasonality ?? [],
+		best_weeks: detail.best_weeks ?? [],
+		time_of_day: detail.time_of_day ?? []
+	};
 }
