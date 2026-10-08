@@ -220,7 +220,11 @@
 <div bind:this={container} class="map"></div>
 
 <style>
+	/* Leaflet sets position: relative itself only when the container has none,
+	   so a map first drawn in the phone's fixed layout would be static after
+	   a resize to the desktop layout. */
 	.map {
+		position: relative;
 		width: 100%;
 		height: 100%;
 		isolation: isolate;

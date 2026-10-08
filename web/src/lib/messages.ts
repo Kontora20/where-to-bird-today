@@ -99,7 +99,13 @@ export const en = {
 	'card.yourBirds': 'Your birds here',
 	'card.likely': 'Most likely this week',
 	'card.share':
-		"Share of that week's checklists that recorded the bird. Select a bird for its season and time of day.",
+		"How often that week's checklists recorded the bird. Where there are too few checklists to tell, no estimate is given and the number of checklists is shown instead. Select a bird for its season and time of day.",
+	'chance.tooLittle': 'Too little data',
+	'chance.almostAlways': 'Almost always',
+	'chance.often': 'Often',
+	'chance.sometimes': 'Sometimes',
+	'chance.rarely': 'Rarely',
+	'chance.veryRarely': 'Very rarely',
 	'card.noChecklists': 'No checklists at this hotspot in this week of the year.',
 	'card.searchHere': 'Search around here',
 
@@ -273,7 +279,13 @@ export const lt: Record<MessageKey, Message> = {
 	'card.yourBirds': 'Jūsų paukščiai čia',
 	'card.likely': 'Labiausiai tikėtini šią savaitę',
 	'card.share':
-		'Tos savaitės sąrašų, kuriuose paukštis buvo užfiksuotas, dalis. Pasirinkite paukštį, kad pamatytumėte jo sezoną ir paros laiką.',
+		'Kaip dažnai tos savaitės sąrašuose buvo užfiksuotas paukštis. Kai sąrašų per mažai, įvertinimas nerodomas, o vietoj jo rodomas sąrašų skaičius. Pasirinkite paukštį, kad pamatytumėte jo sezoną ir paros laiką.',
+	'chance.tooLittle': 'Per mažai duomenų',
+	'chance.almostAlways': 'Beveik visada',
+	'chance.often': 'Dažnai',
+	'chance.sometimes': 'Kartais',
+	'chance.rarely': 'Retai',
+	'chance.veryRarely': 'Labai retai',
 	'card.noChecklists': 'Šioje stebėjimo vietoje šią metų savaitę sąrašų nėra.',
 	'card.searchHere': 'Ieškoti aplink čia',
 

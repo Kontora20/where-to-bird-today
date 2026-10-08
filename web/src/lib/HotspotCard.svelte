@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Recommendation, SpeciesMatch } from '$lib/api';
 	import { t } from '$lib/i18n.svelte';
-	import { checklistCount, distanceText, sighting } from '$lib/format';
+	import { chanceKey, checklistCount, distanceText, fewChecklists, sighting } from '$lib/format';
 
 	interface Props {
 		hotspot: Recommendation;
@@ -60,11 +60,15 @@
 		<ul class="seen">
 			{#each shown as species (species.species_id)}
 				{@const percent = Math.round(species.frequency * 100)}
+				{@const tooFew = species.checklists < fewChecklists}
 				<li>
 					<button type="button" onclick={() => onpickspecies(species.species_id)}>
 						<span class="name">{species.common_name}</span>
-						<span class="track"><span class="fill" style="width: {percent}%"></span></span>
-						<span class="percent">{percent}%</span>
+						<span class="track"><span class="fill" style="width: {tooFew ? 0 : percent}%"></span></span>
+						<span class="chance" class:thin={tooFew}>
+							{t(tooFew ? 'chance.tooLittle' : chanceKey(species.frequency))}
+							{#if tooFew}<small>{t('list.count', { count: species.checklists })}</small>{/if}
+						</span>
 					</button>
 				</li>
 			{/each}
@@ -230,11 +234,24 @@
 		background: var(--color-accent-strong);
 	}
 
-	.percent {
-		width: 36px;
+	.chance {
+		width: 6.5rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		line-height: 1.2;
 		text-align: right;
-		font: 600 0.8rem var(--font-mono);
 	}
+
+	.chance small {
+		display: block;
+		font-size: 0.75rem;
+	}
+
+	.chance.thin {
+		color: var(--color-muted);
+		font-weight: 400;
+	}
+
 
 	.actions {
 		display: flex;

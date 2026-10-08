@@ -1,5 +1,19 @@
 import { formatDate, formatNumber, t } from '$lib/i18n.svelte';
+import type { MessageKey } from '$lib/messages';
 import type { LastSeen, Recommendation, SeasonalSpecies, SpeciesMatch } from '$lib/api';
+
+// How many checklists are too few to trust a share.
+export const fewChecklists = 5;
+
+// The words for the share of a week's checklists that recorded a bird. Words
+// say less than a number, which suits shares that rest on few checklists.
+export function chanceKey(frequency: number): MessageKey {
+	if (frequency >= 0.8) return 'chance.almostAlways';
+	if (frequency >= 0.5) return 'chance.often';
+	if (frequency >= 0.2) return 'chance.sometimes';
+	if (frequency >= 0.05) return 'chance.rarely';
+	return 'chance.veryRarely';
+}
 
 // A bird seen within this many days counts as seen this week.
 const recentDays = 7;
