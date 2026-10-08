@@ -58,7 +58,7 @@ export function distanceText(hotspot: Recommendation): string {
 }
 
 // Whole days from an ISO date to today, counted in the reader's own calendar.
-export function daysSince(isoDate: string, today: Date): number {
+function daysSince(isoDate: string, today: Date): number {
 	const [year, month, day] = isoDate.split('-').map(Number);
 	const then = Date.UTC(year, month - 1, day);
 	const now = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
@@ -67,7 +67,7 @@ export function daysSince(isoDate: string, today: Date): number {
 
 // "today", "yesterday", "5 days ago", or the date itself once it is over two
 // weeks back, with the year when it is not this year's.
-export function seenText(isoDate: string, today: Date): string {
+function seenText(isoDate: string, today: Date): string {
 	const days = daysSince(isoDate, today);
 	if (days <= 0) return t('seen.today');
 	if (days === 1) return t('seen.yesterday');

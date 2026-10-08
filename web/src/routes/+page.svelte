@@ -10,6 +10,7 @@
 	import Scrubber from '$lib/Scrubber.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
 	import { locale, placeLabel, t } from '$lib/i18n.svelte';
+	import { locate } from '$lib/locate';
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
 	import {
 		addDays,
@@ -325,20 +326,16 @@
 	}
 
 	function useMyLocation() {
-		if (!navigator.geolocation) {
-			error = t('error.noGeolocation');
-			return;
-		}
 		error = '';
 		locating = true;
-		navigator.geolocation.getCurrentPosition(
-			(position) => {
+		locate(
+			(lat, lon) => {
 				locating = false;
-				moveHome(position.coords.latitude, position.coords.longitude, 'you');
+				moveHome(lat, lon, 'you');
 			},
-			(geoError) => {
-				error = geoError.message;
+			(message) => {
 				locating = false;
+				error = message;
 			}
 		);
 	}
@@ -436,6 +433,17 @@
 <svelte:head>
 	<title>{t('app.title')}</title>
 </svelte:head>
+
+{#snippet yearScrubber()}
+	<Scrubber
+		weeks={scrubberWeeks}
+		selected={selectedWeek}
+		note={scrubberNote}
+		onpick={searchWeek}
+		onshift={shiftWeek}
+		ontoday={goToToday}
+	/>
+{/snippet}
 
 <div class="shell" inert={planOpen || speciesLoading || !!speciesError || !!openSpecies}>
 	<Header
@@ -595,14 +603,7 @@
 				aria-labelledby={phone ? 'tab-year' : undefined}
 			>
 				{#if scrubberWeeks.length > 0}
-					<Scrubber
-						weeks={scrubberWeeks}
-						selected={selectedWeek}
-						note={scrubberNote}
-						onpick={searchWeek}
-						onshift={shiftWeek}
-						ontoday={goToToday}
-					/>
+					{@render yearScrubber()}
 				{/if}
 			</section>
 		</aside>
@@ -646,14 +647,7 @@
 			{/if}
 			{#if scrubberWeeks.length > 0}
 				<div class="scrubber-overlay">
-					<Scrubber
-						weeks={scrubberWeeks}
-						selected={selectedWeek}
-						note={scrubberNote}
-						onpick={searchWeek}
-						onshift={shiftWeek}
-						ontoday={goToToday}
-					/>
+					{@render yearScrubber()}
 				</div>
 			{/if}
 			{#if selectedHotspot}

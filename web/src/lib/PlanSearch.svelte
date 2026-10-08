@@ -2,6 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import type { SpeciesMatch } from '$lib/api';
 	import { placeLabel, t } from '$lib/i18n.svelte';
+	import { locate } from '$lib/locate';
 	import { cities, type Place } from '$lib/cities';
 	import { dateLimits, formatDay, isUsableDate, nextSaturday, todayIso } from '$lib/format';
 	import RangePicker from '$lib/RangePicker.svelte';
@@ -57,20 +58,16 @@
 	}
 
 	function useMyLocation() {
-		if (!navigator.geolocation) {
-			error = t('error.noGeolocation');
-			return;
-		}
 		error = '';
 		locating = true;
-		navigator.geolocation.getCurrentPosition(
-			(position) => {
+		locate(
+			(lat, lon) => {
 				locating = false;
-				start = { lat: position.coords.latitude, lon: position.coords.longitude, label: 'you' };
+				start = { lat, lon, label: 'you' };
 			},
-			(geoError) => {
+			(message) => {
 				locating = false;
-				error = geoError.message;
+				error = message;
 			}
 		);
 	}

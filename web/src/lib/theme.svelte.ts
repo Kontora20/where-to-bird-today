@@ -14,7 +14,7 @@ function savedChoice(): ThemeChoice {
 
 export const theme = $state({ choice: savedChoice() });
 
-export function applyTheme() {
+function applyTheme() {
 	const dark = theme.choice === 'dark' || (theme.choice === 'system' && darkQuery.matches);
 	document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 }
