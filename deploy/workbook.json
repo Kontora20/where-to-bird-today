@@ -82,7 +82,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'wtbt-server' | where Log_s startswith '{' | extend j = parse_json(Log_s) | where tostring(j.msg) == 'http request' | extend path = tostring(j.path), status = toint(j.status), ms = todouble(j.duration) / 1000000.0 | where path !in ('/health', '/ready') | summarize requests = count(), errors = countif(status >= 500), p50_ms = round(percentile(ms, 50), 0), p95_ms = round(percentile(ms, 95), 0), max_ms = round(max(ms), 0) by path = iff(path startswith '/hotspots/', '/hotspots/{id}/species/{id}', iff(path startswith '/assets' or path startswith '/_app' or path contains '.', 'static files', path)) | order by requests desc",
+        "query": "ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'wtbt-server' | where Log_s startswith '{' | extend j = parse_json(Log_s) | where tostring(j.msg) == 'http request' | extend path = tostring(j.path), status = toint(j.status), ms = todouble(j.duration) / 1000000.0 | where path !in ('/health', '/ready') | summarize requests = count(), errors = countif(status >= 500), p50_ms = round(percentile(ms, 50), 0), p95_ms = round(percentile(ms, 95), 0), max_ms = round(max(ms), 0) by path = iff(path startswith '/hotspots/', '/hotspots/:id/species/:id', iff(path startswith '/assets' or path startswith '/_app' or path contains '.', 'static files', path)) | order by requests desc",
         "size": 0,
         "title": "Endpoints: volume and latency",
         "queryType": 0,
