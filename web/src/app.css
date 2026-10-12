@@ -222,8 +222,8 @@ body {
 	color: var(--color-on-accent);
 }
 
-/* A group of hotspots: a paper disc with an ink outline, so it reads as
-   different from any one numbered hotspot. */
+/* A group of hotspots: the same ink circle as a hotspot, with a second ring
+   outside it. An orange ring outside both when any hotspot in it has a recent bird. */
 .cluster-icon .cluster {
 	display: flex;
 	align-items: center;
@@ -232,10 +232,21 @@ body {
 	height: 100%;
 	border: 1.5px solid var(--color-text);
 	border-radius: 999px;
-	background: var(--color-ground);
-	color: var(--color-text);
+	background: var(--color-text);
+	color: var(--color-ground);
 	font: 600 12px/1 var(--font-ui);
 	font-variant-numeric: tabular-nums;
+	box-shadow:
+		0 0 0 2px var(--color-ground),
+		0 0 0 3.5px var(--color-text);
+}
+
+.cluster-icon.recent .cluster {
+	box-shadow:
+		0 0 0 2px var(--color-ground),
+		0 0 0 3.5px var(--color-text),
+		0 0 0 5.5px var(--color-ground),
+		0 0 0 7.5px var(--color-accent-strong);
 }
 
 .bubble-label {

@@ -611,6 +611,7 @@
 				<p>
 					{mapCaption}
 					{t(mapLayer === 'yourBirds' ? 'map.bubbleBirds' : 'map.bubbleAll')}
+					{t('map.group')}
 					{#if targetSpecies.length > 0}{t('map.recentRing')}{/if}
 					{t('map.clickToMove')}
 				</p>

@@ -85,6 +85,7 @@ export const en = {
 	'map.all': 'All hotspots',
 	'map.bubbleAll': 'Number: place in the list. Circle size: birdwatcher lists in this week of the year.',
 	'map.bubbleBirds': 'Number: place in the list. Circle size: how many of your birds were seen here.',
+	'map.group': 'A double ring: several hotspots, the best-ranked number shown; zoom in to split them.',
 	'map.recentRing': 'An orange ring: one of your birds was seen there in the last week.',
 	'map.clickToMove': 'Click the map to move your start point.',
 
@@ -267,6 +268,7 @@ export const lt: Record<MessageKey, Message> = {
 	'map.all': 'Visos stebėjimo vietos',
 	'map.bubbleAll': 'Skaičius – vieta sąraše; dydis – sąrašų skaičius šią savaitę.',
 	'map.bubbleBirds': 'Skaičius – vieta sąraše; dydis – kiek jūsų paukščių čia matyta.',
+	'map.group': 'Dvigubas žiedas: kelios stebėjimo vietos, rodomas geriausio numeris; priartinkite, kad jos išsiskirstytų.',
 	'map.recentRing': 'Oranžinis žiedas: per savaitę matytas jūsų paukštis.',
 	'map.clickToMove': 'Spustelėkite žemėlapį, kad perkeltumėte centrą.',
 

@@ -67,7 +67,7 @@
 				.markerClusterGroup({
 					maxClusterRadius,
 					showCoverageOnHover: false,
-					iconCreateFunction: (cluster) => clusterIcon(cluster.getChildCount())
+					iconCreateFunction: (cluster) => clusterIcon(cluster.getAllChildMarkers())
 				})
 				.addTo(map);
 			map.on('click', (event) => {
@@ -124,7 +124,8 @@
 				.marker([hotspot.latitude, hotspot.longitude], {
 					icon: bubbleIcon(hotspot, size, rank + 1),
 					title: hotspot.hotspot_name,
-					zIndexOffset: offset
+					zIndexOffset: offset,
+					...{ rank: rank + 1, recent: isRecent(hotspot) }
 				})
 				.on('click', () => onselect(hotspot.hotspot_id))
 				.addTo(markersLayer);
@@ -180,25 +181,29 @@
 		const wrapper = document.createElement('div');
 		wrapper.style.width = wrapper.style.height = '100%';
 		wrapper.append(bubble, label);
-		const recent = birdBadge(hotspot, birds, today)?.recent ?? false;
 		return leaflet.divIcon({
-			className: recent ? 'bubble-icon recent' : 'bubble-icon',
+			className: isRecent(hotspot) ? 'bubble-icon recent' : 'bubble-icon',
 			html: wrapper,
 			iconSize: [size, size],
 			iconAnchor: [size / 2, size / 2]
 		});
 	}
 
-	// A cluster's number is how many hotspots it groups, not a sum of any
-	// hotspot's own count -- a different, unrelated quantity, so it gets its
-	// own modest size curve rather than sharing bubbleIcon's.
-	function clusterIcon(count: number): Leaflet.DivIcon {
-		const size = Math.min(smallestBubble + bubbleRange, smallestBubble + 6 * Math.sqrt(count));
+	function isRecent(hotspot: Recommendation): boolean {
+		return birdBadge(hotspot, birds, today)?.recent ?? false;
+	}
+
+	// A group of hotspots shows the number of the best-ranked one inside it, so
+	// every number on the map means a place in the list. The outer ring marks it
+	// as a group; zooming in splits it into the numbered hotspots.
+	function clusterIcon(children: Leaflet.Marker[]): Leaflet.DivIcon {
+		const members = children.map((child) => child.options as unknown as { rank: number; recent: boolean });
+		const size = Math.min(smallestBubble + bubbleRange, smallestBubble + 6 * Math.sqrt(members.length));
 		const cluster = document.createElement('div');
 		cluster.className = 'cluster';
-		cluster.textContent = String(count);
+		cluster.textContent = String(Math.min(...members.map((member) => member.rank)));
 		return leaflet.divIcon({
-			className: 'cluster-icon',
+			className: members.some((member) => member.recent) ? 'cluster-icon recent' : 'cluster-icon',
 			html: cluster,
 			iconSize: [size, size],
 			iconAnchor: [size / 2, size / 2]
