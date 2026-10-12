@@ -46,6 +46,7 @@ export const en = {
 	'error.crashed': 'Something went wrong on this page.',
 
 	'area.label': 'Around',
+	'area.cities': 'Start from a city',
 	'area.summaryCar': '{amount} by car',
 	'area.summaryStraight': '{amount} straight line',
 	'area.useMyLocation': 'Use my location',
@@ -228,6 +229,7 @@ export const lt: Record<MessageKey, Message> = {
 	'error.crashed': 'Puslapyje įvyko klaida.',
 
 	'area.label': 'Paieškos centras',
+	'area.cities': 'Pradėti nuo miesto',
 	'area.summaryCar': '{amount} automobiliu',
 	'area.summaryStraight': '{amount} tiesia linija',
 	'area.useMyLocation': 'Naudoti mano vietą',

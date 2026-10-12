@@ -9,6 +9,7 @@
 	import Scrubber from '$lib/Scrubber.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
 	import { locale, placeLabel, t } from '$lib/i18n.svelte';
+	import { cities } from '$lib/cities';
 	import { locate } from '$lib/locate';
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
 	import {
@@ -449,6 +450,18 @@
 					<span aria-hidden="true">{controlsOpen ? '▴' : '▾'}</span>
 				</button>
 				<div class="fold" class:open={controlsOpen}>
+					<div class="cities" role="group" aria-label={t('area.cities')}>
+						{#each cities as city (city.label)}
+							<button
+								type="button"
+								class="text-button"
+								aria-pressed={home.lat === city.lat && home.lon === city.lon}
+								onclick={() => moveHome(city.lat, city.lon, city.label)}
+							>
+								{city.label}
+							</button>
+						{/each}
+					</div>
 					<RangePicker
 						value={range}
 						onchange={(next) => {
@@ -693,6 +706,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
+	}
+
+	.cities {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 16px;
+	}
+
+	.cities button {
+		min-height: 32px;
+		font-size: 0.9rem;
+		font-weight: 500;
 	}
 
 	.links {
@@ -1011,7 +1036,8 @@
 			border-right: 0;
 		}
 
-		.link {
+		.link,
+		.cities button {
 			min-height: 44px;
 		}
 
