@@ -800,6 +800,10 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	.row .hint {
+		white-space: nowrap;
+	}
+
 	.hint {
 		margin: 0;
 		color: var(--color-muted);

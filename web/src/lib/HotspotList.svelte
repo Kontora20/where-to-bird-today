@@ -71,13 +71,7 @@
 				<span class="text">
 					<span class="name">{name.main}</span>
 					{#if name.alternative}<span class="alternative">{name.alternative}</span>{/if}
-					<span class="meta">
-						{distanceText(hotspot)} ·
-						<span title={t('list.countTitle')}>{t('list.count', { count: checklistCount(hotspot) })}</span>
-						{#if birds.length > 0}
-							· {t('list.expected', { score: formatNumber(hotspot.score, 1), count: birds.length })}
-						{/if}
-					</span>
+					<span class="meta">{distanceText(hotspot)}</span>
 					{#if status}
 						<span class="status" class:recent={status.recent}>{status.text}</span>
 					{/if}
@@ -89,14 +83,16 @@
 				{@const sightings = mine(hotspot)}
 				<div class="details">
 					<p class="note">{t('card.meta', { count: checklistCount(hotspot) })}</p>
+					{#if birds.length > 0}
+						<p class="note">{t('list.expected', { score: formatNumber(hotspot.score, 1) })}</p>
+					{/if}
 
 					{#if sightings.length > 0}
 						<h4>{t('card.yourBirds')}</h4>
-						<ul class="rows">
+						<ul class="rows stacked">
 							{#each sightings as entry (entry.bird.species_id)}
 								<li>
 									<span class="label">{entry.bird.common_name}</span>
-									<span class="dots" aria-hidden="true"></span>
 									{#if entry.url}
 										<a href={entry.url} class:recent={entry.recent} target="_blank" rel="noopener noreferrer">{entry.text}</a>
 									{:else}
@@ -236,14 +232,20 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		padding: 0 0 16px 48px;
+		margin: 0 0 16px 17px;
+		padding: 0 0 0 30px;
+		border-left: 1px solid var(--color-text);
 	}
 
 	h4 {
-		margin: 6px 0 0;
-		font-size: 1rem;
+		margin: 14px 0 2px;
+		font-size: 1.1rem;
 		font-style: italic;
 		font-weight: 500;
+	}
+
+	h4:first-of-type {
+		margin-top: 6px;
 	}
 
 	.rows {
@@ -276,7 +278,20 @@
 	}
 
 	.label {
+		font-weight: 500;
 		overflow-wrap: anywhere;
+	}
+
+	.rows.stacked li {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0;
+		padding: 5px 0;
+	}
+
+	.rows.stacked .value,
+	.rows.stacked a {
+		text-align: left;
 	}
 
 	.dots {
@@ -305,7 +320,8 @@
 	.note {
 		margin: 0;
 		color: var(--color-muted);
-		font-size: 0.8rem;
+		font-size: 0.85rem;
+		line-height: 1.45;
 	}
 
 	.actions {
