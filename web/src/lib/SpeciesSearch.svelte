@@ -104,7 +104,7 @@
 	.icon {
 		position: absolute;
 		top: 50%;
-		left: 14px;
+		left: 4px;
 		transform: translateY(-50%);
 		color: var(--color-muted);
 		pointer-events: none;
@@ -113,10 +113,11 @@
 	input {
 		width: 100%;
 		height: 44px;
-		padding: 0 14px 0 42px;
-		border: 1px solid var(--color-control-border);
-		border-radius: 999px;
-		background: var(--color-panel);
+		padding: 0 4px 0 30px;
+		border: 0;
+		border-bottom: 1px solid var(--color-text);
+		border-radius: 0;
+		background: none;
 		color: var(--color-text);
 		font: inherit;
 		font-size: 1rem;
@@ -138,10 +139,8 @@
 		margin: 0.25rem 0 0;
 		padding: 0.25rem 0;
 		list-style: none;
-		border: 1px solid var(--color-line);
-		border-radius: 8px;
-		background: var(--color-panel);
-		box-shadow: var(--shadow-raised);
+		border: 1px solid var(--color-text);
+		background: var(--color-ground);
 	}
 
 	.suggestions button {
@@ -155,14 +154,20 @@
 
 	.suggestions button:hover,
 	.suggestions button:focus-visible {
-		background: var(--color-chip);
+		background: var(--color-line-soft);
 	}
 
 	@media (max-width: 639px) {
 		input {
 			height: 48px;
-			border: 0;
-			box-shadow: var(--shadow-raised);
+			border-bottom: 0;
+			background: var(--color-ground);
+			box-shadow: 0 0 0 1px var(--color-text);
+			padding-left: 36px;
+		}
+
+		.icon {
+			left: 10px;
 		}
 	}
 </style>

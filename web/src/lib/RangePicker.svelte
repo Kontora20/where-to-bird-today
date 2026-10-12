@@ -5,8 +5,8 @@
 	interface Props {
 		// "min:60" for a drive time of 60 minutes, "km:25" for 25 km in a straight line.
 		value: string;
-		// The place the range is measured from.
-		place: string;
+		// The place the range is measured from; when given, a sentence says so.
+		place?: string;
 		onchange: (value: string) => void;
 	}
 
@@ -46,9 +46,13 @@
 </script>
 
 <div class="picker">
-	<div class="toggle" role="group" aria-label={t('range.measureBy')}>
-		<button type="button" aria-pressed={unit === 'min'} onclick={() => setUnit('min')}>{t('range.driveTime')}</button>
-		<button type="button" aria-pressed={unit === 'km'} onclick={() => setUnit('km')}>{t('range.straightLine')}</button>
+	<div class="measure" role="group" aria-label={t('range.measureBy')}>
+		<button type="button" class="text-button" aria-pressed={unit === 'min'} onclick={() => setUnit('min')}>
+			{t('range.driveTime')}
+		</button>
+		<button type="button" class="text-button" aria-pressed={unit === 'km'} onclick={() => setUnit('km')}>
+			{t('range.straightLine')}
+		</button>
 	</div>
 	<div class="amounts" role="group" aria-label={t(unit === 'min' ? 'range.minutesGroup' : 'range.kilometresGroup')}>
 		{#each amounts as option (option)}
@@ -73,67 +77,55 @@
 			<span class="limits">({limits.low}–{limits.high})</span>
 		</label>
 	{/if}
-	<p class="caption">
-		{t(unit === 'min' ? 'range.captionDrive' : 'range.captionStraight', { amount, place: placeLabel(place) })}
-	</p>
+	{#if place}
+		<p class="caption">
+			{t(unit === 'min' ? 'range.captionDrive' : 'range.captionStraight', { amount, place: placeLabel(place) })}
+		</p>
+	{/if}
 </div>
 
 <style>
 	.picker {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 10px;
 	}
 
-	.toggle {
+	.measure {
 		display: flex;
-		align-self: flex-start;
-		padding: 3px;
-		border-radius: 10px;
-		background: var(--color-control-track);
+		gap: 16px;
 	}
 
-	.toggle button {
-		height: 36px;
-		padding: 0 14px;
-		border: 0;
-		border-radius: 8px;
-		background: none;
-		color: var(--color-muted);
-		font: inherit;
+	.measure button {
+		min-height: 36px;
 		font-size: 0.9rem;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.toggle button[aria-pressed='true'] {
-		background: var(--color-inverse);
-		color: var(--color-on-inverse);
+		font-weight: 500;
 	}
 
 	.amounts {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: 4px;
 	}
 
+	/* The chosen amount is circled in ink. */
 	.amounts button {
+		min-width: 44px;
 		height: 36px;
 		padding: 0 12px;
-		border: 1px solid var(--color-control-border);
+		border: 1.5px solid transparent;
 		border-radius: 999px;
-		background: var(--color-panel);
+		background: none;
 		color: var(--color-text);
 		font: inherit;
 		font-size: 0.9rem;
-		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 		cursor: pointer;
 	}
 
 	.amounts button[aria-pressed='true'] {
-		border-color: var(--color-inverse);
-		background: var(--color-inverse);
-		color: var(--color-on-inverse);
+		border-color: var(--color-text);
+		font-weight: 600;
 	}
 
 	.custom {
@@ -141,24 +133,19 @@
 		align-items: center;
 		gap: 8px;
 		font-size: 0.9rem;
-		font-weight: 600;
+		font-weight: 500;
 	}
 
 	.custom input {
-		width: 90px;
+		width: 80px;
 		height: 36px;
-		padding: 0 10px;
-		border: 1px solid var(--color-control-border);
-		border-radius: 10px;
-		background: var(--color-panel);
+		padding: 0 4px;
+		border: 0;
+		border-bottom: 1px solid var(--color-text);
+		background: none;
 		color: var(--color-text);
 		font: inherit;
-		font-family: var(--font-mono);
-	}
-
-	.limits {
-		color: var(--color-muted);
-		font-weight: 400;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.caption {
@@ -167,11 +154,16 @@
 		font-size: 0.85rem;
 	}
 
+	.limits {
+		color: var(--color-muted);
+		font-weight: 400;
+	}
+
 	@media (max-width: 639px) {
-		.toggle button,
+		.measure button,
 		.amounts button,
 		.custom input {
-			height: 44px;
+			min-height: 44px;
 		}
 	}
 </style>

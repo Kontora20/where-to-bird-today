@@ -204,10 +204,10 @@
 		width: min(480px, 100%);
 		max-height: 100dvh;
 		overflow-y: auto;
-		border-radius: 16px;
+		border-radius: 0;
 		background: var(--color-ground);
 		color: var(--color-text);
-		box-shadow: var(--shadow-raised);
+		border: 1px solid var(--color-text);
 		outline: none;
 	}
 
@@ -270,7 +270,7 @@
 
 	.count {
 		color: var(--color-muted);
-		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
 		font-size: 0.9rem;
 	}
 
@@ -357,7 +357,7 @@
 		gap: 6px;
 		padding: 4px 4px 4px 14px;
 		border-radius: 999px;
-		background: var(--color-chip);
+		background: var(--color-line-soft);
 		font-weight: 600;
 	}
 

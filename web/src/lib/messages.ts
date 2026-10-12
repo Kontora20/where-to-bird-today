@@ -45,7 +45,7 @@ export const en = {
 	'error.server': 'Something went wrong on the server.',
 	'error.crashed': 'Something went wrong on this page.',
 
-	'area.heading': 'Around {place}',
+	'area.label': 'Around',
 	'area.summaryCar': '{amount} by car',
 	'area.summaryStraight': '{amount} straight line',
 	'area.useMyLocation': 'Use my location',
@@ -83,10 +83,10 @@ export const en = {
 
 	'map.layer': 'Map layer',
 	'map.all': 'All hotspots',
-	'map.legendButton': 'What the map shows',
-	'map.bubbleAll': 'Bubble: birdwatcher lists in this week of the year',
-	'map.bubbleBirds': 'Bubble: how many of your birds were seen here',
-	'map.clickToMove': 'Click the map to move your start point',
+	'map.bubbleAll': 'Number: place in the list. Circle size: birdwatcher lists in this week of the year.',
+	'map.bubbleBirds': 'Number: place in the list. Circle size: how many of your birds were seen here.',
+	'map.recentRing': 'An orange ring: one of your birds was seen there in the last week.',
+	'map.clickToMove': 'Click the map to move your start point.',
 
 	'list.count': { one: '{count} list', other: '{count} lists' },
 	'list.countTitle': 'Checklists in this week of the year',
@@ -225,7 +225,7 @@ export const lt: Record<MessageKey, Message> = {
 	'error.server': 'Serverio klaida.',
 	'error.crashed': 'Puslapyje įvyko klaida.',
 
-	'area.heading': 'Paieškos centras: {place}',
+	'area.label': 'Paieškos centras',
 	'area.summaryCar': '{amount} automobiliu',
 	'area.summaryStraight': '{amount} tiesia linija',
 	'area.useMyLocation': 'Naudoti mano vietą',
@@ -264,10 +264,10 @@ export const lt: Record<MessageKey, Message> = {
 
 	'map.layer': 'Žemėlapio sluoksnis',
 	'map.all': 'Visos stebėjimo vietos',
-	'map.legendButton': 'Ką rodo žemėlapis',
-	'map.bubbleAll': 'Burbulas: paukštininkų sąrašai šią metų savaitę',
-	'map.bubbleBirds': 'Burbulas: kiek jūsų paukščių čia matyta',
-	'map.clickToMove': 'Spustelėkite žemėlapį, kad perkeltumėte paieškos centrą',
+	'map.bubbleAll': 'Skaičius: vieta sąraše. Apskritimo dydis: paukštininkų sąrašai šią metų savaitę.',
+	'map.bubbleBirds': 'Skaičius: vieta sąraše. Apskritimo dydis: kiek jūsų paukščių čia matyta.',
+	'map.recentRing': 'Oranžinis žiedas: čia per pastarąją savaitę matytas bent vienas jūsų paukštis.',
+	'map.clickToMove': 'Spustelėkite žemėlapį, kad perkeltumėte paieškos centrą.',
 
 	'list.count': { one: '{count} sąrašas', few: '{count} sąrašai', other: '{count} sąrašų' },
 	'list.countTitle': 'Sąrašai šią metų savaitę',

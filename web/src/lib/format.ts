@@ -194,6 +194,13 @@ export function sparkBars(year: number[], week: number, maxHeight = 28): SparkBa
 	}));
 }
 
+// An eBird hotspot name with the second language in brackets, "Vingis Park
+// (Vingio parkas)", as the name and the bracketed part.
+export function splitName(name: string): { main: string; alternative?: string } {
+	const match = name.match(/^(.*\S)\s*\(([^()]+)\)\s*$/);
+	return match ? { main: match[1], alternative: match[2] } : { main: name };
+}
+
 // One bar of the year scrubber.
 export interface ScrubberWeek {
 	week: number;

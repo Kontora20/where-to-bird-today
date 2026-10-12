@@ -28,10 +28,6 @@
 	const phoneQuery = '(max-width: 639px)';
 	// The share of a phone's height the bottom sheet covers.
 	const sheetShare = 0.45;
-	// The space the hotspot card covers: its width on a desktop, the share of the
-	// height it may take on a phone.
-	const cardWidth = 372;
-	const cardShare = 0.6;
 	const bubbleClearance = (smallestBubble + bubbleRange) / 2;
 
 	// The pixel radius markers are grouped within, at any zoom: smaller than
@@ -65,6 +61,7 @@
 				})
 				.addTo(map);
 			leaflet.control.zoom({ position: 'bottomright' }).addTo(map);
+			leaflet.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 			markersLayer = leaflet
 				.markerClusterGroup({
 					maxClusterRadius,
@@ -105,7 +102,7 @@
 		markers.clear();
 		const sizeOf = layer === 'yourBirds' ? birdCount : checklistCount;
 		const largest = Math.max(1, ...hotspots.map(sizeOf));
-		for (const hotspot of hotspots) {
+		for (const [rank, hotspot] of hotspots.entries()) {
 			// A hotspot with nothing to show in this layer -- no checklists this
 			// week, or none of your birds -- draws no bubble; it still shows up
 			// in the list, but a map full of same-size "0" bubbles is noise, not
@@ -116,7 +113,7 @@
 			const offset = Math.round(smallestBubble + bubbleRange - size);
 			const marker = leaflet
 				.marker([hotspot.latitude, hotspot.longitude], {
-					icon: bubbleIcon(hotspot, size, sizeOf(hotspot)),
+					icon: bubbleIcon(hotspot, size, rank + 1),
 					title: hotspot.hotspot_name,
 					zIndexOffset: offset
 				})
@@ -140,14 +137,14 @@
 		// since the marker had no DOM element to style before this.
 		markersLayer.zoomToShowLayer(selected.marker, () => {
 			applySelection(id);
-			// The hotspot card covers part of the map, so keep the whole bubble
-			// clear of it, not only its centre.
+			// On a phone the bottom sheet covers the lower part of the map, so keep
+			// the whole bubble clear of it, not only its centre.
 			const phone = window.matchMedia(phoneQuery).matches;
 			map.panInside(selected.marker.getLatLng(), {
 				paddingTopLeft: [bubbleClearance, (phone ? 80 : 20) + bubbleClearance],
 				paddingBottomRight: [
-					(phone ? 20 : cardWidth) + bubbleClearance,
-					(phone ? window.innerHeight * cardShare : 20) + bubbleClearance
+					bubbleClearance,
+					(phone ? window.innerHeight * sheetShare : 20) + bubbleClearance
 				]
 			});
 		});
@@ -162,27 +159,21 @@
 	}
 
 	// The names come from outside, so the marker is built from elements and
-	// text nodes, never from an HTML string.
-	function bubbleIcon(hotspot: Recommendation, size: number, count: number): Leaflet.DivIcon {
+	// text nodes, never from an HTML string. The number is the hotspot's place
+	// in the list.
+	function bubbleIcon(hotspot: Recommendation, size: number, number: number): Leaflet.DivIcon {
 		const bubble = document.createElement('div');
 		bubble.className = 'bubble';
-		bubble.textContent = String(count);
+		bubble.textContent = String(number);
 		const label = document.createElement('span');
 		label.className = 'bubble-label';
 		label.textContent = hotspot.hotspot_name;
 		const wrapper = document.createElement('div');
 		wrapper.style.width = wrapper.style.height = '100%';
 		wrapper.append(bubble, label);
-		const badge = birdBadge(hotspot, birds, today);
-		if (badge) {
-			const badgeElement = document.createElement('div');
-			badgeElement.className = 'badge';
-			badgeElement.classList.toggle('recent', badge.recent);
-			badgeElement.textContent = String(badge.count);
-			wrapper.append(badgeElement);
-		}
+		const recent = birdBadge(hotspot, birds, today)?.recent ?? false;
 		return leaflet.divIcon({
-			className: 'bubble-icon',
+			className: recent ? 'bubble-icon recent' : 'bubble-icon',
 			html: wrapper,
 			iconSize: [size, size],
 			iconAnchor: [size / 2, size / 2]

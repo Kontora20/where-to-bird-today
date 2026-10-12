@@ -26,8 +26,8 @@
 					class="photo"
 					src={bird.photo.thumb_url}
 					alt=""
-					width="40"
-					height="40"
+					width="48"
+					height="48"
 					loading="lazy"
 					title={t('season.photo', { attribution: bird.photo.attribution, license: bird.photo.license })}
 				/>
@@ -36,6 +36,7 @@
 			{/if}
 			<button type="button" class="info" onclick={() => onopen(bird.species_id)}>
 				<span class="name">{bird.common_name}</span>
+				<span class="latin" lang="la">{bird.scientific_name}</span>
 				<span class="note">{peakText(bird)}</span>
 			</button>
 			<span class="spark" aria-hidden="true" title={t('season.chance')}>
@@ -63,7 +64,7 @@
 		display: flex;
 		flex-direction: column;
 		margin: 0;
-		padding: 0 12px;
+		padding: 0 20px;
 		list-style: none;
 	}
 
@@ -71,15 +72,18 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 6px 8px;
-		border-top: 1px solid var(--color-line-soft);
+		padding: 10px 0;
+		border-bottom: 1px solid var(--color-line);
+	}
+
+	li:first-child {
+		border-top: 1px solid var(--color-text);
 	}
 
 	.photo {
 		flex-shrink: 0;
-		width: 40px;
-		height: 40px;
-		border-radius: 8px;
+		width: 48px;
+		height: 48px;
 		object-fit: cover;
 		background: repeating-linear-gradient(
 			45deg,
@@ -105,8 +109,14 @@
 	}
 
 	.name {
-		font-size: 0.9rem;
+		font-size: 1rem;
 		font-weight: 600;
+	}
+
+	.latin {
+		color: var(--color-muted);
+		font-size: 0.85rem;
+		font-style: italic;
 	}
 
 	.note {
@@ -125,7 +135,6 @@
 
 	.spark span {
 		flex: 1;
-		border-radius: 1px 1px 0 0;
 		background: var(--color-bar);
 	}
 
@@ -139,19 +148,19 @@
 
 	.toggle {
 		flex-shrink: 0;
-		width: 40px;
-		height: 40px;
-		border: 1px solid var(--color-control-border);
-		border-radius: 999px;
-		background: var(--color-panel);
+		width: 44px;
+		height: 44px;
+		border: 1px solid var(--color-text);
+		border-radius: 0;
+		background: none;
 		color: var(--color-text);
-		font: 700 1.1rem/1 inherit;
+		font: 600 1.1rem/1 inherit;
 		cursor: pointer;
 	}
 
 	.toggle.tracked {
-		border-color: var(--color-accent-strong);
-		background: var(--color-chip);
+		background: var(--color-text);
+		color: var(--color-ground);
 	}
 
 	.toggle:disabled {

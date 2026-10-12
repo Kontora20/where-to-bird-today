@@ -2,16 +2,28 @@
 	import { tick } from 'svelte';
 	import type { Recommendation, SpeciesMatch } from '$lib/api';
 	import { formatNumber, t } from '$lib/i18n.svelte';
-	import { checklistCount, distanceText, lastSeenStatus } from '$lib/format';
+	import {
+		chanceKey,
+		checklistCount,
+		distanceText,
+		fewChecklists,
+		httpsUrl,
+		lastSeenStatus,
+		sighting,
+		splitName
+	} from '$lib/format';
 
 	interface Props {
 		hotspots: Recommendation[];
 		selectedId: number | null;
 		birds: SpeciesMatch[];
-		onselect: (hotspotId: number) => void;
+		// Null when the open entry is picked again and closes.
+		onselect: (hotspotId: number | null) => void;
+		onpickspecies: (hotspot: Recommendation, speciesId: number) => void;
+		onsearchhere: (hotspot: Recommendation) => void;
 	}
 
-	let { hotspots, selectedId, birds, onselect }: Props = $props();
+	let { hotspots, selectedId, birds, onselect, onpickspecies, onsearchhere }: Props = $props();
 
 	// The list starts with the best few so it does not push the sections below
 	// it off the screen; the rest are one click away.
@@ -30,35 +42,100 @@
 			document.getElementById(`hotspot-${selectedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 		);
 	});
+
+	function mine(hotspot: Recommendation) {
+		return birds.map((bird) => ({
+			bird,
+			...sighting(
+				hotspot.last_seen?.find((seen) => seen.species_id === bird.species_id),
+				today
+			)
+		}));
+	}
 </script>
 
 <ul class="list">
-	{#each shown as hotspot (hotspot.hotspot_id)}
+	{#each shown as hotspot, index (hotspot.hotspot_id)}
 		{@const status = lastSeenStatus(hotspot, birds, today)}
+		{@const name = splitName(hotspot.hotspot_name)}
+		{@const selected = hotspot.hotspot_id === selectedId}
 		<li id="hotspot-{hotspot.hotspot_id}">
 			<button
 				type="button"
-				class:selected={hotspot.hotspot_id === selectedId}
-				aria-pressed={hotspot.hotspot_id === selectedId}
-				onclick={() => onselect(hotspot.hotspot_id)}
+				class="entry"
+				class:selected
+				aria-expanded={selected}
+				onclick={() => onselect(selected ? null : hotspot.hotspot_id)}
 			>
-				<span class="ring"></span>
+				<span class="number" aria-hidden="true">{index + 1}</span>
 				<span class="text">
-					<span class="top">
-						<span class="name">{hotspot.hotspot_name}</span>
-						<span class="count" title={t('list.countTitle')}>{t('list.count', { count: checklistCount(hotspot) })}</span>
-					</span>
+					<span class="name">{name.main}</span>
+					{#if name.alternative}<span class="alternative">{name.alternative}</span>{/if}
 					<span class="meta">
-						{distanceText(hotspot)}{#if birds.length > 0}
-							· {t('list.expected', { score: formatNumber(hotspot.score, 1), count: birds.length })}{/if}
+						{distanceText(hotspot)} ·
+						<span title={t('list.countTitle')}>{t('list.count', { count: checklistCount(hotspot) })}</span>
+						{#if birds.length > 0}
+							· {t('list.expected', { score: formatNumber(hotspot.score, 1), count: birds.length })}
+						{/if}
 					</span>
 					{#if status}
-						<span class="status" class:recent={status.recent}>
-							<span class="dot"></span>{status.text}
-						</span>
+						<span class="status" class:recent={status.recent}>{status.text}</span>
 					{/if}
 				</span>
 			</button>
+
+			{#if selected}
+				{@const shownSpecies = hotspot.top_species.slice(0, 5)}
+				{@const sightings = mine(hotspot)}
+				<div class="details">
+					<p class="note">{t('card.meta', { count: checklistCount(hotspot) })}</p>
+
+					{#if sightings.length > 0}
+						<h4>{t('card.yourBirds')}</h4>
+						<ul class="rows">
+							{#each sightings as entry (entry.bird.species_id)}
+								<li>
+									<span class="label">{entry.bird.common_name}</span>
+									<span class="dots" aria-hidden="true"></span>
+									{#if entry.url}
+										<a href={entry.url} class:recent={entry.recent} target="_blank" rel="noopener noreferrer">{entry.text}</a>
+									{:else}
+										<span class="value">{entry.text}</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+
+					{#if shownSpecies.length > 0}
+						<h4>{t('card.likely')}</h4>
+						<ul class="rows">
+							{#each shownSpecies as species (species.species_id)}
+								{@const tooFew = species.checklists < fewChecklists}
+								<li>
+									<button type="button" class="row-button" onclick={() => onpickspecies(hotspot, species.species_id)}>
+										<span class="label">{species.common_name}</span>
+										<span class="dots" aria-hidden="true"></span>
+										<span class="value">
+											{tooFew ? t('chance.tooLittle') : t(chanceKey(species.frequency))}
+										</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+						<p class="note">{t('card.share')}</p>
+					{:else}
+						<p class="note">{t('card.noChecklists')}</p>
+					{/if}
+
+					<div class="actions">
+						<button type="button" class="primary" onclick={() => onsearchhere(hotspot)}>{t('card.searchHere')}</button>
+						{#if httpsUrl(hotspot.verification_url)}
+							<a href={httpsUrl(hotspot.verification_url)} target="_blank" rel="noopener noreferrer">eBird ↗</a>
+						{/if}
+					</div>
+				</div>
+			{/if}
 		</li>
 	{/each}
 </ul>
@@ -70,42 +147,201 @@
 
 <style>
 	.list {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
 		margin: 0;
-		padding: 0 12px;
+		padding: 0 20px;
 		list-style: none;
 	}
 
-	.list button {
+	.list > li {
+		border-bottom: 1px solid var(--color-line);
+	}
+
+	/* The ink rule above the first entry. */
+	.list > li:first-child {
+		border-top: 1px solid var(--color-text);
+	}
+
+	.entry {
 		display: flex;
-		gap: 12px;
+		gap: 14px;
 		width: 100%;
-		padding: 9px 8px;
-		border: 1px solid var(--color-line);
-		border-radius: 10px;
-		background: var(--color-panel);
+		padding: 12px 0;
+		border: 0;
+		background: none;
 		color: var(--color-text);
 		font: inherit;
 		text-align: left;
 		cursor: pointer;
 	}
 
-	.list button.selected {
-		border-color: var(--color-accent-strong);
-		background: var(--color-selected);
+	/* A large old-style figure; the open entry's is a filled orange disc. */
+	.number {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		border-radius: 999px;
+		font-size: 1.7rem;
+		font-variant-numeric: oldstyle-nums;
+		line-height: 1;
+	}
+
+	.selected .number {
+		background: var(--color-accent-strong);
+		color: var(--color-on-accent);
+		font-size: 1rem;
+		font-weight: 600;
+		font-variant-numeric: lining-nums;
+	}
+
+	.text {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.name {
+		font-size: 1rem;
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.alternative {
+		color: var(--color-muted);
+		font-size: 0.85rem;
+		font-style: italic;
+	}
+
+	.meta {
+		color: var(--color-muted);
+		font-size: 0.85rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.status {
+		color: var(--color-muted);
+		font-size: 0.85rem;
+	}
+
+	.status.recent {
+		color: var(--color-accent-text);
+		font-weight: 600;
+	}
+
+	.details {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 0 0 16px 48px;
+	}
+
+	h4 {
+		margin: 6px 0 0;
+		font-size: 1rem;
+		font-style: italic;
+		font-weight: 500;
+	}
+
+	.rows {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.rows li {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		padding: 3px 0;
+		font-size: 0.9rem;
+	}
+
+	.row-button {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		width: 100%;
+		min-height: 28px;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--color-text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.label {
+		overflow-wrap: anywhere;
+	}
+
+	.dots {
+		flex: 1;
+		min-width: 12px;
+		border-bottom: 1px dotted var(--color-muted);
+	}
+
+	.value,
+	.rows a {
+		color: var(--color-muted);
+		font-size: 0.85rem;
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
+	.rows a {
+		text-decoration: underline;
+	}
+
+	.rows a.recent {
+		color: var(--color-accent-text);
+		font-weight: 600;
+	}
+
+	.note {
+		margin: 0;
+		color: var(--color-muted);
+		font-size: 0.8rem;
+	}
+
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin-top: 4px;
+	}
+
+	.primary {
+		min-height: 44px;
+		padding: 0 18px;
+		border: 0;
+		border-radius: 0;
+		background: var(--color-text);
+		color: var(--color-ground);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.actions a {
+		color: var(--color-text);
+		font-weight: 500;
+		text-decoration: underline;
 	}
 
 	.more {
-		margin: 6px 12px 0;
+		margin: 6px 20px 0;
 		padding: 8px 0;
 		border: 0;
 		background: none;
-		color: var(--color-accent-text);
+		color: var(--color-text);
 		font: inherit;
 		font-size: 0.9rem;
-		font-weight: 600;
+		font-weight: 500;
 		text-decoration: underline;
 		cursor: pointer;
 	}
@@ -114,69 +350,10 @@
 		.more {
 			min-height: 44px;
 		}
-	}
 
-	.ring {
-		flex-shrink: 0;
-		width: 22px;
-		height: 22px;
-		margin-top: 2px;
-		border: 3px solid var(--color-accent-strong);
-		border-radius: 999px;
-		background: var(--color-panel);
-	}
-
-	.text {
-		display: flex;
-		flex: 1;
-		flex-direction: column;
-		gap: 3px;
-		min-width: 0;
-	}
-
-	.top {
-		display: flex;
-		justify-content: space-between;
-		gap: 8px;
-	}
-
-	.name {
-		font-size: 0.95rem;
-		font-weight: 700;
-		overflow-wrap: anywhere;
-	}
-
-	.count {
-		font: 600 0.8rem var(--font-mono);
-	}
-
-	.meta {
-		color: var(--color-muted);
-		font-size: 0.8rem;
-	}
-
-	.status {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		color: var(--color-muted);
-		font-size: 0.8rem;
-		font-weight: 600;
-	}
-
-	.status.recent {
-		color: var(--color-accent-text);
-	}
-
-	.dot {
-		flex-shrink: 0;
-		width: 8px;
-		height: 8px;
-		border-radius: 999px;
-		background: var(--color-control-border);
-	}
-
-	.recent .dot {
-		background: var(--color-accent-strong);
+		.row-button {
+			min-height: 44px;
+			align-items: center;
+		}
 	}
 </style>

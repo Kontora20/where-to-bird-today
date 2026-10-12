@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import Header from '$lib/Header.svelte';
-	import HotspotCard from '$lib/HotspotCard.svelte';
 	import HotspotList from '$lib/HotspotList.svelte';
 	import HotspotMap from '$lib/HotspotMap.svelte';
 	import InSeason from '$lib/InSeason.svelte';
@@ -68,39 +67,17 @@
 	let mapLayer = $state<MapLayer>('all');
 	let planOpen = $state(false);
 
-	// The map's legend shows for a few seconds, on load and after the layer
-	// changes, then gets out of the way; the i button brings it back.
-	const legendSeconds = 6;
-	let legendOpen = $state(true);
-	let legendTimer: ReturnType<typeof setTimeout> | undefined;
-
-	function showLegend() {
-		legendOpen = true;
-		clearTimeout(legendTimer);
-		legendTimer = setTimeout(() => (legendOpen = false), legendSeconds * 1000);
-	}
-
-	function toggleLegend() {
-		if (!legendOpen) return showLegend();
-		clearTimeout(legendTimer);
-		legendOpen = false;
-	}
-
-	$effect(() => {
-		void mapLayer;
-		showLegend();
-		return () => clearTimeout(legendTimer);
-	});
 	// On a phone the range and the date are folded into one line to leave room
 	// for the lists; on a wider screen they are always open.
 	let controlsOpen = $state(false);
+	const dateText = $derived(date === todayIso() ? t('common.today') : formatDay(date));
 	const controlsSummary = $derived.by(() => {
 		const [unit, amount] = range.split(':');
 		const reach =
 			unit === 'min'
 				? t('area.summaryCar', { amount: rangeLabel('min', Number(amount)) })
 				: t('area.summaryStraight', { amount: rangeLabel('km', Number(amount)) });
-		return `${reach} · ${date === todayIso() ? t('common.today') : formatDay(date)}`;
+		return `${reach} · ${dateText}`;
 	});
 
 	// "Your birds" has nothing to size bubbles by once the list is empty, so
@@ -124,7 +101,14 @@
 		seasonSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
-	const selectedHotspot = $derived(recommendations.find((hotspot) => hotspot.hotspot_id === selectedHotspotId));
+	// What the caption under the map says about the area searched.
+	const mapCaption = $derived.by(() => {
+		const [unit, amount] = range.split(':');
+		return t(unit === 'min' ? 'range.captionDrive' : 'range.captionStraight', {
+			amount: Number(amount),
+			place: placeLabel(home.label)
+		});
+	});
 
 	let openSpecies = $state<SpeciesDetail | null>(null);
 	let speciesLoading = $state(false);
@@ -276,9 +260,11 @@
 		return refresh();
 	}
 
-	function selectHotspot(hotspotId: number) {
+	function selectHotspot(hotspotId: number | null) {
 		selectedHotspotId = hotspotId;
 	}
+
+	const selectedHotspot = $derived(recommendations.find((hotspot) => hotspot.hotspot_id === selectedHotspotId));
 
 	// The hotspot to show a species at when none was chosen: the selected one,
 	// else the highest ranked that expects it, else the highest ranked.
@@ -456,7 +442,8 @@
 	<div class="body">
 		<aside class="sidebar">
 			<section class="area">
-				<h2>{t('area.heading', { place: placeLabel(home.label) })}</h2>
+				<p class="eyebrow">{t('area.label')} · {dateText}</p>
+				<h2 class="place">{placeLabel(home.label)}</h2>
 				<button type="button" class="summary" aria-expanded={controlsOpen} onclick={() => (controlsOpen = !controlsOpen)}>
 					{controlsSummary}
 					<span aria-hidden="true">{controlsOpen ? '▴' : '▾'}</span>
@@ -464,18 +451,15 @@
 				<div class="fold" class:open={controlsOpen}>
 					<RangePicker
 						value={range}
-						place={home.label}
 						onchange={(next) => {
 							range = next;
 							refreshSoon();
 						}}
 					/>
-					<div class="controls">
-						<label class="pill">
-							<span class="visually-hidden">{t('common.date')}</span>
-							<input type="date" min={dateLimits.min} max={dateLimits.max} bind:value={date} onchange={changeDate} />
-						</label>
-					</div>
+					<label class="date">
+						<span class="visually-hidden">{t('common.date')}</span>
+						<input type="date" min={dateLimits.min} max={dateLimits.max} bind:value={date} onchange={changeDate} />
+					</label>
 				</div>
 				<div class="links">
 					<button type="button" class="link" onclick={useMyLocation} disabled={locating}>
@@ -493,6 +477,7 @@
 					</button>
 				{/if}
 			</section>
+			<div class="double-rule" aria-hidden="true"></div>
 
 			{#if error}
 				<p class="error" role="alert">{error}</p>
@@ -500,23 +485,23 @@
 
 			<section class="birds">
 				<div class="row">
-					<h3>{t('common.yourBirds')}</h3>
+					<h3 class="section-heading">{t('common.yourBirds')}</h3>
 					<span class="count">{targetSpecies.length} / {maxTargetSpecies}</span>
 				</div>
 				{#if targetSpecies.length > 0}
 					<ul class="chips">
 						{#each targetSpecies as target (target.species_id)}
 							<li>
-									<button type="button" class="name" onclick={() => openSpeciesAnywhere(target.species_id)}>
-										{target.common_name}
-									</button>
-									<button
-										type="button"
-										class="remove"
-										onclick={() => removeTargetSpecies(target.species_id)}
-										aria-label={t('common.remove', { name: target.common_name })}>✕</button
-									>
-								</li>
+								<button type="button" class="name" onclick={() => openSpeciesAnywhere(target.species_id)}>
+									{target.common_name}
+								</button>
+								<button
+									type="button"
+									class="remove"
+									onclick={() => removeTargetSpecies(target.species_id)}
+									aria-label={t('common.remove', { name: target.common_name })}>×</button
+								>
+							</li>
 						{/each}
 					</ul>
 				{:else}
@@ -550,7 +535,7 @@
 				aria-labelledby={phone ? 'tab-hotspots' : undefined}
 			>
 				<div class="row">
-					<h3>{t('hotspots.heading')}</h3>
+					<h3 class="section-heading">{t('hotspots.heading')}</h3>
 					<span class="hint">{loading ? t('hotspots.searching') : searched ? t('hotspots.found', { count: recommendations.length }) : ''}</span>
 				</div>
 				{#if searched && recommendations.length === 0}
@@ -563,6 +548,8 @@
 					selectedId={selectedHotspotId}
 					birds={targetSpecies}
 					onselect={selectHotspot}
+					onpickspecies={openSpeciesDetail}
+					onsearchhere={(hotspot) => moveHome(hotspot.latitude, hotspot.longitude, hotspot.hotspot_name)}
 				/>
 			</section>
 
@@ -575,7 +562,7 @@
 				bind:this={seasonSection}
 			>
 				<div class="row">
-					<h3>{seasonTitle}</h3>
+					<h3 class="section-heading">{seasonTitle}</h3>
 					<span class="hint">{t('season.peaking')}</span>
 				</div>
 				{#if targetSpecies.length === 0 && seasonCount > 0}
@@ -609,56 +596,43 @@
 		</aside>
 
 		<div class="map-area">
-			<HotspotMap
-				{home}
-				hotspots={recommendations}
-				selectedId={selectedHotspotId}
-				birds={targetSpecies}
-				layer={mapLayer}
-				onselect={selectHotspot}
-				onpick={(lat, lon) => moveHome(lat, lon, 'your point')}
-			/>
-			<div class="layer-switch" role="group" aria-label={t('map.layer')}>
-				<button type="button" aria-pressed={mapLayer === 'all'} onclick={() => (mapLayer = 'all')}>
-					{t('map.all')}
-				</button>
-				<button
-					type="button"
-					aria-pressed={mapLayer === 'yourBirds'}
-					disabled={targetSpecies.length === 0}
-					onclick={() => (mapLayer = 'yourBirds')}
-				>
-					{t('common.yourBirds')}
-				</button>
+			<div class="plate">
+				<HotspotMap
+					{home}
+					hotspots={recommendations}
+					selectedId={selectedHotspotId}
+					birds={targetSpecies}
+					layer={mapLayer}
+					onselect={selectHotspot}
+					onpick={(lat, lon) => moveHome(lat, lon, 'your point')}
+				/>
 			</div>
-			<button
-				type="button"
-				class="legend-button"
-				aria-label={t('map.legendButton')}
-				aria-expanded={legendOpen}
-				aria-controls="map-legend"
-				onclick={toggleLegend}>i</button
-			>
-			{#if legendOpen}
-				<p id="map-legend" class="legend">
-					{t(mapLayer === 'yourBirds' ? 'map.bubbleBirds' : 'map.bubbleAll')}<br />
+			<div class="caption">
+				<p>
+					{mapCaption}
+					{t(mapLayer === 'yourBirds' ? 'map.bubbleBirds' : 'map.bubbleAll')}
+					{#if targetSpecies.length > 0}{t('map.recentRing')}{/if}
 					{t('map.clickToMove')}
 				</p>
-			{/if}
+				<div class="layer-switch" role="group" aria-label={t('map.layer')}>
+					<button type="button" class="text-button" aria-pressed={mapLayer === 'all'} onclick={() => (mapLayer = 'all')}>
+						{t('map.all')}
+					</button>
+					<button
+						type="button"
+						class="text-button"
+						aria-pressed={mapLayer === 'yourBirds'}
+						disabled={targetSpecies.length === 0}
+						onclick={() => (mapLayer = 'yourBirds')}
+					>
+						{t('common.yourBirds')}
+					</button>
+				</div>
+			</div>
 			{#if scrubberWeeks.length > 0}
-				<div class="scrubber-overlay">
+				<div class="year-strip">
 					{@render yearScrubber()}
 				</div>
-			{/if}
-			{#if selectedHotspot}
-				<HotspotCard
-					hotspot={selectedHotspot}
-					birds={targetSpecies}
-					onclose={() => (selectedHotspotId = null)}
-					onpickspecies={(speciesId) => openSpeciesDetail(selectedHotspot, speciesId)}
-					onsearchhere={() =>
-						moveHome(selectedHotspot.latitude, selectedHotspot.longitude, selectedHotspot.hotspot_name)}
-				/>
 			{/if}
 		</div>
 	</div>
@@ -703,11 +677,11 @@
 		display: flex;
 		flex-direction: column;
 		flex-shrink: 0;
-		width: 400px;
+		width: 420px;
 		padding-bottom: 1.5rem;
 		overflow-y: auto;
-		border-right: 1px solid var(--color-line);
-		background: var(--color-panel);
+		border-right: 1px solid var(--color-text);
+		background: var(--color-ground);
 	}
 
 	.summary {
@@ -727,62 +701,51 @@
 	}
 
 	.teaser {
-		padding: 8px 12px;
+		padding: 0;
 		border: 0;
-		border-radius: 10px;
-		background: var(--color-chip);
+		background: none;
 		color: var(--color-text);
 		font: inherit;
-		font-size: 0.85rem;
+		font-size: 0.9rem;
 		line-height: 1.4;
 		text-align: left;
 		cursor: pointer;
-	}
-
-	.map-area {
-		position: relative;
-		flex: 1;
 	}
 
 	.area {
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
-		padding: 16px 20px 12px;
-		border-bottom: 1px solid var(--color-line);
+		padding: 20px 20px 16px;
 	}
 
-	h2 {
-		margin: 0;
-		font-size: 1.5rem;
-		letter-spacing: -0.01em;
-	}
-
-	h3 {
+	.eyebrow {
 		margin: 0;
 		color: var(--color-muted);
-		font-size: 0.75rem;
+		font-size: 0.85rem;
+	}
+
+	.place {
+		margin: 0;
+		font-size: 3rem;
 		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
+		letter-spacing: -0.02em;
+		line-height: 1.05;
+		overflow-wrap: anywhere;
 	}
 
-	.controls {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-
-	.pill input {
+	.date input {
 		height: 36px;
-		padding: 0 12px;
-		border: 1px solid var(--color-control-border);
-		border-radius: 999px;
-		background: var(--color-panel);
+		padding: 0 4px;
+		border: 0;
+		border-bottom: 1px solid var(--color-text);
+		border-radius: 0;
+		background: none;
 		color: var(--color-text);
 		font: inherit;
 		font-size: 0.9rem;
-		font-weight: 600;
+		font-weight: 500;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.link {
@@ -790,10 +753,10 @@
 		padding: 0;
 		border: 0;
 		background: none;
-		color: var(--color-accent-text);
+		color: var(--color-text);
 		font: inherit;
 		font-size: 0.9rem;
-		font-weight: 600;
+		font-weight: 500;
 		text-decoration: underline;
 		cursor: pointer;
 	}
@@ -820,20 +783,21 @@
 	.birds {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: 12px 20px;
-		border-bottom: 1px solid var(--color-line);
+		gap: 8px;
+		padding: 16px 20px;
 	}
 
 	.row {
 		display: flex;
 		align-items: baseline;
 		justify-content: space-between;
+		gap: 8px;
 	}
 
 	.count {
 		color: var(--color-muted);
-		font: 0.8rem var(--font-mono);
+		font-size: 0.85rem;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.hint {
@@ -849,7 +813,7 @@
 	.chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: 4px 16px;
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -857,49 +821,45 @@
 
 	.chips li {
 		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 4px 6px 4px 12px;
-		border-radius: 999px;
-		background: var(--color-chip);
-		font-size: 0.9rem;
-		font-weight: 600;
+		align-items: baseline;
+		gap: 2px;
+		font-size: 1rem;
+		font-weight: 500;
+	}
+
+	.chips button {
+		min-height: 32px;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--color-text);
+		font: inherit;
+		cursor: pointer;
 	}
 
 	.chips .name {
 		overflow-wrap: anywhere;
 		text-align: left;
-		width: auto;
-		height: auto;
-		padding: 0;
-		font-size: inherit;
-		font-weight: inherit;
-		cursor: pointer;
+		text-decoration: underline;
+		text-decoration-color: var(--color-line);
+		text-underline-offset: 4px;
 	}
 
-	.chips button {
-		width: 22px;
-		height: 22px;
-		border: 0;
-		border-radius: 999px;
-		background: none;
-		color: var(--color-text);
-		font: inherit;
+	.chips .remove {
+		min-width: 24px;
+		color: var(--color-muted);
+		font-size: 1.2rem;
 		line-height: 1;
-		cursor: pointer;
 	}
 
-	.hotspots {
-		padding-top: 14px;
+	.hotspots,
+	.season {
+		padding-top: 18px;
 	}
 
 	.hotspots .row,
 	.season .row {
-		padding: 0 20px 6px;
-	}
-
-	.season {
-		padding-top: 14px;
+		padding: 0 20px 8px;
 	}
 
 	.tabs,
@@ -907,79 +867,53 @@
 		display: none;
 	}
 
-	.scrubber-overlay {
-		position: absolute;
-		bottom: 16px;
-		left: 16px;
-		width: min(600px, calc(100% - 96px));
-		padding: 14px 16px 12px;
-		border-radius: 12px;
-		background: var(--color-panel);
-		box-shadow: var(--shadow-raised);
+	.map-area {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		gap: 12px;
+		min-width: 0;
+		padding: 24px 28px 20px;
 	}
 
-	.legend-button {
-		position: absolute;
-		top: 16px;
-		left: 16px;
-		z-index: 5;
-		width: 36px;
-		height: 36px;
-		border: 0;
-		border-radius: 999px;
-		background: var(--color-panel);
-		box-shadow: var(--shadow-raised);
-		color: var(--color-text);
-		font: italic 700 1rem serif;
-		cursor: pointer;
+	/* The map is a plate: a hairline frame with a second line outside it. */
+	.plate {
+		position: relative;
+		flex: 1;
+		min-height: 200px;
+		margin: 5px;
+		border: 1px solid var(--color-text);
+		outline: 1px solid var(--color-text);
+		outline-offset: 4px;
 	}
 
-	.legend {
-		position: absolute;
-		top: 60px;
-		left: 16px;
+	.caption {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 4px 24px;
+		padding: 4px 5px 0;
+	}
+
+	.caption p {
+		flex: 1 1 360px;
 		margin: 0;
-		padding: 6px 10px;
-		border-radius: 8px;
-		background: var(--color-panel);
-		box-shadow: var(--shadow-raised);
 		color: var(--color-muted);
 		font-size: 0.8rem;
 		line-height: 1.5;
 	}
 
 	.layer-switch {
-		position: absolute;
-		top: 16px;
-		right: 16px;
 		display: flex;
-		gap: 2px;
-		padding: 2px;
-		border-radius: 8px;
-		background: var(--color-control-track);
-		box-shadow: var(--shadow-raised);
+		gap: 16px;
+		font-size: 0.85rem;
+		font-weight: 500;
 	}
 
-	.layer-switch button {
-		padding: 6px 10px;
-		border: none;
-		border-radius: 6px;
-		background: none;
-		color: var(--color-text);
-		font: inherit;
-		font-size: 0.8rem;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.layer-switch button[aria-pressed='true'] {
-		background: var(--color-inverse);
-		color: var(--color-on-inverse);
-	}
-
-	.layer-switch button:disabled {
-		color: var(--color-muted);
-		cursor: not-allowed;
+	.year-strip {
+		padding: 12px 5px 0;
+		border-top: 1px solid var(--color-text);
 	}
 
 	@media (max-width: 639px) {
@@ -990,7 +924,7 @@
 			display: flex;
 			padding: 0 8px;
 			border-bottom: 1px solid var(--color-line);
-			background: var(--color-panel);
+			background: var(--color-ground);
 		}
 
 		.tabs button {
@@ -1002,13 +936,18 @@
 			color: var(--color-muted);
 			font: inherit;
 			font-size: 0.95rem;
-			font-weight: 600;
+			font-weight: 500;
 			cursor: pointer;
 		}
 
 		.tabs button[aria-selected='true'] {
 			border-bottom-color: var(--color-accent-strong);
 			color: var(--color-text);
+			font-weight: 600;
+		}
+
+		.place {
+			font-size: 2.25rem;
 		}
 
 		.summary {
@@ -1016,13 +955,13 @@
 			align-items: center;
 			justify-content: space-between;
 			min-height: 44px;
-			padding: 0 14px;
-			border: 1px solid var(--color-control-border);
-			border-radius: 10px;
-			background: var(--color-panel);
+			padding: 0;
+			border: 0;
+			border-bottom: 1px solid var(--color-text);
+			background: none;
 			color: var(--color-text);
 			font: inherit;
-			font-weight: 600;
+			font-weight: 500;
 			cursor: pointer;
 		}
 
@@ -1039,9 +978,22 @@
 			display: none;
 		}
 
-		.scrubber-overlay {
+		.year-strip,
+		.caption p {
 			display: none;
 		}
+
+		.map-area {
+			padding: 0;
+		}
+
+		.plate {
+			position: static;
+			margin: 0;
+			border: 0;
+			outline: 0;
+		}
+
 		.sidebar {
 			position: fixed;
 			right: 0;
@@ -1050,24 +1002,8 @@
 			z-index: 10;
 			width: auto;
 			height: 45dvh;
+			border-top: 1px solid var(--color-text);
 			border-right: 0;
-			border-radius: 20px 20px 0 0;
-			box-shadow: var(--shadow-sheet);
-		}
-
-		.legend {
-			position: fixed;
-			top: 120px;
-			left: 12px;
-			z-index: 5;
-		}
-
-		.legend-button {
-			position: fixed;
-			top: 68px;
-			left: 12px;
-			width: 44px;
-			height: 44px;
 		}
 
 		.link {
@@ -1078,15 +1014,18 @@
 			display: none;
 		}
 
-		.layer-switch button {
-			min-height: 44px;
-		}
-
 		.layer-switch {
 			position: fixed;
 			top: 68px;
 			right: 12px;
 			z-index: 5;
+			padding: 0 12px;
+			background: var(--color-ground);
+			box-shadow: 0 0 0 1px var(--color-text);
+		}
+
+		.layer-switch button {
+			min-height: 44px;
 		}
 	}
 </style>

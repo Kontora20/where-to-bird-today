@@ -33,11 +33,15 @@
 	</svg>
 {/snippet}
 
-<div class="group" role="group" aria-label={t('theme.label')}>
+<div class="switch group" role="group" aria-label={t('theme.label')}>
 	{#each choices as choice (choice)}
-		<button type="button" aria-pressed={theme.choice === choice} onclick={() => chooseTheme(choice)}>
-			{@render icon(choice)}
-			<span>{t(`theme.${choice}`)}</span>
+		<button
+			type="button"
+			class="text-button"
+			aria-pressed={theme.choice === choice}
+			onclick={() => chooseTheme(choice)}
+		>
+			{t(`theme.${choice}`)}
 		</button>
 	{/each}
 </div>
@@ -52,32 +56,9 @@
 </button>
 
 <style>
-	.group {
-		display: flex;
-		gap: 2px;
-		padding: 2px;
-		border-radius: 8px;
-		background: var(--color-control-track);
-	}
-
 	.group button {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.3rem 0.6rem;
-		border: none;
-		border-radius: 6px;
-		background: none;
-		color: var(--color-text);
-		font: inherit;
 		font-size: 0.85rem;
 		text-transform: capitalize;
-		cursor: pointer;
-	}
-
-	.group button[aria-pressed='true'] {
-		background: var(--color-inverse);
-		color: var(--color-on-inverse);
 	}
 
 	.cycle {
@@ -86,9 +67,8 @@
 		justify-content: center;
 		width: 44px;
 		height: 44px;
-		border: 1px solid var(--color-control-border);
-		border-radius: 8px;
-		background: var(--color-panel);
+		border: 1px solid var(--color-text);
+		background: var(--color-ground);
 		color: var(--color-text);
 		cursor: pointer;
 	}

@@ -20,11 +20,11 @@
 
 <section class="scrubber" aria-label={t('year.label')}>
 	<div class="head">
-		<h2>{t('year.label')}</h2>
+		<h2 class="section-heading">{t('year.label')}</h2>
 		<div class="buttons">
-			<button type="button" class="step" aria-label={t('year.previous')} onclick={() => onshift(-1)}>◀</button>
-			<button type="button" class="step" aria-label={t('year.next')} onclick={() => onshift(1)}>▶</button>
-			<button type="button" onclick={ontoday}>{t('common.today')}</button>
+			<button type="button" class="text-button step" aria-label={t('year.previous')} onclick={() => onshift(-1)}>◀</button>
+			<button type="button" class="text-button step" aria-label={t('year.next')} onclick={() => onshift(1)}>▶</button>
+			<button type="button" class="text-button today" onclick={ontoday}>{t('common.today')}</button>
 		</div>
 	</div>
 
@@ -64,37 +64,28 @@
 
 	.head {
 		display: flex;
-		align-items: center;
+		align-items: baseline;
 		justify-content: space-between;
 		gap: 8px;
 	}
 
-	h2 {
-		margin: 0;
-		font-size: 0.95rem;
-	}
-
 	.buttons {
 		display: flex;
-		gap: 6px;
+		align-items: center;
+		gap: 4px;
 	}
 
 	.buttons button {
-		height: 36px;
-		padding: 0 12px;
-		border: 1px solid var(--color-control-border);
-		border-radius: 8px;
-		background: var(--color-panel);
+		min-width: 44px;
+		height: 44px;
 		color: var(--color-text);
-		font: inherit;
-		font-size: 0.85rem;
-		font-weight: 600;
-		cursor: pointer;
+		font-size: 0.9rem;
+		font-weight: 500;
 	}
 
-	.buttons .step {
-		width: 44px;
-		padding: 0;
+	.buttons .today {
+		padding: 0 8px;
+		text-decoration: underline;
 	}
 
 	.bars {
@@ -109,7 +100,6 @@
 		min-height: 3px;
 		padding: 0;
 		border: 0;
-		border-radius: 2px 2px 0 0;
 		background: var(--color-bar);
 		cursor: pointer;
 	}
@@ -127,7 +117,8 @@
 		padding-top: 3px;
 		border-top: 1px solid var(--color-line);
 		color: var(--color-muted);
-		font: 0.75rem var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 500;
 	}
 
 	.months span {

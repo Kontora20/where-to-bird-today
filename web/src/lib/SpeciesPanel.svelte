@@ -278,7 +278,7 @@
 		display: flex;
 		margin-top: 2px;
 		color: var(--color-muted);
-		font: 0.7rem var(--font-mono);
+		font-size: 0.7rem;
 	}
 
 	.axis.months span {

@@ -125,6 +125,12 @@
 	line-height: 1.2;
 }
 
+/* Two 1 px lines, 3 px apart. */
+.double-rule {
+	height: 5px;
+	background: linear-gradient(var(--color-text) 0 1px, transparent 1px 4px, var(--color-text) 4px 5px);
+}
+
 /* The language switch and the theme switch share one look. */
 .switch {
 	display: flex;

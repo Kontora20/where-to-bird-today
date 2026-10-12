@@ -48,7 +48,7 @@
 		gap: 24px;
 		height: 64px;
 		padding: 0 20px;
-		border-bottom: 1px solid var(--color-line);
+		border-bottom: 1px solid var(--color-text);
 		background: var(--color-ground);
 	}
 
@@ -68,6 +68,7 @@
 		margin: 0;
 		overflow: hidden;
 		font-size: 1.2rem;
+		font-weight: 600;
 		letter-spacing: -0.01em;
 		text-overflow: ellipsis;
 		white-space: nowrap;
