@@ -41,6 +41,7 @@
 	let markersLayer: Leaflet.MarkerClusterGroup;
 	let homeMarker: Leaflet.Marker | undefined;
 	let markers = new Map<number, { marker: Leaflet.Marker; offset: number }>();
+	let resizeObserver: ResizeObserver | undefined;
 	let ready = $state(false);
 
 	// Leaflet touches `window`, so it is loaded here rather than at module
@@ -74,9 +75,17 @@
 				const point = event.latlng.wrap();
 				onpick(point.lat, point.lng);
 			});
+			// The frame, the caption and the year strip settle the map's size after
+			// Leaflet has measured it, and a window resize changes it later; the
+			// map keeps its centre when it re-measures.
+			resizeObserver = new ResizeObserver(() => map.invalidateSize());
+			resizeObserver.observe(container);
 			ready = true;
 		})();
-		return () => map?.remove();
+		return () => {
+			resizeObserver?.disconnect();
+			map?.remove();
+		};
 	});
 
 	$effect(() => {

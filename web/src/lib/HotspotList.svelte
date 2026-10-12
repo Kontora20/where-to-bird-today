@@ -140,7 +140,7 @@
 	{/each}
 </ul>
 {#if hotspots.length > initiallyShown}
-	<button type="button" class="more" onclick={() => (showAll = !showAll)}>
+	<button type="button" class="more" class:expanded={showAll} onclick={() => (showAll = !showAll)}>
 		{showAll ? t('list.showFewer') : t('list.showMore', { count: hotspots.length - initiallyShown })}
 	</button>
 {/if}
@@ -344,6 +344,17 @@
 		font-weight: 500;
 		text-decoration: underline;
 		cursor: pointer;
+	}
+
+	/* While the list is long, the button to shorten it stays at the bottom of
+	   the visible sidebar. */
+	.more.expanded {
+		position: sticky;
+		bottom: 0;
+		width: calc(100% - 40px);
+		border-top: 1px solid var(--color-text);
+		background: var(--color-ground);
+		text-align: left;
 	}
 
 	@media (max-width: 639px) {
