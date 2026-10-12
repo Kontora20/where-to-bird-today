@@ -1,3 +1,43 @@
+@font-face {
+	font-family: 'Libre Franklin';
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/LibreFranklin-latin-ext.woff2') format('woff2');
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+		U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+	font-family: 'Libre Franklin';
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/LibreFranklin-latin.woff2') format('woff2');
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'Libre Franklin';
+	font-style: italic;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/LibreFranklin-Italic-latin-ext.woff2') format('woff2');
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+		U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+	font-family: 'Libre Franklin';
+	font-style: italic;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/LibreFranklin-Italic-latin.woff2') format('woff2');
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
 	color-scheme: light;
 	--color-ground: #f5f2ea;
@@ -12,24 +52,16 @@
 	--color-on-accent: #16181a;
 	--color-accent-strong: #d9760a;
 	--color-accent-text: #9a5200;
-	--color-chip: #fbe8c6;
-	--color-selected: #fdf3df;
 	--color-bar: #e3dccb;
 	--color-inverse: #16181a;
 	--color-on-inverse: #ffffff;
 	--color-home: #2c66de;
 	--color-error: #c0392b;
 	--color-backdrop: rgba(0, 0, 0, 0.4);
-	--color-bubble: rgba(242, 161, 39, 0.45);
-	--color-bubble-selected: rgba(242, 161, 39, 0.75);
-	--shadow-raised: 0 2px 8px rgba(0, 0, 0, 0.25);
-	--shadow-sheet: 0 -4px 16px rgba(0, 0, 0, 0.2);
-	--font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
-	font-family:
-		system-ui,
-		-apple-system,
-		'Segoe UI',
-		sans-serif;
+	--font-text: 'Libre Franklin', system-ui, sans-serif;
+	--font-ui: 'Libre Franklin', system-ui, sans-serif;
+	font-family: var(--font-text);
+	font-variant-numeric: lining-nums;
 }
 
 :root[data-theme='dark'] {
@@ -44,20 +76,59 @@
 	--color-control-track: #2a2e33;
 	--color-accent-strong: #f2a127;
 	--color-accent-text: #f5b04a;
-	--color-chip: #3a2c12;
-	--color-selected: #2a2113;
 	--color-bar: #3b4046;
 	--color-inverse: #f1eee6;
 	--color-on-inverse: #16181a;
 	--color-home: #5b8def;
 	--color-error: #ff6b5e;
 	--color-backdrop: rgba(0, 0, 0, 0.6);
-	--color-bubble: rgba(242, 161, 39, 0.8);
-	--color-bubble-selected: rgba(242, 161, 39, 0.95);
 }
 
 * {
 	box-sizing: border-box;
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-text);
+	outline-offset: 2px;
+}
+
+/* A control set as plain text: the pressed one is underlined in orange. */
+.text-button {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--color-muted);
+	font: inherit;
+	cursor: pointer;
+}
+
+.text-button[aria-pressed='true'] {
+	color: var(--color-text);
+	text-decoration: underline;
+	text-decoration-color: var(--color-accent-strong);
+	text-decoration-thickness: 2px;
+	text-underline-offset: 5px;
+}
+
+.text-button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* Section headings: large italic type rather than small grey capitals. */
+.section-heading {
+	margin: 0;
+	font-size: 1.5rem;
+	font-style: italic;
+	font-weight: 500;
+	line-height: 1.2;
+}
+
+/* The language switch and the theme switch share one look. */
+.switch {
+	display: flex;
+	gap: 12px;
 }
 
 body {
@@ -72,14 +143,32 @@ body {
 	filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
 }
 
+:root[data-theme='light'] .leaflet-tile-pane {
+	filter: sepia(0.25) saturate(0.8) contrast(0.95);
+}
+
 :root .leaflet-container {
 	background: var(--color-line-soft);
 }
 
 :root .leaflet-bar a {
-	background-color: var(--color-panel);
-	border-bottom-color: var(--color-line);
+	border-radius: 0;
+	background-color: var(--color-ground);
+	border-bottom-color: var(--color-text);
 	color: var(--color-text);
+}
+
+:root .leaflet-bar {
+	border: 1px solid var(--color-text);
+	border-radius: 0;
+	box-shadow: none;
+}
+
+:root .leaflet-control-scale-line {
+	border-color: var(--color-text);
+	background: color-mix(in srgb, var(--color-ground) 80%, transparent);
+	color: var(--color-text);
+	font-family: var(--font-ui);
 }
 
 :root .leaflet-bar a:hover,
@@ -93,7 +182,7 @@ body {
 }
 
 :root .leaflet-control-attribution {
-	background: color-mix(in srgb, var(--color-panel) 80%, transparent);
+	background: color-mix(in srgb, var(--color-ground) 80%, transparent);
 	color: var(--color-muted);
 }
 
@@ -107,31 +196,40 @@ body {
 	justify-content: center;
 	width: 100%;
 	height: 100%;
-	border: 2px solid var(--color-accent-strong);
+	border: 1.5px solid var(--color-text);
 	border-radius: 999px;
-	background: var(--color-bubble);
-	color: var(--color-on-accent);
-	font: 700 10px var(--font-mono);
+	background: var(--color-text);
+	color: var(--color-ground);
+	font: 600 11px/1 var(--font-ui);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Seen within the last week: a ring of orange outside a paper-coloured gap. */
+.bubble-icon.recent .bubble {
+	box-shadow:
+		0 0 0 2px var(--color-ground),
+		0 0 0 4px var(--color-accent-strong);
 }
 
 .bubble-icon.selected .bubble {
-	border: 3px solid var(--color-text);
-	background: var(--color-bubble-selected);
+	background: var(--color-accent-strong);
+	color: var(--color-on-accent);
 }
 
-/* Opaque, unlike .bubble's translucent fill, so a group of hotspots reads as
-   visually denser than any one of them. */
+/* A group of hotspots: a paper disc with an ink outline, so it reads as
+   different from any one numbered hotspot. */
 .cluster-icon .cluster {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	width: 100%;
 	height: 100%;
-	border: 2px solid var(--color-accent-strong);
+	border: 1.5px solid var(--color-text);
 	border-radius: 999px;
-	background: var(--color-accent-strong);
-	color: var(--color-on-accent);
-	font: 700 11px var(--font-mono);
+	background: var(--color-ground);
+	color: var(--color-text);
+	font: 600 12px/1 var(--font-ui);
+	font-variant-numeric: tabular-nums;
 }
 
 .bubble-label {
@@ -139,45 +237,23 @@ body {
 	left: 100%;
 	top: 50%;
 	display: none;
-	margin-left: 8px;
-	padding: 3px 8px;
+	margin-left: 10px;
+	padding: 2px 8px;
 	transform: translateY(-50%);
-	border-radius: 6px;
-	background: var(--color-panel);
-	box-shadow: var(--shadow-raised);
+	border: 1px solid var(--color-text);
+	background: var(--color-ground);
 	color: var(--color-text);
 	font-size: 13px;
-	font-weight: 600;
+	font-weight: 500;
 	white-space: nowrap;
 	pointer-events: none;
 }
 
-/* A name is only worth the clutter once you're pointing at its bubble or it's
+/* A name is only worth the clutter once you're pointing at its marker or it's
    the one you picked -- everywhere else it's noise on top of noise. */
 .bubble-icon:hover .bubble-label,
 .bubble-icon.selected .bubble-label {
 	display: block;
-}
-
-.badge {
-	position: absolute;
-	top: -5px;
-	right: -5px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 15px;
-	height: 15px;
-	padding: 0 3px;
-	border-radius: 999px;
-	background: var(--color-inverse);
-	color: var(--color-on-inverse);
-	font: 700 9px var(--font-mono);
-}
-
-.badge.recent {
-	background: var(--color-accent-strong);
-	color: var(--color-on-accent);
 }
 
 .home-icon {
@@ -192,7 +268,7 @@ body {
 	content: '';
 	width: 16px;
 	height: 16px;
-	border: 3px solid var(--color-panel);
+	border: 3px solid var(--color-ground);
 	border-radius: 999px;
 	background: var(--color-home);
 }
@@ -216,7 +292,6 @@ body {
 	flex: 1;
 	min-height: 2px;
 	background: var(--color-bar);
-	border-radius: 2px 2px 0 0;
 }
 
 .week-bar.best {
