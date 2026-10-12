@@ -123,9 +123,10 @@ jobs:
         with:
           # Pinned, not "latest": a new linter release adding a check would
           # otherwise turn CI red on a commit that changed nothing. Bump this
-          # deliberately, matching the version installed locally.
-          version: v2.13.2
-          # Built with this job's Go. The release binary was built with an older
-          # one and fails with "export data version 5 is greater than maximum
-          # supported version 4" on code compiled by Go 1.27.
+          # deliberately, matching the version installed locally. v2.13.2 fails
+          # on Go 1.27.2 with "export data version 5 is greater than maximum
+          # supported version 4"; v2.14.0 reads it.
+          version: v2.14.0
+          # Built with this job's Go, so the linter and the code agree on the Go
+          # version.
           install-mode: goinstall
