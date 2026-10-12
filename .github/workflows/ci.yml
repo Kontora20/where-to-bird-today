@@ -123,7 +123,9 @@ jobs:
         with:
           # Pinned, not "latest": a new linter release adding a check would
           # otherwise turn CI red on a commit that changed nothing. Bump this
-          # deliberately, matching the version installed locally. v2.13.2 is
-          # the first release built with Go 1.27 -- golangci-lint refuses to
-          # analyse a module targeting a newer Go than it was built with.
+          # deliberately, matching the version installed locally.
           version: v2.13.2
+          # Built with this job's Go. The release binary was built with an older
+          # one and fails with "export data version 5 is greater than maximum
+          # supported version 4" on code compiled by Go 1.27.
+          install-mode: goinstall
