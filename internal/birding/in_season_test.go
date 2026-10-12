@@ -116,7 +116,7 @@ func TestInSeasonReturnsOnlyTheBestFew(t *testing.T) {
 	t.Parallel()
 
 	area := areaWithChecklists()
-	for id := int64(30); id < 38; id++ {
+	for id := int64(30); id < 43; id++ {
 		area.speciesWeeksRows = append(area.speciesWeeksRows, speciesInWeeks(id, "Species", 38, 14, 14, 14, 14)...)
 	}
 
@@ -129,8 +129,8 @@ func TestInSeasonReturnsOnlyTheBestFew(t *testing.T) {
 	for _, species := range got.Species {
 		ids = append(ids, species.SpeciesID)
 	}
-	if want := []int64{30, 31, 32, 33, 34, 35}; !slices.Equal(ids, want) {
-		t.Errorf("species ids = %v, want %v (six, equal ones in id order)", ids, want)
+	if want := []int64{30, 31, 32, 33, 34, 35, 36, 37, 38, 39}; !slices.Equal(ids, want) {
+		t.Errorf("species ids = %v, want %v (ten, equal ones in id order)", ids, want)
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 
 const (
 	// maxSeasonalSpecies caps how many species InSeason returns.
-	maxSeasonalSpecies = 6
+	maxSeasonalSpecies = 10
 
 	// minSeasonalFrequency is the share of the area's checklists that must
 	// have recorded a species in the week for it to be one to look for.
