@@ -80,7 +80,7 @@
 			</button>
 
 			{#if selected}
-				{@const shownSpecies = hotspot.top_species.slice(0, 5)}
+				{@const shownSpecies = hotspot.top_species}
 				{@const sightings = mine(hotspot)}
 				<div class="details">
 					<p class="note">{t('card.meta', { count: checklistCount(hotspot) })}</p>
