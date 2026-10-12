@@ -88,7 +88,10 @@ export const en = {
 	'map.recentRing': 'An orange ring: one of your birds was seen there in the last week.',
 	'map.clickToMove': 'Click the map to move your start point.',
 
-	'list.expected': 'On a visit, expect about {score} of your birds.',
+	'expected.nearlyAll': 'On a visit, expect nearly all of your birds.',
+	'expected.most': 'On a visit, expect most of your birds.',
+	'expected.some': 'On a visit, expect some of your birds.',
+	'expected.few': 'On a visit, expect few of your birds.',
 	'list.showFewer': 'Show fewer',
 	'list.showMore': 'Show {count} more',
 
@@ -267,7 +270,10 @@ export const lt: Record<MessageKey, Message> = {
 	'map.recentRing': 'Oranžinis žiedas: čia per pastarąją savaitę matytas bent vienas jūsų paukštis.',
 	'map.clickToMove': 'Spustelėkite žemėlapį, kad perkeltumėte paieškos centrą.',
 
-	'list.expected': 'Apsilankius tikėtina pamatyti apie {score} jūsų paukščio.',
+	'expected.nearlyAll': 'Apsilankius tikėtina pamatyti beveik visus jūsų paukščius.',
+	'expected.most': 'Apsilankius tikėtina pamatyti daugumą jūsų paukščių.',
+	'expected.some': 'Apsilankius tikėtina pamatyti kai kuriuos jūsų paukščius.',
+	'expected.few': 'Apsilankius tikėtina pamatyti tik nedaugelį jūsų paukščių.',
 	'list.showFewer': 'Rodyti mažiau',
 	'list.showMore': 'Rodyti dar {count}',
 

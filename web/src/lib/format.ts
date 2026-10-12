@@ -26,6 +26,17 @@ export function chanceKey(frequency: number): MessageKey {
 	return 'chance.veryRarely';
 }
 
+// The words for how many of your birds a visit is expected to record. The
+// score of a hotspot is the sum of the chances of your birds there, so its
+// share of the number of birds is the share expected.
+export function expectedKey(score: number, birdCount: number): MessageKey {
+	const share = score / birdCount;
+	if (share >= 0.8) return 'expected.nearlyAll';
+	if (share >= 0.5) return 'expected.most';
+	if (share >= 0.2) return 'expected.some';
+	return 'expected.few';
+}
+
 // A bird seen within this many days counts as seen this week.
 const recentDays = 7;
 // Older than this, a date reads better than a number of days.

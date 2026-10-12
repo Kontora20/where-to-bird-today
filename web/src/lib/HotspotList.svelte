@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import type { Recommendation, SpeciesMatch } from '$lib/api';
-	import { formatNumber, t } from '$lib/i18n.svelte';
+	import { t } from '$lib/i18n.svelte';
 	import {
 		chanceKey,
+	expectedKey,
 		checklistCount,
 		distanceText,
 		fewChecklists,
@@ -84,7 +85,7 @@
 				<div class="details">
 					<p class="note">{t('card.meta', { count: checklistCount(hotspot) })}</p>
 					{#if birds.length > 0}
-						<p class="note">{t('list.expected', { score: formatNumber(hotspot.score, 1) })}</p>
+						<p class="note">{t(expectedKey(hotspot.score, birds.length))}</p>
 					{/if}
 
 					{#if sightings.length > 0}
