@@ -217,7 +217,7 @@ export const lt: Record<MessageKey, Message> = {
 	'error.searchFailed': 'paieška nepavyko',
 	'error.speciesSearchFailed': 'paukščių paieška nepavyko',
 	'error.speciesDetailFailed': 'nepavyko įkelti paukščio duomenų',
-	'error.noHotspotForBird': 'Pasirinktu nuotoliu nėra stebėjimo vietos, kurioje būtų galima parodyti šį paukštį.',
+	'error.noHotspotForBird': 'Šio paukščio pasirinktu nuotoliu nerasta.',
 	'error.noGeolocation': 'šioje naršyklėje vietos nustatymas nepalaikomas',
 	'error.travelTimeUnavailable': 'Kelio laikas šiuo metu nepasiekiamas; ieškokite tiesia linija.',
 	'error.noRoad': 'Šalia šios vietos nėra kelio.',
@@ -235,7 +235,7 @@ export const lt: Record<MessageKey, Message> = {
 	'area.seasonLink': 'Sezono paukščiai ↓',
 	'area.teaserMore': '{names} ir dar {count}',
 
-	'birds.hint': 'Ieškokite paukščio laukelyje viršuje – stebėjimo vietos bus išrikiuotos pagal jį.',
+	'birds.hint': 'Ieškokite paukščio viršuje – vietos bus išrikiuotos pagal jį.',
 
 	'tabs.label': 'Skyriai',
 	'tabs.hotspots': 'Stebėjimo vietos',
@@ -246,14 +246,14 @@ export const lt: Record<MessageKey, Message> = {
 	'hotspots.heading': 'Pasiekiamos stebėjimo vietos',
 	'hotspots.searching': 'Ieškoma…',
 	'hotspots.found': 'Rasta: {count}',
-	'hotspots.noneForBirds': 'Nė vienoje pasiekiamoje stebėjimo vietoje šių paukščių tą savaitę nėra.',
+	'hotspots.noneForBirds': 'Šių paukščių tą savaitę pasiekiamose vietose nėra.',
 	'hotspots.none': 'Pasiekiamų stebėjimo vietų nerasta.',
 
 	'season.titleNow': 'Dabar pasirodo',
 	'season.titleThen': 'Tą savaitę pasirodo',
 	'season.peaking': 'Sezono pikas aplink jus',
 	'season.addHint':
-		'Paspauskite +, kad įtrauktumėte paukštį į „Jūsų paukščius“. Stulpeliai rodo tikimybę jį pamatyti per metus.',
+		'Paspauskite +, kad įtrauktumėte paukštį. Stulpeliai rodo, kada jį galima pamatyti.',
 	'season.none': 'Tą savaitę aplink jus jokia rūšis ypač neišsiskiria.',
 	'season.photo': 'Nuotrauka: {attribution} · {license}',
 	'season.chance': 'Tikimybė pamatyti per metus',
@@ -265,10 +265,10 @@ export const lt: Record<MessageKey, Message> = {
 
 	'map.layer': 'Žemėlapio sluoksnis',
 	'map.all': 'Visos stebėjimo vietos',
-	'map.bubbleAll': 'Skaičius: vieta sąraše. Apskritimo dydis: paukštininkų sąrašai šią metų savaitę.',
-	'map.bubbleBirds': 'Skaičius: vieta sąraše. Apskritimo dydis: kiek jūsų paukščių čia matyta.',
-	'map.recentRing': 'Oranžinis žiedas: čia per pastarąją savaitę matytas bent vienas jūsų paukštis.',
-	'map.clickToMove': 'Spustelėkite žemėlapį, kad perkeltumėte paieškos centrą.',
+	'map.bubbleAll': 'Skaičius – vieta sąraše; dydis – sąrašų skaičius šią savaitę.',
+	'map.bubbleBirds': 'Skaičius – vieta sąraše; dydis – kiek jūsų paukščių čia matyta.',
+	'map.recentRing': 'Oranžinis žiedas: per savaitę matytas jūsų paukštis.',
+	'map.clickToMove': 'Spustelėkite žemėlapį, kad perkeltumėte centrą.',
 
 	'expected.nearlyAll': 'Apsilankius tikėtina pamatyti beveik visus jūsų paukščius.',
 	'expected.most': 'Apsilankius tikėtina pamatyti daugumą jūsų paukščių.',
@@ -285,7 +285,7 @@ export const lt: Record<MessageKey, Message> = {
 	'card.yourBirds': 'Jūsų paukščiai čia',
 	'card.likely': 'Labiausiai tikėtini šią savaitę',
 	'card.share':
-		'Kaip dažnai tos savaitės sąrašuose buvo užfiksuotas paukštis. Kai sąrašų per mažai, įvertinimas nerodomas, o vietoj jo rodomas sąrašų skaičius. Pasirinkite paukštį, kad pamatytumėte jo sezoną ir paros laiką.',
+		'Kaip dažnai tos savaitės sąrašuose buvo paukštis. Pasirinkite paukštį, kad pamatytumėte jo sezoną ir paros laiką.',
 	'chance.tooLittle': 'Per mažai duomenų',
 	'chance.almostAlways': 'Beveik visada',
 	'chance.often': 'Dažnai',
@@ -315,14 +315,14 @@ export const lt: Record<MessageKey, Message> = {
 	'range.custom': 'Kita',
 	'range.minutesUnit': 'min.',
 	'range.kmUnit': 'km',
-	'range.captionDrive': 'Stebėjimo vietos iki {amount} min. kelio automobiliu. Paieškos centras: {place}.',
-	'range.captionStraight': 'Stebėjimo vietos iki {amount} km tiesia linija. Paieškos centras: {place}.',
+	'range.captionDrive': 'Stebėjimo vietos iki {amount} min. automobiliu nuo: {place}.',
+	'range.captionStraight': 'Stebėjimo vietos iki {amount} km tiesia linija nuo: {place}.',
 
 	'plan.title': 'Suplanuoti paiešką',
 	'plan.start': 'Pradžios vieta',
 	'plan.yourLocation': 'Jūsų vieta',
 	'plan.useLocation': 'Naudoti mano vietą',
-	'plan.hint': 'Norėdami nurodyti tikslų tašką, uždarykite langą ir spustelėkite žemėlapį.',
+	'plan.hint': 'Tikslų tašką nurodykite žemėlapyje, uždarę šį langą.',
 	'plan.howFar': 'Kaip toli',
 	'plan.when': 'Kada',
 	'plan.saturday': 'Šeš. {day}',
@@ -342,8 +342,8 @@ export const lt: Record<MessageKey, Message> = {
 		other: '{week} savaitė: {count} sąrašų'
 	},
 	'year.noteBest': 'Geriausios savaitės jūsų paukščiams: {ranges}.',
-	'year.noteBirds': 'Stulpeliai rodo, kiek tikėtini jūsų paukščiai kiekvieną savaitę.',
-	'year.noteArea': 'Stulpeliai rodo, kiek sąrašų kiekvieną savaitę užregistruota šioje apylinkėje.',
+	'year.noteBirds': 'Stulpeliai rodo jūsų paukščių tikimybę kiekvieną savaitę.',
+	'year.noteArea': 'Stulpeliai rodo sąrašų skaičių kiekvieną savaitę.',
 
 	'species.details': 'Paukščio duomenys',
 	'species.figures': 'Duomenys: {hotspot}',
@@ -360,7 +360,7 @@ export const lt: Record<MessageKey, Message> = {
 	'species.otherWeeks': 'Kitos savaitės',
 	'species.best': 'Geriausia: {ranges}.',
 	'species.weeksNote':
-		'Kiekviena savaitė sujungiama su gretimomis savaitėmis; stulpelio aukštis rodomas lyginant su geriausia savaite.',
+		'Stulpelio aukštis lyginamas su geriausia savaite.',
 	'species.timeOfDay': 'Paros laikas šioje stebėjimo vietoje',
 	'species.noData': 'nėra duomenų',
 	'species.sunrise': 'Saulėtekis',
@@ -368,6 +368,6 @@ export const lt: Record<MessageKey, Message> = {
 	'species.bestHours': 'Geriausios valandos',
 	'species.otherHours': 'Kitos valandos',
 	'species.hoursNote':
-		'Stulpeliai eina nuo saulėtekio visą parą; jų aukštis rodomas lyginant su geriausia valanda.',
+		'Stulpelio aukštis lyginamas su geriausia valanda.',
 	'species.latest': 'Naujausias įrašas šioje stebėjimo vietoje ({date})'
 };
