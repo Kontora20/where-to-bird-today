@@ -246,7 +246,24 @@ resource server 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       // One replica at most: the bill cannot grow with traffic, whatever a bot does.
-      scale: { minReplicas: 0, maxReplicas: 1 }
+      // From 07:00 to 22:00 Vilnius time one replica stays on, so the first
+      // visitor of the day is not waiting for a cold start. Outside those hours
+      // the app scales to zero. Giving any rule replaces the default one, so
+      // the HTTP rule that wakes a sleeping app is listed too.
+      scale: {
+        minReplicas: 0
+        maxReplicas: 1
+        rules: [
+          { name: 'http', http: { metadata: { concurrentRequests: '10' } } }
+          {
+            name: 'daytime'
+            custom: {
+              type: 'cron'
+              metadata: { timezone: 'Europe/Vilnius', start: '0 7 * * *', end: '0 22 * * *', desiredReplicas: '1' }
+            }
+          }
+        ]
+      }
     }
   }
 }
