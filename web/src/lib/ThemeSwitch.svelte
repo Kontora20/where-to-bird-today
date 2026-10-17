@@ -3,6 +3,8 @@
 	import { chooseTheme, theme, type ThemeChoice } from '$lib/theme.svelte';
 
 	const choices: ThemeChoice[] = ['system', 'light', 'dark'];
+	// The desktop switch leaves out system: it follows the device until one is chosen.
+	const desktopChoices = choices.filter((choice) => choice !== 'system');
 
 	const next = () => choices[(choices.indexOf(theme.choice) + 1) % choices.length];
 </script>
@@ -34,7 +36,7 @@
 {/snippet}
 
 <div class="switch group" role="group" aria-label={t('theme.label')}>
-	{#each choices as choice (choice)}
+	{#each desktopChoices as choice (choice)}
 		<button
 			type="button"
 			class="text-button"

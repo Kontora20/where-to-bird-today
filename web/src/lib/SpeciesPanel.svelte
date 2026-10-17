@@ -3,6 +3,7 @@
 	import type { HourFrequency, SpeciesDetail } from '$lib/api';
 	import { monthInitials, t } from '$lib/i18n.svelte';
 	import { formatDay, httpsUrl } from '$lib/format';
+	import SlowLoading from '$lib/SlowLoading.svelte';
 
 	interface Props {
 		loading: boolean;
@@ -67,6 +68,7 @@
 
 		{#if loading}
 			<p>{t('common.loading')}</p>
+			<SlowLoading active={loading} />
 		{:else if error}
 			<p class="error" role="alert">{error}</p>
 		{:else if species}

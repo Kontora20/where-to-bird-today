@@ -23,7 +23,7 @@
 	function setUnit(next: 'min' | 'km') {
 		if (next === unit) return;
 		customOpen = false;
-		onchange(next === 'min' ? 'min:60' : 'km:50');
+		onchange(next === 'min' ? 'min:30' : 'km:25');
 	}
 
 	function pick(option: number) {
@@ -47,11 +47,11 @@
 
 <div class="picker">
 	<div class="measure" role="group" aria-label={t('range.measureBy')}>
-		<button type="button" class="text-button" aria-pressed={unit === 'min'} onclick={() => setUnit('min')}>
-			{t('range.driveTime')}
-		</button>
 		<button type="button" class="text-button" aria-pressed={unit === 'km'} onclick={() => setUnit('km')}>
 			{t('range.straightLine')}
+		</button>
+		<button type="button" class="text-button" aria-pressed={unit === 'min'} onclick={() => setUnit('min')}>
+			{t('range.driveTime')}
 		</button>
 	</div>
 	<div class="amounts" role="group" aria-label={t(unit === 'min' ? 'range.minutesGroup' : 'range.kilometresGroup')}>

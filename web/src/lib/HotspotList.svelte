@@ -29,16 +29,22 @@
 	// The list starts with the best few so it does not push the sections below
 	// it off the screen; the rest are one click away.
 	const initiallyShown = 5;
+	const step = 5;
 
 	const today = new Date();
-	let showAll = $state(false);
-	const shown = $derived(showAll ? hotspots : hotspots.slice(0, initiallyShown));
+	let visible = $state(initiallyShown);
+	// A hotspot picked on the map may be one the list has not shown yet: it is
+	// put after the last visible row, keeping its own number.
+	const pinned = $derived(hotspots.findIndex((hotspot) => hotspot.hotspot_id === selectedId));
+	const shown = $derived(
+		hotspots
+			.map((hotspot, index) => ({ hotspot, rank: index + 1 }))
+			.filter((_, index) => index < visible || index === pinned)
+	);
+	const hidden = $derived(hotspots.length - shown.length);
 
-	// A hotspot picked on the map may be one the list has not shown yet.
 	$effect(() => {
-		const index = hotspots.findIndex((hotspot) => hotspot.hotspot_id === selectedId);
-		if (index < 0) return;
-		if (index >= initiallyShown) showAll = true;
+		if (selectedId === null) return;
 		void tick().then(() =>
 			document.getElementById(`hotspot-${selectedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 		);
@@ -56,7 +62,7 @@
 </script>
 
 <ul class="list">
-	{#each shown as hotspot, index (hotspot.hotspot_id)}
+	{#each shown as { hotspot, rank } (hotspot.hotspot_id)}
 		{@const status = lastSeenStatus(hotspot, birds, today)}
 		{@const name = splitName(hotspot.hotspot_name)}
 		{@const selected = hotspot.hotspot_id === selectedId}
@@ -68,7 +74,7 @@
 				aria-expanded={selected}
 				onclick={() => onselect(selected ? null : hotspot.hotspot_id)}
 			>
-				<span class="number" aria-hidden="true">{index + 1}</span>
+				<span class="number" aria-hidden="true">{rank}</span>
 				<span class="text">
 					<span class="name">{name.main}</span>
 					{#if name.alternative}<span class="alternative">{name.alternative}</span>{/if}
@@ -136,10 +142,13 @@
 		</li>
 	{/each}
 </ul>
-{#if hotspots.length > initiallyShown}
-	<button type="button" class="more" class:expanded={showAll} onclick={() => (showAll = !showAll)}>
-		{showAll ? t('list.showFewer') : t('list.showMore', { count: hotspots.length - initiallyShown })}
+{#if hidden > 0}
+	<button type="button" class="more" onclick={() => (visible += step)}>
+		{t('list.showMore', { count: Math.min(step, hidden) })}
 	</button>
+{/if}
+{#if visible > initiallyShown}
+	<button type="button" class="more expanded" onclick={() => (visible = initiallyShown)}>{t('list.showFewer')}</button>
 {/if}
 
 <style>

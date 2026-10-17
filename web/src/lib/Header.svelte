@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { SpeciesMatch } from '$lib/api';
 	import { t } from '$lib/i18n.svelte';
+	import InfoButton from '$lib/InfoButton.svelte';
 	import LanguageSwitch from '$lib/LanguageSwitch.svelte';
 	import SpeciesSearch from '$lib/SpeciesSearch.svelte';
 	import ThemeSwitch from '$lib/ThemeSwitch.svelte';
@@ -39,6 +40,7 @@
 	</div>
 	<LanguageSwitch />
 	<ThemeSwitch />
+	<InfoButton />
 </header>
 
 <style>

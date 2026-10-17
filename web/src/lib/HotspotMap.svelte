@@ -23,8 +23,8 @@
 
 	const today = new Date();
 
-	const smallestBubble = 24;
-	const bubbleRange = 16;
+	const smallestBubble = 19;
+	const bubbleRange = 13;
 	const phoneQuery = '(max-width: 639px)';
 	// The share of a phone's height the bottom sheet covers.
 	const sheetShare = 0.45;
@@ -34,6 +34,24 @@
 	// Leaflet.markercluster's own default (80) so a cluster only forms once
 	// bubbles would otherwise overlap, not whenever they're merely close.
 	const maxClusterRadius = 35;
+
+	// Bubbles are small while the whole area is in view and reach full size only
+	// when zoomed right in, so the map stays clear. Zoom levels from the first
+	// number are drawn at the matching share of full size.
+	const bubbleScales: [zoom: number, scale: number][] = [[14, 1], [13, 0.85], [12, 0.65]];
+	const farBubbleScale = 0.45;
+	// Below this the number would be unreadable, so it is left out.
+	const smallestReadableScale = 0.75;
+
+	function bubbleScaleAt(zoom: number): number {
+		return bubbleScales.find(([fromZoom]) => zoom >= fromZoom)?.[1] ?? farBubbleScale;
+	}
+
+	function applyBubbleScale() {
+		const scale = bubbleScaleAt(map.getZoom());
+		container.style.setProperty('--bubble-scale', String(scale));
+		container.style.setProperty('--bubble-number', scale >= smallestReadableScale ? 'var(--color-ground)' : 'transparent');
+	}
 
 	let container: HTMLDivElement;
 	let leaflet: typeof Leaflet;
@@ -65,11 +83,13 @@
 			leaflet.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 			markersLayer = leaflet
 				.markerClusterGroup({
-					maxClusterRadius,
+					maxClusterRadius: (zoom) => Math.max(14, Math.round(maxClusterRadius * bubbleScaleAt(zoom))),
 					showCoverageOnHover: false,
 					iconCreateFunction: (cluster) => clusterIcon(cluster.getAllChildMarkers())
 				})
 				.addTo(map);
+			map.on('zoomend', applyBubbleScale);
+			applyBubbleScale();
 			map.on('click', (event) => {
 				// The map repeats across the date line; the API takes -180 to 180.
 				const point = event.latlng.wrap();
@@ -97,10 +117,10 @@
 		}
 		homeMarker = leaflet
 			.marker(latLng, {
-				icon: leaflet.divIcon({ className: 'home-icon', iconSize: [40, 40] }),
+				icon: leaflet.divIcon({ className: 'home-icon', iconSize: [34, 34] }),
 				interactive: false,
 				keyboard: false,
-				zIndexOffset: -1000
+				zIndexOffset: 1000
 			})
 			.addTo(map);
 	});

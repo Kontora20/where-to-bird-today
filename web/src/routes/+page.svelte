@@ -7,10 +7,12 @@
 	import PlanSearch, { type Plan } from '$lib/PlanSearch.svelte';
 	import RangePicker from '$lib/RangePicker.svelte';
 	import Scrubber from '$lib/Scrubber.svelte';
+	import SlowLoading from '$lib/SlowLoading.svelte';
 	import SpeciesPanel from '$lib/SpeciesPanel.svelte';
 	import { locale, placeLabel, t } from '$lib/i18n.svelte';
 	import { cities } from '$lib/cities';
 	import { locate } from '$lib/locate';
+	import { loadLastChoices, saveLastChoices } from '$lib/lastChoices';
 	import { loadYourBirds, saveYourBirds } from '$lib/yourBirds';
 	import {
 		addDays,
@@ -44,8 +46,10 @@
 	// the list, typing in the date), so the search waits for a pause.
 	const searchDelayMs = 300;
 
-	let home = $state({ lat: 54.6872, lon: 25.2797, label: 'Vilnius' });
-	let range = $state('min:60');
+	const lastChoices = loadLastChoices();
+	let home = $state(lastChoices?.home ?? { lat: 54.6872, lon: 25.2797, label: 'Vilnius' });
+	let range = $state(lastChoices?.range ?? 'km:25');
+	$effect(() => saveLastChoices({ home: { ...home }, range }));
 	let date = $state(todayIso());
 
 	let targetSpecies = $state<SpeciesMatch[]>(loadYourBirds(maxTargetSpecies));
@@ -551,6 +555,7 @@
 					<h3 class="section-heading">{t('hotspots.heading')}</h3>
 					<span class="hint">{loading ? t('hotspots.searching') : searched ? t('hotspots.found', { count: recommendations.length }) : ''}</span>
 				</div>
+				<SlowLoading active={loading} />
 				{#if searched && recommendations.length === 0}
 					<p class="hint padded">
 						{t(targetSpecies.length > 0 ? 'hotspots.noneForBirds' : 'hotspots.none')}

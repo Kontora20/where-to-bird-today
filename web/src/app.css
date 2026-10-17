@@ -205,9 +205,10 @@ body {
 	border: 1.5px solid var(--color-text);
 	border-radius: 999px;
 	background: var(--color-text);
-	color: var(--color-ground);
+	color: var(--bubble-number, var(--color-ground));
 	font: 600 11px/1 var(--font-ui);
 	font-variant-numeric: tabular-nums;
+	transform: scale(var(--bubble-scale, 1));
 }
 
 /* Seen within the last week: a ring of orange outside a paper-coloured gap. */
@@ -220,6 +221,7 @@ body {
 .bubble-icon.selected .bubble {
 	background: var(--color-accent-strong);
 	color: var(--color-on-accent);
+	transform: none;
 }
 
 /* A group of hotspots: the same ink circle as a hotspot, with a second ring
@@ -233,9 +235,10 @@ body {
 	border: 1.5px solid var(--color-text);
 	border-radius: 999px;
 	background: var(--color-text);
-	color: var(--color-ground);
+	color: var(--bubble-number, var(--color-ground));
 	font: 600 12px/1 var(--font-ui);
 	font-variant-numeric: tabular-nums;
+	transform: scale(var(--bubble-scale, 1));
 	box-shadow:
 		0 0 0 2px var(--color-ground),
 		0 0 0 3.5px var(--color-text);
@@ -274,20 +277,13 @@ body {
 }
 
 .home-icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	border: 3px solid var(--color-home);
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--color-home) 18%, transparent);
-}
-
-.home-icon::after {
-	content: '';
-	width: 16px;
-	height: 16px;
-	border: 3px solid var(--color-ground);
-	border-radius: 999px;
-	background: var(--color-home);
+	background: none;
+	box-shadow:
+		0 0 0 2px #ffffff,
+		0 1px 6px 2px rgba(0, 0, 0, 0.5);
+	pointer-events: none;
 }
 
 @media (max-width: 639px) {

@@ -18,6 +18,7 @@ export const en = {
 	'common.remove': 'Remove {name}',
 	'common.loading': 'Loading…',
 	'common.retry': 'Try again',
+	'common.stillLoading': 'Still working. This can take a few seconds…',
 	'common.yourBirds': 'Your birds',
 
 	'language.label': 'Language',
@@ -127,7 +128,7 @@ export const en = {
 	'range.min': '{amount} min',
 	'range.km': '{amount} km',
 	'range.measureBy': 'Measure the distance by',
-	'range.driveTime': 'Drive time',
+	'range.driveTime': 'By car',
 	'range.straightLine': 'Straight line',
 	'range.minutesGroup': 'Minutes of driving',
 	'range.kilometresGroup': 'Kilometres',
@@ -162,6 +163,10 @@ export const en = {
 	'year.noteBest': 'Best weeks for your birds: {ranges}.',
 	'year.noteBirds': 'Bars show how likely your birds are in each week.',
 	'year.noteArea': 'Bars show the checklists recorded in the area each week.',
+
+	'about.text': 'This site plans where to go birding. It does not collect sightings. Its figures come from eBird checklists, so the more people record on eBird, the better they get. Record your own sightings there.',
+	'about.label': 'About this site',
+	'about.link': 'Go to eBird',
 
 	'species.details': 'Bird details',
 	'species.figures': 'Figures for {hotspot}',
@@ -201,6 +206,7 @@ export const lt: Record<MessageKey, Message> = {
 	'common.remove': 'Pašalinti: {name}',
 	'common.loading': 'Kraunama…',
 	'common.retry': 'Bandyti dar kartą',
+	'common.stillLoading': 'Dar kraunama. Tai gali užtrukti kelias sekundes…',
 	'common.yourBirds': 'Jūsų paukščiai',
 
 	'language.label': 'Kalba',
@@ -312,7 +318,7 @@ export const lt: Record<MessageKey, Message> = {
 	'range.min': '{amount} min.',
 	'range.km': '{amount} km',
 	'range.measureBy': 'Atstumas matuojamas',
-	'range.driveTime': 'Kelio laiku',
+	'range.driveTime': 'Automobiliu',
 	'range.straightLine': 'Tiesia linija',
 	'range.minutesGroup': 'Važiavimo minutės',
 	'range.kilometresGroup': 'Kilometrai',
@@ -348,6 +354,10 @@ export const lt: Record<MessageKey, Message> = {
 	'year.noteBest': 'Geriausios savaitės jūsų paukščiams: {ranges}.',
 	'year.noteBirds': 'Stulpeliai rodo jūsų paukščių tikimybę kiekvieną savaitę.',
 	'year.noteArea': 'Stulpeliai rodo sąrašų skaičių kiekvieną savaitę.',
+
+	'about.text': 'Ši svetainė padeda planuoti, kur stebėti paukščius. Ji nerenka stebėjimų. Duomenys gaunami iš „eBird“ sąrašų, todėl kuo daugiau žmonių įrašo stebėjimus į „eBird“, tuo tikslesni skaičiai. Savo stebėjimus įrašykite ten.',
+	'about.label': 'Apie svetainę',
+	'about.link': 'Eiti į „eBird“',
 
 	'species.details': 'Paukščio duomenys',
 	'species.figures': 'Duomenys: {hotspot}',
