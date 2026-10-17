@@ -43,6 +43,9 @@ type Params struct {
 	// RadiusKM.
 	MaxMinutes float64
 	Week       int16
+	// WeekRadius, when above zero, ranks by the week and that many weeks either
+	// side pooled, so a hotspot with few checklists in one week has more to rest on.
+	WeekRadius int
 	Lang       string
 	SpeciesIDs []int64
 }
@@ -150,7 +153,9 @@ func (r *Recommender) Recommend(ctx context.Context, p Params) ([]Recommendation
 		Latitude:        pgtype.Float8{Float64: p.Latitude, Valid: true},
 		Longitude:       pgtype.Float8{Float64: p.Longitude, Valid: true},
 		RadiusMeters:    pgtype.Float8{Float64: radiusKM * 1000, Valid: true},
-		WeekOfYear:      pgtype.Int2{Int16: p.Week, Valid: true},
+		WeekOfYear:      pgtype.Int4{Int32: int32(p.Week), Valid: true},
+		WeekRadius:      pgtype.Int4{Int32: int32(p.WeekRadius), Valid: true},
+		PriorChecklists: pgtype.Float4{Float32: weekPriorChecklists, Valid: true},
 		SpeciesIds:      p.SpeciesIDs,
 		TopSpeciesLimit: pgtype.Int8{Int64: topSpeciesPerHotspot, Valid: true},
 	})

@@ -3,6 +3,7 @@ const storageKey = 'last-choices';
 export interface LastChoices {
 	home: { lat: number; lon: number; label: string };
 	range: string;
+	poolWeeks: boolean;
 }
 
 type Home = LastChoices['home'];
@@ -31,7 +32,7 @@ export function loadLastChoices(): LastChoices | null {
 			return null;
 		}
 		const { lat, lon, label } = saved.home;
-		return { home: { lat, lon, label }, range: saved.range };
+		return { home: { lat, lon, label }, range: saved.range, poolWeeks: saved.poolWeeks === true };
 	} catch {
 		return null;
 	}

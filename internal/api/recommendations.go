@@ -122,6 +122,8 @@ type search struct {
 	maxMinutes float64
 	date       time.Time
 	speciesIDs []int64
+	// poolWeeks asks the ranking to pool the week with the weeks either side.
+	poolWeeks bool
 }
 
 // parseSearch reads the query of a request about an area. The error's text is
@@ -163,12 +165,21 @@ func parseSearch(query url.Values) (search, error) {
 	if err != nil {
 		return search{}, err
 	}
+	parsed.poolWeeks = query.Get("pool_weeks") == "true"
 	return parsed, nil
 }
 
 // statusClientClosedRequest is the status nginx uses, and so the one log
 // readers know, for a request the client gave up on before the answer.
 const statusClientClosedRequest = 499
+
+// weekRadius is how many weeks either side of the date the ranking pools.
+func (s search) weekRadius() int {
+	if s.poolWeeks {
+		return 1
+	}
+	return 0
+}
 
 // logAttrs describes what was asked, for the log. The place is left out: it is
 // where a person is.
@@ -178,6 +189,7 @@ func (s search) logAttrs() []any {
 		slog.Float64("radius_km", s.radiusKM),
 		slog.String("date", s.date.Format(time.DateOnly)),
 		slog.Int("target_species", len(s.speciesIDs)),
+		slog.Bool("pool_weeks", s.poolWeeks),
 	}
 }
 
@@ -215,6 +227,7 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommender) 
 			RadiusKM:   parsed.radiusKM,
 			MaxMinutes: parsed.maxMinutes,
 			Week:       birding.WeekOfYear(parsed.date),
+			WeekRadius: parsed.weekRadius(),
 			Lang:       resolveLanguage(r),
 			SpeciesIDs: parsed.speciesIDs,
 		})

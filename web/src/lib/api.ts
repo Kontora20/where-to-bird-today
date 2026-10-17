@@ -118,6 +118,8 @@ export interface SearchQuery {
 	radiusKm?: number;
 	date?: string;
 	speciesIds?: number[];
+	// Rank hotspots by the week and the weeks either side of it together.
+	poolWeeks?: boolean;
 }
 
 async function getSearch<T>(path: string, query: SearchQuery, signal?: AbortSignal): Promise<T> {
@@ -132,6 +134,9 @@ async function getSearch<T>(path: string, query: SearchQuery, signal?: AbortSign
 	}
 	if (query.date) {
 		params.set('date', query.date);
+	}
+	if (query.poolWeeks) {
+		params.set('pool_weeks', 'true');
 	}
 	for (const speciesId of query.speciesIds ?? []) {
 		params.append('species', String(speciesId));

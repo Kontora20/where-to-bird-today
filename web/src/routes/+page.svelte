@@ -49,7 +49,9 @@
 	const lastChoices = loadLastChoices();
 	let home = $state(lastChoices?.home ?? { lat: 54.6872, lon: 25.2797, label: 'Vilnius' });
 	let range = $state(lastChoices?.range ?? 'km:25');
-	$effect(() => saveLastChoices({ home: { ...home }, range }));
+	let poolWeeks = $state(lastChoices?.poolWeeks ?? false);
+	let poolInfoOpen = $state(false);
+	$effect(() => saveLastChoices({ home: { ...home }, range, poolWeeks }));
 	let date = $state(todayIso());
 
 	let targetSpecies = $state<SpeciesMatch[]>(loadYourBirds(maxTargetSpecies));
@@ -215,7 +217,8 @@
 			lon: home.lon,
 			maxMinutes: unit === 'min' ? Number(amount) : undefined,
 			radiusKm: unit === 'km' ? Number(amount) : undefined,
-			date: date || undefined
+			date: date || undefined,
+			poolWeeks
 		};
 	}
 
@@ -477,6 +480,27 @@
 						<span class="visually-hidden">{t('common.date')}</span>
 						<input type="date" min={dateLimits.min} max={dateLimits.max} bind:value={date} onchange={changeDate} />
 					</label>
+					<div class="pool">
+						<label>
+							<input type="checkbox" bind:checked={poolWeeks} onchange={refreshSoon} />
+							{t('range.poolWeeks')}
+						</label>
+						<button
+							type="button"
+							class="info"
+							aria-label={t('range.poolWeeksInfoLabel')}
+							aria-expanded={poolInfoOpen}
+							onclick={() => (poolInfoOpen = !poolInfoOpen)}
+						>
+							<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+								<circle cx="12" cy="12" r="10" />
+								<path d="M12 16v-5M12 8h.01" />
+							</svg>
+						</button>
+					</div>
+					{#if poolInfoOpen}
+						<p class="hint">{t('range.poolWeeksInfo')}</p>
+					{/if}
 				</div>
 				<div class="links">
 					<button type="button" class="link" onclick={useMyLocation} disabled={locating}>
@@ -763,6 +787,45 @@
 		letter-spacing: -0.02em;
 		line-height: 1.05;
 		overflow-wrap: anywhere;
+	}
+
+	.pool {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		min-height: 36px;
+		font-size: 0.9rem;
+	}
+
+	.pool label {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		cursor: pointer;
+	}
+
+	.pool .info {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--color-muted);
+		cursor: pointer;
+	}
+
+	.pool .info:hover,
+	.pool .info[aria-expanded='true'] {
+		color: var(--color-text);
+	}
+
+	.pool input {
+		width: 18px;
+		height: 18px;
+		accent-color: var(--color-accent-strong);
 	}
 
 	.date input {

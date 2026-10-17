@@ -977,6 +977,7 @@ func TestRecommendHotspots(t *testing.T) {
 
 	const centerLat, centerLon = 55.0, 25.0
 	const week = int16(10)
+	const weekRadius = int32(0)
 
 	near, err := queries.UpsertHotspot(ctx, UpsertHotspotParams{
 		Name: "Near Hotspot", Latitude: 55.05, Longitude: 25.05,
@@ -1025,6 +1026,12 @@ func TestRecommendHotspots(t *testing.T) {
 			t.Fatalf("seeding species_seasonality: %v", err)
 		}
 	}
+	// The ranking adjusts the frequencies itself, toward the country's: the
+	// common bird is common across the country, so it ends above the rare one
+	// although its own frequency is lower.
+	if _, err := pool.Exec(ctx, "INSERT INTO country_seasonality (country, species_id, week_of_year, frequency) VALUES ('LT', $1, $2, 1.0)", common.ID, week); err != nil {
+		t.Fatalf("seeding country_seasonality: %v", err)
+	}
 	seedSeasonality(near.ID, common.ID, 0.8, 0.8)
 	seedSeasonality(near.ID, rare.ID, 0.9, 0.3)
 	// noData and the far hotspot deliberately get no seasonality rows: the
@@ -1035,7 +1042,11 @@ func TestRecommendHotspots(t *testing.T) {
 		params.Latitude = pgtype.Float8{Float64: centerLat, Valid: true}
 		params.Longitude = pgtype.Float8{Float64: centerLon, Valid: true}
 		params.RadiusMeters = pgtype.Float8{Float64: 25_000, Valid: true}
-		params.WeekOfYear = pgtype.Int2{Int16: week, Valid: true}
+		params.WeekOfYear = pgtype.Int4{Int32: int32(week), Valid: true}
+		if !params.WeekRadius.Valid {
+			params.WeekRadius = pgtype.Int4{Int32: weekRadius, Valid: true}
+		}
+		params.PriorChecklists = pgtype.Float4{Float32: 5, Valid: true}
 		if params.TopSpeciesLimit.Int64 == 0 {
 			params.TopSpeciesLimit = pgtype.Int8{Int64: 10, Valid: true}
 		}
@@ -1090,8 +1101,8 @@ func TestRecommendHotspots(t *testing.T) {
 		// Score sums two float32 frequencies, so -- like assertSeasonality
 		// above -- this needs a coarser tolerance than floatsClose's, which
 		// is calibrated for float64 PostGIS coordinate round-trips.
-		if math.Abs(float64(nearSpecies[0].Score)-1.1) > 1e-4 {
-			t.Errorf("near hotspot score = %v, want ~1.1 (0.8 + 0.3, the adjusted frequencies)", nearSpecies[0].Score)
+		if math.Abs(float64(nearSpecies[0].Score)-1.4666667) > 1e-4 {
+			t.Errorf("near hotspot score = %v, want ~1.4667 (13/15 + 9/15, the adjusted frequencies)", nearSpecies[0].Score)
 		}
 	})
 
@@ -1119,8 +1130,33 @@ func TestRecommendHotspots(t *testing.T) {
 			if r.SpeciesID.Int64 != rare.ID {
 				t.Errorf("species_ids filter let through species %d, want only %d", r.SpeciesID.Int64, rare.ID)
 			}
-			if math.Abs(float64(r.Score)-0.3) > 1e-4 {
-				t.Errorf("filtered score = %v, want 0.3 (rare's adjusted frequency alone)", r.Score)
+			if math.Abs(float64(r.Score)-0.6) > 1e-4 {
+				t.Errorf("filtered score = %v, want 0.6 (rare's adjusted frequency alone)", r.Score)
+			}
+		}
+	})
+
+	t.Run("pooling weeks ranks by the week and its neighbour weeks together", func(t *testing.T) {
+		// The week before has 10 more checklists, 1 of them with the rare bird.
+		if _, err := pool.Exec(ctx,
+			"INSERT INTO species_seasonality (hotspot_id, species_id, week_of_year, frequency, adjusted_frequency, sample_size) VALUES ($1, $2, $3, 0.1, 0.1, 10)",
+			near.ID, rare.ID, week-1,
+		); err != nil {
+			t.Fatalf("seeding the neighbour week: %v", err)
+		}
+
+		rows := recommend(RecommendHotspotsParams{SpeciesIds: []int64{rare.ID}, WeekRadius: pgtype.Int4{Int32: 1, Valid: true}})
+
+		for _, r := range rows {
+			if r.HotspotID != near.ID {
+				continue
+			}
+			// 10 of 20 checklists, no country figure: 10 / (20 + 5).
+			if math.Abs(float64(r.Score)-0.4) > 1e-4 {
+				t.Errorf("pooled score = %v, want 0.4", r.Score)
+			}
+			if r.Checklists.Int32 != 20 || math.Abs(float64(r.Frequency.Float32)-0.5) > 1e-4 {
+				t.Errorf("pooled frequency = %v of %d checklists, want 0.5 of 20", r.Frequency.Float32, r.Checklists.Int32)
 			}
 		}
 	})
