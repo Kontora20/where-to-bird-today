@@ -3,6 +3,7 @@ package birding
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/Kontora20/where-to-bird-today/internal/routing"
 	"github.com/Kontora20/where-to-bird-today/internal/store"
@@ -43,7 +44,7 @@ func warmOneOrigin(ctx context.Context, logger *slog.Logger, hotspots hotspotLis
 		RadiusMeters: warmupRadiusMeters,
 	})
 	if err != nil {
-		logger.Warn("drive-time cache warm-up: listing hotspots failed", slog.Any("origin", origin), slog.Any("error", err))
+		logger.Warn("drive-time cache warm-up: listing hotspots failed", slog.Float64("latitude", origin.Latitude), slog.Float64("longitude", origin.Longitude), slog.Any("error", err))
 		return
 	}
 
@@ -52,9 +53,10 @@ func warmOneOrigin(ctx context.Context, logger *slog.Logger, hotspots hotspotLis
 		destinations[i] = routing.Point{Latitude: row.Latitude.Float64, Longitude: row.Longitude.Float64}
 	}
 
+	started := time.Now()
 	if _, err := driveTimes.DriveTimes(ctx, origin, destinations); err != nil {
-		logger.Warn("drive-time cache warm-up: asking the routing server failed", slog.Any("origin", origin), slog.Any("error", err))
+		logger.Warn("drive-time cache warm-up: asking the routing server failed", slog.Float64("latitude", origin.Latitude), slog.Float64("longitude", origin.Longitude), slog.Duration("took", time.Since(started)), slog.Any("error", err))
 		return
 	}
-	logger.Info("drive-time cache warmed", slog.Any("origin", origin), slog.Int("hotspots", len(destinations)))
+	logger.Info("drive-time cache warmed", slog.Float64("latitude", origin.Latitude), slog.Float64("longitude", origin.Longitude), slog.Int("hotspots", len(destinations)), slog.Duration("took", time.Since(started)))
 }

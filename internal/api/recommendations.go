@@ -166,6 +166,21 @@ func parseSearch(query url.Values) (search, error) {
 	return parsed, nil
 }
 
+// statusClientClosedRequest is the status nginx uses, and so the one log
+// readers know, for a request the client gave up on before the answer.
+const statusClientClosedRequest = 499
+
+// logAttrs describes what was asked, for the log. The place is left out: it is
+// where a person is.
+func (s search) logAttrs() []any {
+	return []any{
+		slog.Float64("max_minutes", s.maxMinutes),
+		slog.Float64("radius_km", s.radiusKM),
+		slog.String("date", s.date.Format(time.DateOnly)),
+		slog.Int("target_species", len(s.speciesIDs)),
+	}
+}
+
 // writeSearchError answers a failed search of an area. action names what was
 // being done, for the log.
 func writeSearchError(w http.ResponseWriter, logger *slog.Logger, err error, action string) {
@@ -177,6 +192,9 @@ func writeSearchError(w http.ResponseWriter, logger *slog.Logger, err error, act
 	case errors.Is(err, birding.ErrRoutingBusy):
 		w.Header().Set("Retry-After", "2")
 		http.Error(w, "routing_busy", http.StatusServiceUnavailable)
+	case errors.Is(err, context.Canceled):
+		logger.Debug(action+" abandoned by the client", slog.Any("error", err))
+		http.Error(w, "client closed request", statusClientClosedRequest)
 	default:
 		logger.Error(action+" failed", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -201,7 +219,7 @@ func handleGetRecommendations(logger *slog.Logger, recommendations recommender) 
 			SpeciesIDs: parsed.speciesIDs,
 		})
 		if err != nil {
-			writeSearchError(w, logger, err, "ranking recommendations")
+			writeSearchError(w, logger.With(parsed.logAttrs()...), err, "ranking recommendations")
 			return
 		}
 
@@ -233,7 +251,7 @@ func handleGetAreaWeeks(logger *slog.Logger, weeks weekFinder) http.Handler {
 			Date:       parsed.date,
 		})
 		if err != nil {
-			writeSearchError(w, logger, err, "finding best weeks")
+			writeSearchError(w, logger.With(parsed.logAttrs()...), err, "finding best weeks")
 			return
 		}
 
@@ -260,7 +278,7 @@ func handleGetInSeason(logger *slog.Logger, seasons seasonFinder) http.Handler {
 			Date:       parsed.date,
 		}, resolveLanguage(r))
 		if err != nil {
-			writeSearchError(w, logger, err, "finding species in season")
+			writeSearchError(w, logger.With(parsed.logAttrs()...), err, "finding species in season")
 			return
 		}
 

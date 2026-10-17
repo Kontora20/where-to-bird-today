@@ -114,9 +114,10 @@ func (c *Client) DriveTimes(ctx context.Context, origin Point, destinations []Po
 	if err != nil {
 		return nil, fmt.Errorf("building OSRM request: %w", err)
 	}
+	started := time.Now()
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("calling OSRM: %w", err)
+		return nil, fmt.Errorf("calling OSRM with %d destinations, %s after sending: %w", len(destinations), time.Since(started).Round(time.Millisecond), err)
 	}
 	defer func() { _ = response.Body.Close() }()
 

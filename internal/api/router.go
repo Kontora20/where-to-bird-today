@@ -66,6 +66,9 @@ func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationSer
 	return logRequests(logger, securityHeaders(mux))
 }
 
+// slowRequest is the time after which a request is logged as a warning.
+const slowRequest = 5 * time.Second
+
 // logRequests logs one structured line per request, after it completes.
 //
 // This is the whole middleware concept in Go: a function taking an
@@ -88,11 +91,15 @@ func logRequests(logger *slog.Logger, next http.Handler) http.Handler {
 		if rec.status == http.StatusTooManyRequests || rec.status == http.StatusForbidden {
 			level = slog.LevelDebug
 		}
+		took := time.Since(start)
+		if rec.status >= http.StatusInternalServerError || took > slowRequest {
+			level = slog.LevelWarn
+		}
 		logger.Log(r.Context(), level, "http request",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.Int("status", rec.status),
-			slog.Duration("duration", time.Since(start)),
+			slog.Duration("duration", took),
 		)
 	})
 }

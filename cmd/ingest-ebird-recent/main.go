@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/Kontora20/where-to-bird-today/internal/config"
 	"github.com/Kontora20/where-to-bird-today/internal/ingest"
@@ -16,6 +17,7 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	if err := run(); err != nil {
 		slog.Error("ingest-ebird-recent failed", slog.Any("error", err))
 		os.Exit(1)
@@ -24,6 +26,7 @@ func main() {
 
 func run() error {
 	ctx := context.Background()
+	started := time.Now()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -50,6 +53,6 @@ func run() error {
 		return err
 	}
 
-	slog.Info("ebird recent observations ingest complete", slog.Int("last_seen_rows_moved", count), slog.Any("regions", cfg.Regions))
+	slog.Info("ebird recent observations ingest complete", slog.Int("last_seen_rows_moved", count), slog.Any("regions", cfg.Regions), slog.Duration("took", time.Since(started)))
 	return nil
 }

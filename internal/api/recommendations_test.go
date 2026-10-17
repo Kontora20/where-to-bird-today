@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -338,5 +339,17 @@ func TestWriteSearchErrorSaysWhenToRetryWhenRoutingIsBusy(t *testing.T) {
 	}
 	if got, want := rec.Header().Get("Retry-After"), "2"; got != want {
 		t.Errorf("Retry-After = %q, want %q", got, want)
+	}
+}
+
+func TestWriteSearchErrorAnswers499WhenTheClientLeft(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+
+	writeSearchError(rec, testLogger(), fmt.Errorf("finding drive times: %w", context.Canceled), "searching")
+
+	if got, want := rec.Code, statusClientClosedRequest; got != want {
+		t.Errorf("status = %d, want %d", got, want)
 	}
 }
