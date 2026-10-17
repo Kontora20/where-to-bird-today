@@ -145,6 +145,12 @@ async function getSearch<T>(path: string, query: SearchQuery, signal?: AbortSign
 	return getJson(path, params, signal);
 }
 
+// Tells the server that drive times are about to be asked for, so it can wake
+// the routing server first. Nothing depends on the answer.
+export function warmRouting() {
+	void fetch('/routing/warm').catch(() => {});
+}
+
 export async function getRecommendations(query: SearchQuery, signal?: AbortSignal): Promise<Recommendation[]> {
 	const found = await getSearch<Recommendation[]>('/recommendations', query, signal);
 	return found.map((hotspot) => ({

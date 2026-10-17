@@ -20,7 +20,7 @@ import (
 // passes on what it is given and never touches the database itself. spaFS is
 // similarly just an fs.FS -- this package knows nothing about //go:embed or
 // the web module, only that it was handed something file-shaped to serve.
-func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationService, spaFS fs.FS) http.Handler {
+func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationService, spaFS fs.FS, warmRouting func()) http.Handler {
 	mux := http.NewServeMux()
 
 	// "GET /health" is a Go 1.22+ pattern: method and path in one string.
@@ -29,6 +29,7 @@ func NewRouter(logger *slog.Logger, db pinger, recommendations recommendationSer
 	// free, with no configuration.
 	mux.Handle("GET /health", handleHealth(logger))
 	mux.Handle("GET /ready", handleReady(logger, db))
+	mux.Handle("GET /routing/warm", blockBots(handleWarmRouting(warmRouting)))
 
 	// The search endpoints cost a PostGIS query and, with a drive-time limit,
 	// an OSRM table request, so each is also rate-limited per address (row 31

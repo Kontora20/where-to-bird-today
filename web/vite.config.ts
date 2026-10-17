@@ -16,7 +16,8 @@ export default defineConfig({
 			'/recommendations': { target: 'http://localhost:8080', changeOrigin: true },
 			'/in-season': { target: 'http://localhost:8080', changeOrigin: true },
 			'/species': { target: 'http://localhost:8080', changeOrigin: true },
-			'/hotspots': { target: 'http://localhost:8080', changeOrigin: true }
+			'/hotspots': { target: 'http://localhost:8080', changeOrigin: true },
+			'/routing': { target: 'http://localhost:8080', changeOrigin: true }
 		}
 	}
 });

@@ -81,20 +81,16 @@ func run() error {
 	// A nil *routing.Client stored in the interface would not compare equal to
 	// nil, so the interface is only assigned when a server is configured.
 	var driveTimes birding.DriveTimeFinder
+	var warmRouting func()
 	if cfg.OSRMURL != "" {
-		driveTimes = routing.NewCache(routing.NewClient(cfg.OSRMURL), warmupOrigins...)
+		server := routing.NewClient(cfg.OSRMURL)
+		driveTimes = routing.NewCache(server, warmupOrigins...)
+		// The routing server scales to zero. It is woken, and the cache warmed
+		// for the default start point and every major city, when the page asks
+		// for it because someone wants drive times, not at every start.
+		warmRouting = birding.NewRoutingWarmer(ctx, logger, queries, driveTimes, server, warmupOrigins).Warm
 	}
 	recommendations := birding.NewService(queries, driveTimes)
-
-	// Warm routing.Cache for the default start point and every major city
-	// before anyone searches from them, so a real search from one of them is
-	// answered from the cache instead of costing a table request of its own
-	// (master plan row 30). Runs in the background: a slow or failed warm-up
-	// must not delay the server coming up, and every real search still falls
-	// back to asking OSRM directly either way.
-	if driveTimes != nil {
-		go birding.WarmDriveTimeCache(ctx, logger, queries, driveTimes, warmupOrigins)
-	}
 
 	// The embedded FS has everything under a "build" prefix (that's what
 	// //go:embed all:build captured); Sub strips it so a request for
@@ -106,7 +102,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: api.NewRouter(logger, pool, recommendations, spaFS),
+		Handler: api.NewRouter(logger, pool, recommendations, spaFS, warmRouting),
 
 		// The zero value of http.Server has NO timeouts. A client that opens
 		// a connection and never sends anything would occupy a goroutine

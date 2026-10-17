@@ -49,7 +49,7 @@ func TestReady(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 			rec := httptest.NewRecorder()
 
-			NewRouter(testLogger(), fakeDatabase{err: tc.pingErr}, fakeRecommendationService{}, fstest.MapFS{}).ServeHTTP(rec, req)
+			NewRouter(testLogger(), fakeDatabase{err: tc.pingErr}, fakeRecommendationService{}, fstest.MapFS{}, nil).ServeHTTP(rec, req)
 
 			if got := rec.Code; got != tc.wantStatus {
 				t.Fatalf("GET /ready status = %d, want %d", got, tc.wantStatus)

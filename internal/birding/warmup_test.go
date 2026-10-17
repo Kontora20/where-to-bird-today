@@ -84,3 +84,56 @@ func TestWarmDriveTimeCacheDoesNotPanicOnARoutingFailure(t *testing.T) {
 
 	WarmDriveTimeCache(context.Background(), discardLogger(), hotspots, driveTimes, []routing.Point{{}})
 }
+
+// signalingDriveTimes tells the test each time it is asked, and answers with err.
+type signalingDriveTimes struct {
+	asked chan struct{}
+	err   error
+}
+
+func (s signalingDriveTimes) DriveTimes(_ context.Context, _ routing.Point, destinations []routing.Point) ([]time.Duration, error) {
+	s.asked <- struct{}{}
+	return make([]time.Duration, len(destinations)), s.err
+}
+
+func TestRoutingWarmerWakesTheServerOnceForManyRequests(t *testing.T) {
+	t.Parallel()
+
+	server := signalingDriveTimes{asked: make(chan struct{}, 10)}
+	origins := []routing.Point{{Latitude: 54.6872, Longitude: 25.2797}}
+	warmer := NewRoutingWarmer(context.Background(), discardLogger(), fakeAreaStore{}, recordingDriveTimes{origins: new([]routing.Point)}, server, origins)
+
+	warmer.Warm()
+	warmer.Warm()
+	warmer.Warm()
+
+	select {
+	case <-server.asked:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the routing server was never asked")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if got := len(server.asked); got != 0 {
+		t.Errorf("the routing server was asked %d more times, want none", got)
+	}
+}
+
+func TestRoutingWarmerTriesAgainAfterAFailure(t *testing.T) {
+	t.Parallel()
+
+	server := signalingDriveTimes{asked: make(chan struct{}, 10), err: errors.New("asleep")}
+	origins := []routing.Point{{Latitude: 54.6872, Longitude: 25.2797}}
+	warmer := NewRoutingWarmer(context.Background(), discardLogger(), fakeAreaStore{}, recordingDriveTimes{origins: new([]routing.Point)}, server, origins)
+
+	deadline := time.After(2 * time.Second)
+	for asked := 0; asked < 2; {
+		warmer.Warm()
+		select {
+		case <-server.asked:
+			asked++
+		case <-deadline:
+			t.Fatalf("the routing server was asked %d times, want 2", asked)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}

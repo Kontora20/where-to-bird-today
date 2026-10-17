@@ -31,6 +31,7 @@
 		getSeason,
 		getSpeciesDetail,
 		searchSpecies,
+		warmRouting,
 		type AreaWeeks as AreaWeeksData,
 		type Recommendation,
 		type SeasonalSpecies,
@@ -123,7 +124,10 @@
 	// The hotspot the open species is shown at.
 	let speciesHotspotName = $state('');
 
-	onMount(refresh);
+	onMount(() => {
+		if (range.startsWith('min:')) warmRouting();
+		return refresh();
+	});
 
 	// Bird names, hotspot names and the season come in the chosen language, so
 	// a change of language asks for them again.
@@ -473,6 +477,7 @@
 						value={range}
 						onchange={(next) => {
 							range = next;
+							if (next.startsWith('min:')) warmRouting();
 							refreshSoon();
 						}}
 					/>
