@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"database/sql"
+	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -67,10 +68,13 @@ func newTestQueries(t *testing.T) *store.Queries {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	if err := goose.SetDialect("postgres"); err != nil {
-		t.Fatalf("setting goose dialect: %v", err)
+	// A Provider holds its own state. goose.SetDialect and goose.Up share a
+	// package-level variable, which tests running in parallel would race on.
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, os.DirFS("../../../migrations"))
+	if err != nil {
+		t.Fatalf("creating migration provider: %v", err)
 	}
-	if err := goose.Up(sqlDB, "../../../migrations"); err != nil {
+	if _, err := provider.Up(ctx); err != nil {
 		t.Fatalf("running migrations: %v", err)
 	}
 
