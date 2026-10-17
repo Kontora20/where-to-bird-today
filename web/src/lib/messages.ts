@@ -9,7 +9,7 @@ export interface Plural {
 type Message = string | Plural;
 
 export const en = {
-	'app.title': 'Where to Bird Today',
+	'app.title': 'Where the birds at',
 
 	'common.close': 'Close',
 	'common.today': 'Today',
@@ -200,7 +200,7 @@ export type MessageKey = keyof typeof en;
 // Typed against the English keys: a key missing here, or one that English
 // does not have, fails `npm run check`.
 export const lt: Record<MessageKey, Message> = {
-	'app.title': 'Kur šiandien stebėti paukščius',
+	'app.title': 'Kur paukščiai?',
 
 	'common.close': 'Uždaryti',
 	'common.today': 'Šiandien',

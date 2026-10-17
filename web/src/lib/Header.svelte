@@ -18,16 +18,7 @@
 
 <header class="header">
 	<div class="brand">
-		<svg width="40" height="37" viewBox="0 0 70 64" aria-hidden="true">
-			<path
-				d="M8 34 C6 16 24 6 42 10 C60 14 68 30 60 46 C52 60 30 62 16 54 C10 50 9 42 8 34Z"
-				fill="var(--color-inverse)"
-			/>
-			<path
-				d="M40 12 C52 10 64 22 58 34 C52 42 40 38 36 28 C34 20 34 14 40 12Z"
-				fill="var(--color-accent)"
-			/>
-		</svg>
+		<img src="/logo.png" width="40" height="40" alt="" />
 		<h1>{t('app.title')}</h1>
 	</div>
 	<div class="search">
@@ -62,7 +53,7 @@
 		min-width: 0;
 	}
 
-	.brand svg {
+	.brand img {
 		flex-shrink: 0;
 	}
 

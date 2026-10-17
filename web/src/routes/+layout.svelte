@@ -1,6 +1,5 @@
 <script lang="ts">
 	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
 	import { locale, t } from '$lib/i18n.svelte';
 
 	let { children } = $props();
@@ -11,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/png" href="/favicon.png" />
 </svelte:head>
 
 <svelte:boundary>
