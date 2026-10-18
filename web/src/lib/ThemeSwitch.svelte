@@ -2,9 +2,7 @@
 	import { t } from '$lib/i18n.svelte';
 	import { chooseTheme, theme, type ThemeChoice } from '$lib/theme.svelte';
 
-	const choices: ThemeChoice[] = ['system', 'light', 'dark'];
-	// The desktop switch leaves out system: it follows the device until one is chosen.
-	const desktopChoices = choices.filter((choice) => choice !== 'system');
+	const choices: ThemeChoice[] = ['light', 'dark'];
 
 	const next = () => choices[(choices.indexOf(theme.choice) + 1) % choices.length];
 </script>
@@ -21,10 +19,7 @@
 		stroke-linejoin="round"
 		aria-hidden="true"
 	>
-		{#if choice === 'system'}
-			<rect x="2" y="3" width="20" height="14" rx="2" />
-			<path d="M8 21h8M12 17v4" />
-		{:else if choice === 'light'}
+		{#if choice === 'light'}
 			<circle cx="12" cy="12" r="4" />
 			<path
 				d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
@@ -36,7 +31,7 @@
 {/snippet}
 
 <div class="switch group" role="group" aria-label={t('theme.label')}>
-	{#each desktopChoices as choice (choice)}
+	{#each choices as choice (choice)}
 		<button
 			type="button"
 			class="text-button"

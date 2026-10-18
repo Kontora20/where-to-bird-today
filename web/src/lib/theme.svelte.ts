@@ -1,22 +1,19 @@
-export type ThemeChoice = 'system' | 'light' | 'dark';
+export type ThemeChoice = 'light' | 'dark';
 
 const storageKey = 'theme';
-const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 function savedChoice(): ThemeChoice {
 	try {
-		const saved = localStorage.getItem(storageKey);
-		return saved === 'light' || saved === 'dark' ? saved : 'system';
+		return localStorage.getItem(storageKey) === 'dark' ? 'dark' : 'light';
 	} catch {
-		return 'system';
+		return 'light';
 	}
 }
 
 export const theme = $state({ choice: savedChoice() });
 
 function applyTheme() {
-	const dark = theme.choice === 'dark' || (theme.choice === 'system' && darkQuery.matches);
-	document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+	document.documentElement.dataset.theme = theme.choice;
 }
 
 export function chooseTheme(choice: ThemeChoice) {
@@ -28,5 +25,3 @@ export function chooseTheme(choice: ThemeChoice) {
 	}
 	applyTheme();
 }
-
-darkQuery.addEventListener('change', applyTheme);

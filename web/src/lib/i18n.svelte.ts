@@ -5,18 +5,13 @@ export type Language = 'lt' | 'en';
 const storageKey = 'language';
 const catalogs = { en, lt };
 
-// The saved choice, else the first browser language that is supported, else
-// Lithuanian (ADR 0005).
+// The saved choice, else Lithuanian (ADR 0005).
 function initialLanguage(): Language {
 	try {
 		const saved = localStorage.getItem(storageKey);
 		if (saved === 'lt' || saved === 'en') return saved;
 	} catch {
-		// storage blocked: the browser's language decides
-	}
-	for (const tag of navigator.languages) {
-		const base = tag.slice(0, 2).toLowerCase();
-		if (base === 'lt' || base === 'en') return base;
+		// storage blocked: Lithuanian
 	}
 	return 'lt';
 }

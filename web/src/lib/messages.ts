@@ -24,7 +24,6 @@ export const en = {
 	'language.label': 'Language',
 	'theme.label': 'Theme',
 	'theme.change': 'Theme: {theme}. Change theme',
-	'theme.system': 'system',
 	'theme.light': 'light',
 	'theme.dark': 'dark',
 
@@ -215,7 +214,6 @@ export const lt: Record<MessageKey, Message> = {
 	'language.label': 'Kalba',
 	'theme.label': 'Tema',
 	'theme.change': 'Tema: {theme}. Keisti temą',
-	'theme.system': 'sistemos',
 	'theme.light': 'šviesi',
 	'theme.dark': 'tamsi',
 
