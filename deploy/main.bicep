@@ -39,6 +39,12 @@ param monthlyBudget int = 25
 @description('First day of the first budget month. Cannot be moved later than the existing start date once created.')
 param budgetStartDate string = '2026-10-01'
 
+@description('Custom domain served by the server.')
+param customDomain string = 'kurpauksciai.lt'
+
+@description('Name of the managed certificate that `az containerapp hostname bind` created for the domain. Empty until then; a deploy with it empty removes the domain binding.')
+param customDomainCertName string = ''
+
 var osrmImage = 'ghcr.io/project-osrm/osrm-backend@sha256:8a1b1bc938412f15f9b5b32d794c4ec6bf4a85dfbbabfa0a014b70b187edb53b'
 var keyVaultSecretsUserRole = '4633458b-17de-408a-b874-0445c86b69e6'
 var keyVaultSecretsOfficerRole = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
@@ -225,7 +231,19 @@ resource server 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: environment.id
     configuration: {
-      ingress: { external: true, targetPort: 8080, transport: 'http', allowInsecure: false }
+      ingress: {
+        external: true
+        targetPort: 8080
+        transport: 'http'
+        allowInsecure: false
+        customDomains: empty(customDomainCertName) ? [] : [
+          {
+            name: customDomain
+            certificateId: '${environment.id}/managedCertificates/${customDomainCertName}'
+            bindingType: 'SniEnabled'
+          }
+        ]
+      }
       registries: registries
       secrets: vaultSecrets
     }
