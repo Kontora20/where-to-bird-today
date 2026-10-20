@@ -110,7 +110,7 @@ func run() error {
 		// caller; net/http supplies no defaults.
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 
 		// The default allows 1 MB of headers per request. A browser sends a

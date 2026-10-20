@@ -18,7 +18,7 @@ export const en = {
 	'common.remove': 'Remove {name}',
 	'common.loading': 'Loading…',
 	'common.retry': 'Try again',
-	'common.stillLoading': 'Still working. This can take a few seconds…',
+	'common.stillLoading': 'Still working. The first search after a quiet period can take up to half a minute…',
 	'common.yourBirds': 'Your birds',
 
 	'language.label': 'Language',
@@ -208,7 +208,7 @@ export const lt: Record<MessageKey, Message> = {
 	'common.remove': 'Pašalinti: {name}',
 	'common.loading': 'Kraunama…',
 	'common.retry': 'Bandyti dar kartą',
-	'common.stillLoading': 'Dar kraunama. Tai gali užtrukti kelias sekundes…',
+	'common.stillLoading': 'Dar kraunama. Pirma paieška po ilgesnės pertraukos gali užtrukti iki pusės minutės…',
 	'common.yourBirds': 'Jūsų paukščiai',
 
 	'language.label': 'Kalba',

@@ -91,8 +91,9 @@ const errorMessages: Record<string, MessageKey> = {
 	rate_limited: 'error.rateLimited'
 };
 
-// How long a request may take before the page gives up on it.
-const requestTimeoutMs = 15_000;
+// How long a request may take before the page gives up on it. A search that
+// wakes the sleeping routing server takes about 30 seconds.
+const requestTimeoutMs = 60_000;
 
 async function getJson<T>(path: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
 	params.set('lang', locale.language);

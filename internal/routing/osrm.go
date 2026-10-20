@@ -43,6 +43,12 @@ const maxConcurrentRequests = 4
 // osrmBusyWait is how long a request waits for a free slot before giving up.
 const osrmBusyWait = 1 * time.Second
 
+// requestTimeout is how long one OSRM request may take. The routing server
+// scales to zero, and waking it took about 30 seconds in the logs, so a request
+// that arrives first waits for the wake-up. Keep it below the server's write
+// timeout and the page's request timeout.
+const requestTimeout = 45 * time.Second
+
 // Point is a WGS 84 coordinate.
 type Point struct {
 	Latitude  float64
@@ -64,7 +70,7 @@ type Client struct {
 func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: requestTimeout},
 		slots:      make(chan struct{}, maxConcurrentRequests),
 	}
 }
