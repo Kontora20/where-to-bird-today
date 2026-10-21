@@ -1,267 +1,199 @@
 # Where to Bird Today?
 
-Tell it *when* you want to bird, *where* you are, *how far* you'll travel, and a few preferences —
+Tell it *when* you want to bird, *where* you are, *how far* you will travel, and a few preferences, and
 get back a ranked list of places with a summary of what you can realistically expect to see.
 
 **Primary goal: learning Go.** The app is the vehicle.
 
-> Detailed planning notes and decision records are kept privately for now and are not part of this
-> repository.
+## Architecture
 
-**Status: Phase 1** — wiring the database in.
+![Architecture: the browser talks to a Go server on Azure Container Apps, which reads Neon Postgres and an OSRM routing server; scheduled jobs load eBird data into Neon](diagrams/architecture.svg)
 
----
+<details>
+<summary>Mermaid source</summary>
+
+```mermaid
+flowchart TB
+    browser(["Browser<br/>SvelteKit app, Leaflet map"])
+    tiles["OpenStreetMap<br/>map tiles"]
+
+    subgraph azure["Azure Container Apps, Germany West Central"]
+        server["wtbt-server<br/>Go net/http, serves the embedded SvelteKit app<br/>on 07:00-22:00 Vilnius time, otherwise scaled to zero"]
+        osrm["wtbt-osrm<br/>OSRM drive times<br/>road graph on an Azure Files share"]
+        jobs["Scheduled jobs, same image as the server, times in UTC<br/><br/>checklists-lt, -lv, -ee: every 2 hours, 40 minutes apart<br/>recent: every 2 hours<br/>seasonality: 03:50 daily<br/>hotspots: Mondays 03:00<br/>migrate: by hand after a deploy"]
+        vault["Key Vault<br/>database URL, eBird key, registry token"]
+        logs["Log Analytics and a workbook<br/>console logs of the server and the jobs"]
+    end
+
+    neon[("Neon<br/>Postgres 18 + PostGIS")]
+    ebird["eBird API 2.0<br/>500 requests an hour per key"]
+    sources["Wikidata, Wikimedia Commons,<br/>iNaturalist, AviList<br/>loaded by hand"]
+
+    subgraph github["GitHub"]
+        ci["Actions: CI, then Deploy"]
+        ghcr["GHCR<br/>container image"]
+    end
+
+    browser -->|"searches, species, static files"| server
+    browser -->|"map tiles"| tiles
+    server -->|"PostGIS queries"| neon
+    server -->|"drive times"| osrm
+
+    jobs -->|"checklists, hotspots,<br/>latest records"| ebird
+    jobs -->|"writes checklists, observations,<br/>seasonality tables"| neon
+    sources -.->|"names, photos, species"| neon
+
+    vault -.->|"secrets"| server
+    vault -.->|"secrets"| jobs
+
+    ci -->|"build and push"| ghcr
+    ci -->|"migrate, update server and jobs"| server
+```
+
+</details>
+
+`diagrams/architecture.mmd` is the source of the image. Render it again after a change with
+`npx @mermaid-js/mermaid-cli -i diagrams/architecture.mmd -o diagrams/architecture.svg -b white`.
+
+- **One image, two roles.** The Dockerfile builds the web app, then every binary under `cmd/`. The server
+  and the scheduled jobs run the same image with a different command.
+- **The server answers searches from precomputed tables.** It never calls eBird while answering a request.
+  A search is a PostGIS query over hotspots and the weekly frequency of each species at each hotspot,
+  with an optional drive-time limit from OSRM.
+- **The jobs keep the data current.** They call the eBird API on a schedule and write to Neon.
+  See "Data pipeline".
+- **Secrets live in Key Vault.** The server and the jobs read them as Container Apps secrets.
+- **Deploys go through GitHub Actions.** CI tests a push to `main`. Deploy then builds the image, pushes
+  it to GHCR, runs the migrations, and updates the server and the jobs. It signs in to Azure with OpenID
+  Connect, so no Azure password is stored in GitHub.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
-| Backend | Go 1.26, standard-library `net/http` (enhanced `ServeMux`) |
-| DB access | sqlc (SQL → typed Go) + pgx; goose for migrations |
-| Database | PostgreSQL 16+ with **PostGIS** |
-| Logging | `log/slog` |
-| Frontend | SvelteKit + `adapter-static` (SSR off), embedded into the Go binary via `embed` — Phase 4 |
-| Data | eBird API 2.0 + eBird Basic Dataset + AviList v2025b + Wikidata/Commons + iNaturalist — Phase 2 |
-| Languages | Lithuanian (default) and English — Phase 2 |
-| Hosting | Azure Container Apps + Postgres Flexible Server, Bicep, GitHub Actions — Phase 5 |
+| Backend | Go 1.27, standard-library `net/http` (enhanced `ServeMux`), `log/slog` with JSON output |
+| DB access | sqlc (SQL to typed Go) + pgx; goose for migrations |
+| Database | PostgreSQL 18 with PostGIS: Neon (free plan) in production, `postgis/postgis:18-3.6` locally |
+| Frontend | SvelteKit with `adapter-static` (no server rendering), embedded into the Go binary with `embed`; Leaflet map on OpenStreetMap tiles |
+| Routing | OSRM for drive times, on road data for Lithuania, Latvia and Estonia |
+| Data | eBird API 2.0, eBird Basic Dataset, AviList v2025b, Wikidata and Wikimedia Commons, iNaturalist |
+| Languages | Lithuanian (default) and English |
+| Hosting | Azure Container Apps in Germany West Central, defined in Bicep; images in GHCR; secrets in Key Vault; logs in Log Analytics |
+| CI/CD | GitHub Actions |
 
-Deliberately **not** using Gin/Echo/Fiber or an ORM: the point is to learn the real `net/http` model
-and to actually understand the SQL.
+Not used on purpose: Gin, Echo, Fiber and ORMs. The point is to learn the real `net/http` model and to
+understand the SQL.
 
-## Prerequisites
+## Choices made
 
-- **Go 1.26.x** — `go version`
-- **Docker Desktop** — for local Postgres+PostGIS
-- **Node LTS** — not needed until Phase 4
-- An **eBird API key** ([keygen](https://ebird.org/api/keygen)) — not needed until Phase 2
+**Data**
 
-## Quick start
+- **Region.** The Baltics: Estonia, Latvia and Lithuania. The loaders take the region as configuration
+  (`EBIRD_REGIONS`); no loader, schema or query has a country built in.
+- **Frequency comes from checklists.** The frequency of a species at a hotspot in a week is the share of
+  the hotspot's complete checklists that recorded it. A year has 52 weeks; ISO week 53 is counted in week 52.
+- **Hotspots are ranked by an adjusted frequency.** It pulls a hotspot's frequency toward the country's
+  frequency for the same species and week, more strongly the fewer checklists it rests on, so one sighting
+  in three checklists does not outrank 25% over 200.
+- **Species reference data is AviList v2025b.** One CC BY 4.0 spreadsheet gives, for each species, the eBird
+  species code, AvibaseID, IUCN Red List status and the Birds of the World and BirdLife DataZone links.
+  It is loaded offline into `species`. No request resolves a species identifier over the network.
+- **Photos come from Wikidata and Wikimedia Commons first, iNaturalist for the gaps.** The app stores image
+  references, never the image files, and licence and attribution are required columns. Macaulay Library is
+  only a link target: eBird's API has no media endpoints and Macaulay grants no download rights.
 
-```bash
-git clone https://github.com/Kontora20/where-to-bird-today.git
-cd where-to-bird-today
-cp .env.example .env    # then replace every PLACEHOLDER with a real value
-go build ./...
+**Behaviour**
+
+- **The app only reads.** It never submits anything to eBird. Each checklist and location identifier from
+  eBird is kept, so everything links back to the source for verification.
+- **Fresh data comes from scheduled jobs, never from a request.** The jobs respect eBird's limit of 500
+  requests an hour for one key, and leave room for each other.
+- **The species detail is our own panel, not an iframe.** eBird sends `X-Frame-Options: DENY` and Avibase
+  `SAMEORIGIN`, so embedding is not possible, and linking out is the better design anyway. The panel leads
+  with the week-of-year seasonality, which is the part no one else has.
+- **Lithuanian is the default language.** The Go API never returns a user-facing sentence: it returns
+  codes, numbers and names, and the Svelte app writes the prose. Common names live in `species_names`,
+  ranked by source, so the fallback from Lithuanian to English to the scientific name is resolved in SQL.
+  The language is a request parameter, never global state.
+
+**Operations**
+
+- **The cheapest tier that works.** Neon's free plan holds the database, the server scales to zero outside
+  07:00-22:00 Vilnius time, and a budget alert of $25 a month guards the Azure bill.
+- **Abuse guardrails.** Per-address rate limits on every search route, a smaller one for drive-time searches,
+  bot blocking on the search routes, a cap on parallel OSRM requests, and no route that writes.
+- **One image, one deploy path.** The server and every job run the image that CI tested, tagged with the
+  commit.
+
+## Data pipeline
+
+The tables the server reads are derived from checklists and observations:
+
+```
+eBird API  ->  checklists, observations  ->  compute-seasonality  ->  species_seasonality
+                                                                      country_seasonality
+                                                                      species_time_of_day, time_of_day_totals
+                                                                      hotspot_species_last_seen
 ```
 
-Start the database (see below), then put `.env` into your shell and run the server. **The Go process
-does not read `.env`** — it reads real environment variables, and only Docker Compose reads the file
-directly. `DATABASE_URL` is required; the server refuses to start without it.
-
-```bash
-set -a && . ./.env && set +a && go run ./cmd/server
-```
-
-In PowerShell:
-
-```powershell
-Get-Content .env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object { $name, $value = $_ -split '=', 2; Set-Item "env:$($name.Trim())" $value.Trim() }
-go run ./cmd/server
-```
-
-Or, on Windows, [scripts/dev.ps1](scripts/dev.ps1) wraps that PowerShell snippet into one command — it still only sets real environment variables before running the binary, same as above, just without retyping it:
-
-```powershell
-.\scripts\dev.ps1
-```
-
-```bash
-curl http://localhost:8080/health
-curl http://localhost:8080/ready
-```
-
-`/health` is a **liveness** probe — it answers "is this process running?" and never touches the
-database, so a database blip cannot cause the orchestrator to restart a healthy container.
-`/ready` is a **readiness** probe: it pings Postgres and returns `503` when it cannot reach it, so
-the instance is taken out of rotation instead of being killed.
-
-## Local database
-
-Postgres 17 + PostGIS 3.5, from the **repository root**:
-
-```bash
-docker compose --env-file .env -f deploy/docker-compose.yml up -d
-```
-
-`--env-file .env` is required: with `-f`, Compose otherwise looks for `.env` next to the compose
-file in `deploy/` rather than in the directory you ran it from.
-
-Stop it, keeping the data:
-
-```bash
-docker compose --env-file .env -f deploy/docker-compose.yml down
-```
-
-Destroy it, **including the data volume**:
-
-```bash
-docker compose --env-file .env -f deploy/docker-compose.yml down -v
-```
-
-Open a psql shell:
-
-```bash
-docker exec -it wtbt-postgres psql -U birder -d wheretobird
-```
-
-## Loading eBird data
-
-Request the Baltic countries from the [eBird Basic Dataset](https://ebird.org/data/download) with the
-sampling event data option, and unzip each export. Load the hotspots and species first
-(`cmd/ingest-ebird-hotspots`, `cmd/ingest-avilist`), then for each export load the main file and its
-`_sampling.txt` file, then rebuild the tables derived from them:
-
-```bash
-go run ./cmd/ingest-ebd path/to/ebd_LT_..._relJun-2026.txt
-go run ./cmd/ingest-ebd path/to/ebd_LT_..._relJun-2026_sampling.txt
-go run ./cmd/compute-seasonality
-```
-
-Both files are needed for exact frequencies: the sampling file lists every checklist, including the
-ones with no observation rows, and each frequency is out of all complete checklists. Loading is
-idempotent (rows are upserted), so overlapping date ranges are harmless. Expect about 1,000 rows
-per second, one transaction per file.
-
-`compute-seasonality` also stores an `adjusted_frequency` for each row: the frequency pulled toward the
-country's frequency for the same species and week, more strongly the fewer checklists it rests on. Hotspots
-are ranked by it, so one sighting in three checklists no longer outranks 25% over 200. Change
-`priorChecklists` in `internal/ingest/seasonality/seasonality.go` and run it again to tune the pull.
-
-It also stores `country_seasonality`, each species' frequency across a country per week, which the species panel
-pools with a hotspot's weeks to find the species' best weeks there. A year has 52 weeks: ISO week 53 is counted in
-week 52.
-It also works out how long after sunrise each checklist started and counts checklists per hotspot and hour
-after sunrise (0 to 23, around the clock, so night birds are included). The species panel reads those counts for its
-time-of-day strip.
-Last, it stores the most recent record of each species at each hotspot (`hotspot_species_last_seen`), which the
-hotspot list and card use to say when your birds were last seen, and the species panel uses for its link to the
-latest checklist.
-
-**Keeping it current.** Azure jobs keep the data current without an export. `ingest-ebird-checklists` runs
-every 2 hours, one job for each country, and fetches the new checklists at known hotspots from the eBird API,
-from three days before the newest one stored for that country. `ingest-ebird-recent` runs every 2 hours too, and
-`compute-seasonality` rebuilds the derived tables once a night (03:50 UTC). The API records use the same
-identifiers as an export, so a later export updates them instead of duplicating them. Both can also be run by
-hand with `go run ./cmd/ingest-ebird-checklists`. eBird allows one key 500 requests an hour. A checklist run stops with 50 of them left, for the other jobs, and the next run carries on, so a long gap is made up over a few runs. The export is still the source for history before the first
-API load and carries only the records eBird has approved; the loader keeps every species-rank record the API lists.
-
-**Run `compute-seasonality` only after the checklists are loaded.** It rebuilds its tables from
-`checklists`, so with none loaded it replaces them with nothing.
-
-## Travel time
-
-Searches by drive time (`max_minutes`) ask a local OSRM routing server how long it takes to drive to
-each hotspot. It is opt-in, because it needs about 1.3 GB of road data built first.
-
-Build the road graph for Lithuania, Latvia and Estonia into `data/osm/` (git-ignored). It downloads
-about 490 MB of OpenStreetMap extracts from Geofabrik, then needs about 3.3 GB of free RAM and around
-10 minutes for the one-time build. Each step is skipped if its output exists.
-
-```powershell
-.\scripts\build-osrm.ps1
-```
-
-Start the routing server (512 MB memory limit, port 5000) and set `OSRM_URL` in `.env`:
-
-```bash
-docker compose --env-file .env -f deploy/docker-compose.yml --profile routing up -d osrm
-```
-
-Without `OSRM_URL`, a `max_minutes` request answers `503` and searches by `radius_km` still work.
-Map data © OpenStreetMap contributors (ODbL).
-
-## Configuration
-
-All configuration is environment variables. Copy `.env.example` to `.env` and fill it in.
-
-| Variable | Purpose |
+| Job (UTC) | What it does |
 |---|---|
-| `PORT` | HTTP listen port (default `8080`) |
-| `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` |
-| `DATABASE_URL` | **Required.** Postgres connection string — no default, startup fails without it |
-| `EBIRD_API_KEY` | **Secret.** eBird API 2.0 token — Phase 2 |
-| `OSRM_URL` | Optional. OSRM routing server, e.g. `http://127.0.0.1:5000`; enables `max_minutes` searches |
+| `checklists-lt`, `-lv`, `-ee`: every 2 hours, 40 minutes apart | Fetch each country's new checklists at known hotspots from the eBird API, from three days before the newest one stored for that country. |
+| `recent`: every 2 hours | Move `hotspot_species_last_seen` forward from eBird's recent observations. |
+| `seasonality`: 03:50 daily | Rebuild the derived tables from `checklists` and `observations`. |
+| `hotspots`: Mondays 03:00 | Refresh the hotspot list. |
+| `migrate`: by hand | Run the database migrations after a deploy that adds one. |
 
-> **The eBird key is a secret.** It lives in `.env` (gitignored) locally and in GitHub Actions /
-> Container Apps secrets in CI and production. It must never appear in source, compose files,
-> workflow YAML, or logs. `.env.example` contains `PLACEHOLDER` values only.
+- **Rate limit first.** A checklist run reads the remaining hourly quota from eBird's `RateLimit` header and
+  stops with 50 requests left for the other jobs, or when eBird answers 429. The next run carries on, so a
+  long gap is made up over a few runs.
+- **API and export records are the same rows.** The API records use the identifiers of the eBird Basic
+  Dataset, so loading an export later updates them instead of duplicating them.
+- **Loaders are idempotent.** Rows are upserted, so overlapping runs and date ranges are harmless.
 
 ## Layout
 
 ```
-cmd/server/      main.go — wiring and startup only
+cmd/             one main package for each binary
+  server/          the web server: wiring and startup only
+  migrate/         runs the goose migrations
+  ingest-*/        the loaders: AviList, EBD, eBird names, hotspots, checklists, recent observations, species media
+  compute-seasonality/  rebuilds the derived tables
 internal/        app code; the compiler forbids imports from outside this module
-  api/           handlers, middleware, routing
-  config/        environment-variable loading
-  store/         connection pool and, from Phase 1, the sqlc-generated queries
-migrations/      goose SQL migrations (Phase 1)
-deploy/          docker-compose, Dockerfile, Bicep
-web/             SvelteKit app (Phase 4)
+  api/             handlers, middleware, routing
+  birding/         search, ranking and species detail
+  config/          environment-variable loading
+  daylight/        sunrise times, for the time-of-day data
+  ingest/          one package for each data source
+  routing/         the OSRM client and its caches
+  store/           connection pool and the sqlc-generated queries
+migrations/      goose SQL migrations
+deploy/          Bicep template, docker-compose for local use, deploy notes
+diagrams/        the architecture diagram
+scripts/         local helper scripts
+web/             SvelteKit app
 ```
 
-Coming from .NET: `cmd/server` ≈ your `Program.cs` host project, and `internal/*` ≈ class libraries
-— but wired by hand in `main` rather than through a DI container. `internal/` is enforced by the Go
-compiler: no module outside this one can import anything beneath it.
-
-## Decisions
-
-Architecture decision records are kept privately alongside the planning notes. Decisions that
-affect how the code is written are summarised here as they land.
-
-- **EBD region scope** — the Baltics (Estonia, Latvia, Lithuania). The ingestion loader itself
-  stays region-agnostic: the region is configuration, never baked into loader logic, schema, or
-  queries.
-
-- **Species reference backbone — AviList v2025b.** One CC BY 4.0 spreadsheet supplies, per species,
-  the eBird species code, AvibaseID, IUCN Red List status and canonical Birds of the World /
-  BirdLife DataZone URLs. Loaded offline into `species`; **no feature resolves a species identifier
-  over the network at request time.**
-
-- **Photos — Wikidata/Wikimedia Commons first, iNaturalist for gaps.** The app stores image
-  *references*, never bytes, and licence + attribution are required columns on `species_media`.
-  Macaulay Library is a link target only: eBird's API exposes no media endpoints, and Macaulay
-  grants no download rights.
-
-- **Species detail is our own panel, never an iframe.** eBird sends `X-Frame-Options: DENY` and
-  Avibase `SAMEORIGIN`, so embedding is not possible — and linking out is the better design anyway.
-  The panel leads with our own week-of-year seasonality data, which is the part no one else has.
-
-- **Languages — Lithuanian and English, Lithuanian the default.** The load-bearing rule: **the Go
-  API never returns a user-facing sentence.** Explanations are structured codes plus params; the
-  Svelte app renders the prose. Common names live in `species_names`, source-ranked so the
-  `lt → en → scientific` fallback resolves in SQL. Language is a request parameter, never global
-  state.
+To run it locally, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Attribution
 
 Third-party data carries licence obligations that the UI must honour, not just the source:
 
-- **AviList** — CC BY 4.0. *AviList Core Team. 2026. AviList: The Global Avian Checklist, v2025b.*
+- **AviList** CC BY 4.0. *AviList Core Team. 2026. AviList: The Global Avian Checklist, v2025b.*
   <https://doi.org/10.2173/avilist.v2025b>
-- **Wikimedia Commons** — per-image licence and author, rendered next to the image.
-- **iNaturalist** — per-photo `attribution` string, rendered next to the image. Photos default to
-  CC BY-**NC**.
-- **eBird / Cornell Lab** — taxonomy and observation data, per the eBird API terms.
-
-## Roadmap
-
-| Phase | Deliverable |
-|---|---|
-| **0** | `curl localhost:8080/health` works; CI green |
-| **1** | Config, sqlc+pgx, first migration, an endpoint that reads/writes a row ← *here* |
-| 2 | eBird + iNat clients, EBD bulk loader, `species_seasonality` |
-| 3 | Spatial `ST_DWithin` query, ranking, parallel fetches via `errgroup` |
-| 4 | SvelteKit UI with a Leaflet map, embedded in the binary |
-| 5 | Dockerfile, Bicep, Container Apps, full CI/CD |
-| 6 | Observability, pprof pass, write-up |
+- **Wikimedia Commons**: per-image licence and author, shown next to the image.
+- **iNaturalist**: per-photo `attribution` string, shown next to the image. Photos default to CC BY-**NC**.
+- **eBird / Cornell Lab**: taxonomy and observation data, per the eBird API terms.
+- **OpenStreetMap**: map tiles and road data, © OpenStreetMap contributors (ODbL).
 
 ## Conventions
 
-- **Line endings are LF**, enforced by `.gitattributes` rather than left to each machine's git
-  config. Phase 5 copies shell scripts into a Linux container, where CRLF breaks the shebang.
+- **Line endings are LF**, enforced by `.gitattributes` rather than left to each machine's git config, because
+  shell scripts are copied into a Linux container, where CRLF breaks the shebang.
 - **`internal/`** is enforced by the Go compiler: no other module can import anything beneath it.
-- **Dependencies are wired by hand in `main`** — no container, no service registration.
-- **Style follows the [Google Go Style Guide](https://google.github.io/styleguide/go/guide)**, which
-  governs over personal preference. The rule with the most visible effect here: **no assertion
-  libraries.** Tests use standard comparisons and [`go-cmp`](https://github.com/google/go-cmp), and a
-  failure message names what was called — `Load().Port = 9000, want 8080`, never `port = 9000`.
+- **Dependencies are wired by hand in `main`**: no container, no service registration.
+- **Style follows the [Google Go Style Guide](https://google.github.io/styleguide/go/guide)**, which governs
+  over personal preference. The rule with the most visible effect here: **no assertion libraries.** Tests use
+  standard comparisons and [`go-cmp`](https://github.com/google/go-cmp), and a failure message names what was
+  called: `Load().Port = 9000, want 8080`, never `port = 9000`.

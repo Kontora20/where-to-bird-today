@@ -1,0 +1,35 @@
+flowchart TB
+    browser(["Browser<br/>SvelteKit app, Leaflet map"])
+    tiles["OpenStreetMap<br/>map tiles"]
+
+    subgraph azure["Azure Container Apps, Germany West Central"]
+        server["wtbt-server<br/>Go net/http, serves the embedded SvelteKit app<br/>on 07:00-22:00 Vilnius time, otherwise scaled to zero"]
+        osrm["wtbt-osrm<br/>OSRM drive times<br/>road graph on an Azure Files share"]
+        jobs["Scheduled jobs, same image as the server, times in UTC<br/><br/>checklists-lt, -lv, -ee: every 2 hours, 40 minutes apart<br/>recent: every 2 hours<br/>seasonality: 03:50 daily<br/>hotspots: Mondays 03:00<br/>migrate: by hand after a deploy"]
+        vault["Key Vault<br/>database URL, eBird key, registry token"]
+        logs["Log Analytics and a workbook<br/>console logs of the server and the jobs"]
+    end
+
+    neon[("Neon<br/>Postgres 18 + PostGIS")]
+    ebird["eBird API 2.0<br/>500 requests an hour per key"]
+    sources["Wikidata, Wikimedia Commons,<br/>iNaturalist, AviList<br/>loaded by hand"]
+
+    subgraph github["GitHub"]
+        ci["Actions: CI, then Deploy"]
+        ghcr["GHCR<br/>container image"]
+    end
+
+    browser -->|"searches, species, static files"| server
+    browser -->|"map tiles"| tiles
+    server -->|"PostGIS queries"| neon
+    server -->|"drive times"| osrm
+
+    jobs -->|"checklists, hotspots,<br/>latest records"| ebird
+    jobs -->|"writes checklists, observations,<br/>seasonality tables"| neon
+    sources -.->|"names, photos, species"| neon
+
+    vault -.->|"secrets"| server
+    vault -.->|"secrets"| jobs
+
+    ci -->|"build and push"| ghcr
+    ci -->|"migrate, update server and jobs"| server
