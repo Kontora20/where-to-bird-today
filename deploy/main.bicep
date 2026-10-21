@@ -287,13 +287,23 @@ resource server 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 var jobs = [
-  { name: 'recent', command: '/app/ingest-ebird-recent', args: [], cron: '0 4 * * *' }
-  { name: 'hotspots', command: '/app/ingest-ebird-hotspots', args: [], cron: '0 3 * * 1' }
-  { name: 'migrate', command: '/app/migrate', args: ['up'], cron: '' }
+  { name: 'recent', command: '/app/ingest-ebird-recent', regions: '', cron: '10 */2 * * *', timeout: 1800 }
+  { name: 'hotspots', command: '/app/ingest-ebird-hotspots', regions: '', cron: '0 3 * * 1', timeout: 1800 }
+  { name: 'checklists-lt', command: '/app/ingest-ebird-checklists', regions: 'LT', cron: '0 */2 * * *', timeout: 3600 }
+  { name: 'checklists-lv', command: '/app/ingest-ebird-checklists', regions: 'LV', cron: '40 */2 * * *', timeout: 3600 }
+  { name: 'checklists-ee', command: '/app/ingest-ebird-checklists', regions: 'EE', cron: '20 1-23/2 * * *', timeout: 3600 }
+  { name: 'seasonality', command: '/app/compute-seasonality', regions: '', cron: '50 3 * * *', timeout: 3600 }
+  { name: 'migrate', command: '/app/migrate', regions: '', cron: '', timeout: 1800 }
 ]
 
-// Scheduled jobs run the same image with another command. migrate has no
-// schedule: start it by hand after a deploy that adds a migration.
+// Scheduled jobs run the same image with another command. The times are UTC.
+// eBird allows one API key 500 requests an hour, so the jobs that call it are
+// spread out: each country's checklists every 2 hours, 40 minutes apart (LT at
+// :00, EE at :20 of the odd hours, LV at :40), and recent at :10. The checklist
+// jobs stop with 50 requests of the hour left, which keeps room for recent and
+// hotspots. seasonality rebuilds the derived tables once a night between the
+// checklist runs, before the server wakes. migrate has no schedule: start it
+// by hand after a deploy that adds a migration.
 resource job 'Microsoft.App/jobs@2024-03-01' = [
   for item in jobs: {
     name: '${namePrefix}-${item.name}'
@@ -309,7 +319,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = [
         triggerType: empty(item.cron) ? 'Manual' : 'Schedule'
         scheduleTriggerConfig: empty(item.cron) ? null : { cronExpression: item.cron, parallelism: 1, replicaCompletionCount: 1 }
         manualTriggerConfig: empty(item.cron) ? { parallelism: 1, replicaCompletionCount: 1 } : null
-        replicaTimeout: 1800
+        replicaTimeout: item.timeout
         replicaRetryLimit: 1
         registries: registries
         secrets: vaultSecrets
@@ -320,9 +330,9 @@ resource job 'Microsoft.App/jobs@2024-03-01' = [
             name: item.name
             image: image
             command: [item.command]
-            args: item.args
+            args: item.name == 'migrate' ? ['up'] : []
             resources: { cpu: json('0.25'), memory: '0.5Gi' }
-            env: jobEnv
+            env: empty(item.regions) ? jobEnv : concat(jobEnv, [{ name: 'EBIRD_REGIONS', value: item.regions }])
           }
         ]
       }

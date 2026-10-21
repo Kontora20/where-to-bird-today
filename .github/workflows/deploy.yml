@@ -87,7 +87,7 @@ jobs:
       - name: Update the server and the scheduled jobs
         run: |
           az containerapp update -g "$RESOURCE_GROUP" -n wtbt-server --image "$IMAGE" --output none
-          for job in wtbt-recent wtbt-hotspots; do
+          for job in wtbt-recent wtbt-hotspots wtbt-checklists-lt wtbt-checklists-lv wtbt-checklists-ee wtbt-seasonality; do
             az containerapp job update -g "$RESOURCE_GROUP" -n "$job" --image "$IMAGE" --output none
           done
           echo "Deployed $IMAGE to https://$(az containerapp show -g "$RESOURCE_GROUP" -n wtbt-server --query properties.configuration.ingress.fqdn -o tsv)" >> "$GITHUB_STEP_SUMMARY"

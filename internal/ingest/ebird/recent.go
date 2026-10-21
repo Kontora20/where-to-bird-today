@@ -81,28 +81,38 @@ func parseObservedOn(value string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("obsDt %q is not a date", value)
 }
 
-// LoadRecent fetches the recent observations of each of regions and records
-// each as the last sighting of its species at its hotspot when it is newer
-// than the one stored (hotspot_species_last_seen). Records at locations that
-// are not a known hotspot, or of a species with no eBird code in species,
-// are skipped. It returns the number of rows written or moved forward.
-func LoadRecent(ctx context.Context, client *Client, queries *store.Queries, regions []string) (int, error) {
+// loadIDs returns the id of each hotspot by its eBird location code and of
+// each species by its eBird species code.
+func loadIDs(ctx context.Context, queries *store.Queries) (hotspotIDs, speciesIDs map[string]int64, err error) {
 	hotspotRefs, err := queries.ListHotspotRefsBySource(ctx, "ebird")
 	if err != nil {
-		return 0, fmt.Errorf("listing hotspots: %w", err)
+		return nil, nil, fmt.Errorf("listing hotspots: %w", err)
 	}
-	hotspotIDs := make(map[string]int64, len(hotspotRefs))
+	hotspotIDs = make(map[string]int64, len(hotspotRefs))
 	for _, ref := range hotspotRefs {
 		hotspotIDs[ref.SourceRef] = ref.ID
 	}
 
 	speciesRows, err := queries.ListSpeciesEbirdCodes(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("listing species codes: %w", err)
+		return nil, nil, fmt.Errorf("listing species codes: %w", err)
 	}
-	speciesIDs := make(map[string]int64, len(speciesRows))
+	speciesIDs = make(map[string]int64, len(speciesRows))
 	for _, row := range speciesRows {
 		speciesIDs[row.EbirdSpeciesCode.String] = row.ID
+	}
+	return hotspotIDs, speciesIDs, nil
+}
+
+// LoadRecent fetches the recent observations of each of regions and records
+// each as the last sighting of its species at its hotspot when it is newer
+// than the one stored (hotspot_species_last_seen). Records at locations that
+// are not a known hotspot, or of a species with no eBird code in species,
+// are skipped. It returns the number of rows written or moved forward.
+func LoadRecent(ctx context.Context, client *Client, queries *store.Queries, regions []string) (int, error) {
+	hotspotIDs, speciesIDs, err := loadIDs(ctx, queries)
+	if err != nil {
+		return 0, err
 	}
 
 	written := 0

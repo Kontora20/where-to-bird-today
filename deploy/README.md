@@ -85,7 +85,11 @@ The workflow skips itself until `AZURE_CLIENT_ID` is set. GitHub creates the `pr
 on the first run; add yourself as a required reviewer there to approve each deploy. The three IDs are not
 secrets: without the federated credential they let no one in.
 
-## Monthly eBird export
+## eBird export
+
+New data arrives without an export: the `checklists-lt`, `checklists-lv` and `checklists-ee` jobs load new
+checklists from the eBird API every 2 hours, and the `seasonality` job (03:50 UTC) rebuilds the derived tables. Load an export only to fill history
+or to bring in only the records eBird has approved.
 
 Read the connection string from Key Vault, set it as `DATABASE_URL`, and run the README's "Loading eBird
 data" steps against it, ending with `ingest-ebird-recent`:

@@ -137,6 +137,14 @@ Last, it stores the most recent record of each species at each hotspot (`hotspot
 hotspot list and card use to say when your birds were last seen, and the species panel uses for its link to the
 latest checklist.
 
+**Keeping it current.** Azure jobs keep the data current without an export. `ingest-ebird-checklists` runs
+every 2 hours, one job for each country, and fetches the new checklists at known hotspots from the eBird API,
+from three days before the newest one stored for that country. `ingest-ebird-recent` runs every 2 hours too, and
+`compute-seasonality` rebuilds the derived tables once a night (03:50 UTC). The API records use the same
+identifiers as an export, so a later export updates them instead of duplicating them. Both can also be run by
+hand with `go run ./cmd/ingest-ebird-checklists`. eBird allows one key 500 requests an hour. A checklist run stops with 50 of them left, for the other jobs, and the next run carries on, so a long gap is made up over a few runs. The export is still the source for history before the first
+API load and carries only the records eBird has approved; the loader keeps every species-rank record the API lists.
+
 **Run `compute-seasonality` only after the checklists are loaded.** It rebuilds its tables from
 `checklists`, so with none loaded it replaces them with nothing.
 

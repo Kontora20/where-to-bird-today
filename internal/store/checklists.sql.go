@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getLatestChecklistDate = `-- name: GetLatestChecklistDate :one
+SELECT MAX(c.observed_on)::date AS latest
+FROM checklists c
+JOIN hotspots h ON h.id = c.hotspot_id
+WHERE h.region = $1
+`
+
+// The date of the newest checklist loaded at a country's hotspots, where the
+// eBird checklist load of that country resumes from. NULL when there are none.
+func (q *Queries) GetLatestChecklistDate(ctx context.Context, region string) (pgtype.Date, error) {
+	row := q.db.QueryRow(ctx, getLatestChecklistDate, region)
+	var latest pgtype.Date
+	err := row.Scan(&latest)
+	return latest, err
+}
+
 const getLatestChecklistWithSpecies = `-- name: GetLatestChecklistWithSpecies :one
 SELECT sampling_event_id, observed_on
 FROM hotspot_species_last_seen
@@ -36,6 +52,32 @@ func (q *Queries) GetLatestChecklistWithSpecies(ctx context.Context, arg GetLate
 	var i GetLatestChecklistWithSpeciesRow
 	err := row.Scan(&i.SamplingEventID, &i.ObservedOn)
 	return i, err
+}
+
+const listChecklistSamplingEventIDsSince = `-- name: ListChecklistSamplingEventIDsSince :many
+SELECT sampling_event_id FROM checklists WHERE observed_on >= $1
+`
+
+// The checklists already loaded from a date on, so the daily load does not
+// fetch them from eBird again.
+func (q *Queries) ListChecklistSamplingEventIDsSince(ctx context.Context, since pgtype.Date) ([]string, error) {
+	rows, err := q.db.Query(ctx, listChecklistSamplingEventIDsSince, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var sampling_event_id string
+		if err := rows.Scan(&sampling_event_id); err != nil {
+			return nil, err
+		}
+		items = append(items, sampling_event_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertChecklist = `-- name: UpsertChecklist :one
