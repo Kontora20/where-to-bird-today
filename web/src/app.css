@@ -68,8 +68,8 @@
 	color-scheme: dark;
 	--color-ground: #121416;
 	--color-panel: #1b1e21;
-	--color-text: #f1eee6;
-	--color-muted: #a9aca4;
+	--color-text: #d6d3cb;
+	--color-muted: #9a9d96;
 	--color-line: #2e3236;
 	--color-line-soft: #272b2f;
 	--color-control-border: #43484d;
@@ -77,7 +77,7 @@
 	--color-accent-strong: #f2a127;
 	--color-accent-text: #f5b04a;
 	--color-bar: #3b4046;
-	--color-inverse: #f1eee6;
+	--color-inverse: #d6d3cb;
 	--color-on-inverse: #16181a;
 	--color-home: #5b8def;
 	--color-error: #ff6b5e;
@@ -146,7 +146,7 @@ body {
 /* Leaflet builds these elements itself and its stylesheet is light only. The
    `:root` prefix makes these rules win over it whatever the load order. */
 :root[data-theme='dark'] .leaflet-tile-pane {
-	filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+	filter: invert(1) hue-rotate(180deg) brightness(0.75) contrast(0.9);
 }
 
 :root[data-theme='light'] .leaflet-tile-pane {

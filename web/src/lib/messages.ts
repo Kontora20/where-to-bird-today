@@ -152,7 +152,7 @@ export const en = {
 	'plan.lookingFor': 'Looking for',
 	'plan.search': 'Search',
 
-	'year.label': 'Slide through the year',
+	'year.label': 'Seasonality: slide through the year',
 	'year.previous': 'Previous week',
 	'year.next': 'Next week',
 	'year.weekFrom': 'Week {week}, from {day}',
@@ -344,7 +344,7 @@ export const lt: Record<MessageKey, Message> = {
 	'plan.lookingFor': 'Ieškoma',
 	'plan.search': 'Ieškoti',
 
-	'year.label': 'Slinkite per metus',
+	'year.label': 'Sezoniškumas: slinkite per metus',
 	'year.previous': 'Ankstesnė savaitė',
 	'year.next': 'Kita savaitė',
 	'year.weekFrom': '{week} savaitė, nuo {day}',

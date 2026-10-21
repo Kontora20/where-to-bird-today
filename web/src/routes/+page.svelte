@@ -410,6 +410,12 @@
 		return refresh();
 	}
 
+	// Dragging passes many weeks; search once the drag settles.
+	function scrubWeek(start: string) {
+		date = start;
+		refreshSoon();
+	}
+
 	function shiftWeek(weeks: number) {
 		const shifted = addDays(date, 7 * weeks);
 		if (isUsableDate(shifted)) date = shifted;
@@ -438,6 +444,7 @@
 		selected={selectedWeek}
 		note={scrubberNote}
 		onpick={searchWeek}
+		onscrub={scrubWeek}
 		onshift={shiftWeek}
 		ontoday={goToToday}
 	/>

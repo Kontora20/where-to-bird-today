@@ -8,14 +8,23 @@
 		selected: number;
 		note: string;
 		onpick: (start: string) => void;
+		// Called for each new week while a finger or the mouse drags across the bars.
+		onscrub: (start: string) => void;
 		onshift: (weeks: number) => void;
 		ontoday: () => void;
 	}
 
-	let { weeks, selected, note, onpick, onshift, ontoday }: Props = $props();
+	let { weeks, selected, note, onpick, onscrub, onshift, ontoday }: Props = $props();
 
 	const months = $derived(monthInitials());
 	const highest = $derived(Math.max(...weeks.map((week) => week.value)));
+
+	function scrub(event: PointerEvent & { currentTarget: HTMLElement }) {
+		if (!(event.buttons & 1)) return;
+		const { left, width } = event.currentTarget.getBoundingClientRect();
+		const index = Math.min(weeks.length - 1, Math.max(0, Math.floor(((event.clientX - left) / width) * weeks.length)));
+		if (index !== selected) onscrub(weeks[index].start);
+	}
 </script>
 
 <section class="scrubber" aria-label={t('year.label')}>
@@ -28,7 +37,7 @@
 		</div>
 	</div>
 
-	<div class="bars">
+	<div class="bars" onpointermove={scrub} role="presentation">
 		{#each weeks as week, index (week.week)}
 			<button
 				type="button"
@@ -93,6 +102,9 @@
 		align-items: flex-end;
 		gap: 2px;
 		height: 56px;
+		/* Horizontal drags select weeks; vertical drags still scroll the page. */
+		touch-action: pan-y;
+		user-select: none;
 	}
 
 	.bar {
