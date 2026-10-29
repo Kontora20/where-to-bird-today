@@ -15,13 +15,14 @@ import (
 // Each one costs a PostGIS query and, with a drive-time limit, an OSRM table
 // request, so an address stepping its coordinates to dodge routing.Cache
 // still has a limit (master plan row 31).
-const searchRequestsPerMinute = 60
+const searchRequestsPerMinute = 200
 
-// driveTimeRequestsPerMinute is the smaller budget for searches limited by
-// drive time, which are the ones that can cost an OSRM request. It is spent
-// together with the general one. A person changing the range makes three calls
-// each time, so this allows about ten changes a minute.
-const driveTimeRequestsPerMinute = 30
+// driveTimeRequestsPerMinute is the budget for searches limited by drive time,
+// which are the ones that can cost an OSRM request. It is spent together with
+// the general one, so the smaller of the two is the real limit. A person
+// changing the range makes three calls each time, so this allows about
+// sixty-six changes a minute.
+const driveTimeRequestsPerMinute = 200
 
 // allSearchesPerMinute is the ceiling on every address together. The limits per
 // address do not hold when the address cannot be trusted (see clientAddress),

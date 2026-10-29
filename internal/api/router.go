@@ -86,10 +86,11 @@ func logRequests(logger *slog.Logger, next http.Handler) http.Handler {
 
 		next.ServeHTTP(rec, r)
 
-		// A refused request is logged at debug level: a flood of them would
-		// otherwise cost as much in log storage as the requests it sends.
+		// A blocked bot is logged at debug level: a flood of them would
+		// otherwise cost as much in log storage as the requests it sends. Rate
+		// limited requests are logged at info so the workbook shows them.
 		level := slog.LevelInfo
-		if rec.status == http.StatusTooManyRequests || rec.status == http.StatusForbidden {
+		if rec.status == http.StatusForbidden {
 			level = slog.LevelDebug
 		}
 		took := time.Since(start)

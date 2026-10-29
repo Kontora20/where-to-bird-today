@@ -58,7 +58,7 @@ func TestSearchAnswersAreCacheableButErrorsAreNot(t *testing.T) {
 	}
 }
 
-func TestRefusedRequestsAreLoggedBelowInfo(t *testing.T) {
+func TestOnlyBlockedBotsAreLoggedBelowInfo(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -67,7 +67,7 @@ func TestRefusedRequestsAreLoggedBelowInfo(t *testing.T) {
 		wantLogged bool
 	}{
 		{name: "served", status: http.StatusOK, wantLogged: true},
-		{name: "rate limited", status: http.StatusTooManyRequests},
+		{name: "rate limited", status: http.StatusTooManyRequests, wantLogged: true},
 		{name: "blocked", status: http.StatusForbidden},
 	}
 
