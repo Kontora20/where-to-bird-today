@@ -12,13 +12,6 @@ param namePrefix string = 'wtbt'
 @description('Container image of the server and the cmd/ tools, for example ghcr.io/kontora20/where-to-bird-today:<git sha>.')
 param image string
 
-@description('GitHub user that owns the classic token below.')
-param ghcrUsername string
-
-@secure()
-@description('Classic GitHub token with only the read:packages scope, so Azure can pull the private image.')
-param ghcrToken string
-
 @secure()
 @description('Neon connection string to the direct host (not -pooler), postgres://...?sslmode=require.')
 param databaseUrl string
@@ -122,12 +115,6 @@ resource ebirdSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   properties: { value: ebirdApiKey }
 }
 
-resource ghcrSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: vault
-  name: 'ghcr-token'
-  properties: { value: ghcrToken }
-}
-
 // Holds the OSRM road graph (1.3 GB), uploaded once from data/osm.
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: '${namePrefix}osrm${take(uniqueString(resourceGroup().id), 6)}'
@@ -173,18 +160,9 @@ resource osrmStorage 'Microsoft.App/managedEnvironments/storages@2024-03-01' = {
   }
 }
 
-var registries = [
-  {
-    server: 'ghcr.io'
-    username: ghcrUsername
-    passwordSecretRef: 'ghcr-token'
-  }
-]
-
 var vaultSecrets = [
   { name: 'database-url', keyVaultUrl: databaseUrlSecret.properties.secretUri, identity: identity.id }
   { name: 'ebird-api-key', keyVaultUrl: ebirdSecret.properties.secretUri, identity: identity.id }
-  { name: 'ghcr-token', keyVaultUrl: ghcrSecret.properties.secretUri, identity: identity.id }
 ]
 
 var jobEnv = [
@@ -244,7 +222,6 @@ resource server 'Microsoft.App/containerApps@2024-03-01' = {
           }
         ]
       }
-      registries: registries
       secrets: vaultSecrets
     }
     template: {
@@ -321,7 +298,6 @@ resource job 'Microsoft.App/jobs@2024-03-01' = [
         manualTriggerConfig: empty(item.cron) ? { parallelism: 1, replicaCompletionCount: 1 } : null
         replicaTimeout: item.timeout
         replicaRetryLimit: 1
-        registries: registries
         secrets: vaultSecrets
       }
       template: {

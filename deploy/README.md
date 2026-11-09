@@ -27,8 +27,9 @@ Needs Azure CLI (`winget install Microsoft.AzureCLI`) and Docker.
    docker exec wtbt-postgres pg_restore --no-owner --no-privileges -d $neon /tmp/wtbt.dump
    ```
 
-3. Push the image. The repository is private, so the image is too. Use a classic GitHub token with
-   `write:packages` to push, and a second one with only `read:packages` for Azure to pull.
+3. Push the image with a classic GitHub token that has `write:packages`. Then set the package to public
+   (GitHub, package settings, Change visibility), so Azure pulls it without a token. A token with an
+   expiry date stopped the site on 2026-11-09 when it ran out. The image holds no secrets.
 
    ```bash
    docker build -t ghcr.io/kontora20/where-to-bird-today:$(git rev-parse --short HEAD) .
@@ -36,7 +37,7 @@ Needs Azure CLI (`winget install Microsoft.AzureCLI`) and Docker.
    ```
 
 4. Create the resource group and deploy with `deploy/deploy.ps1`. It reads the Neon connection string from
-   the Neon CLI and the eBird key from `.env`, and asks for the `read:packages` token. The secrets reach
+   the Neon CLI and the eBird key from `.env`. The secrets reach
    `az` through a parameters file that is deleted when it finishes: the Neon string contains `&`, which
    breaks on the command line behind `az.cmd`. Leave out `-Image` on later runs to keep the running image.
 

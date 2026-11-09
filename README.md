@@ -21,7 +21,7 @@ flowchart TB
         server["wtbt-server<br/>Go net/http, serves the embedded SvelteKit app<br/>on 07:00-22:00 Vilnius time, otherwise scaled to zero"]
         osrm["wtbt-osrm<br/>OSRM drive times<br/>road graph on an Azure Files share"]
         jobs["Scheduled jobs, same image as the server, times in UTC<br/><br/>checklists-lt, -lv, -ee: every 2 hours, 40 minutes apart<br/>recent: every 2 hours<br/>seasonality: 03:50 daily<br/>hotspots: Mondays 03:00<br/>migrate: by hand after a deploy"]
-        vault["Key Vault<br/>database URL, eBird key, registry token"]
+        vault["Key Vault<br/>database URL, eBird key"]
         logs["Log Analytics and a workbook<br/>console logs of the server and the jobs"]
     end
 
